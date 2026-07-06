@@ -1,0 +1,249 @@
+{
+  "schemaVersion": "1.0.0",
+  "message": {
+    "type": "OML",
+    "triggerEvent": "O21",
+    "structure": "OML_O21",
+    "controlId": "MSG-20260706-0001",
+    "processingId": "P",
+    "version": "2.5.1",
+    "sentAt": "2026-07-06T10:15:00-07:00"
+  },
+  "sender": {
+    "application": {
+      "namespaceId": "NORTHSTAR_LIS"
+    },
+    "facility": {
+      "namespaceId": "NORTHSTAR_LAB"
+    },
+    "receivingApplication": {
+      "namespaceId": "HL7_MAPPER"
+    },
+    "receivingFacility": {
+      "namespaceId": "DEMO_FACILITY"
+    }
+  },
+  "patient": {
+    "identifiers": [
+      {
+        "value": "MRN-104892",
+        "assigningAuthority": "NORTHSTAR_LAB",
+        "type": "MR"
+      }
+    ],
+    "name": {
+      "family": "Lopez",
+      "given": "Elena",
+      "middle": "M",
+      "suffix": null,
+      "prefix": null
+    },
+    "dateOfBirth": "1987-05-14",
+    "administrativeSex": "F",
+    "addresses": [
+      {
+        "street": "742 Evergreen Ave",
+        "city": "Los Angeles",
+        "state": "CA",
+        "postalCode": "90017",
+        "country": "USA"
+      }
+    ],
+    "telecom": [
+      {
+        "use": "PRN",
+        "equipmentType": "PH",
+        "countryCode": null,
+        "areaCode": "213",
+        "localNumber": "5550142"
+      }
+    ]
+  },
+  "coverages": [
+    {
+      "sequence": 1,
+      "plan": {
+        "code": "PPO-42",
+        "display": "Preferred Provider Plan",
+        "system": "99DEMO"
+      },
+      "insurer": {
+        "id": "ACME-001",
+        "name": "Acme Health Plan"
+      },
+      "groupNumber": "GRP-7781",
+      "policyNumber": "POL-558903",
+      "subscriber": {
+        "name": {
+          "family": "Lopez",
+          "given": "Elena",
+          "middle": "M"
+        },
+        "relationship": {
+          "code": "SEL",
+          "display": "Self"
+        }
+      }
+    }
+  ],
+  "guarantor": {
+    "identifier": {
+      "value": "GT-104892",
+      "assigningAuthority": "NORTHSTAR_LAB",
+      "type": "GU"
+    },
+    "name": {
+      "family": "Lopez",
+      "given": "Elena",
+      "middle": "M"
+    },
+    "address": {
+      "street": "742 Evergreen Ave",
+      "city": "Los Angeles",
+      "state": "CA",
+      "postalCode": "90017",
+      "country": "USA"
+    },
+    "telecom": {
+      "use": "PRN",
+      "equipmentType": "PH",
+      "areaCode": "213",
+      "localNumber": "5550142"
+    },
+    "dateOfBirth": "1987-05-14",
+    "administrativeSex": "F",
+    "type": "P",
+    "relationship": {
+      "code": "SEL",
+      "display": "Self"
+    }
+  },
+  "labOrders": [
+    {
+      "controlCode": "NW",
+      "placerOrderNumber": {
+        "value": "ORD-90017",
+        "namespaceId": "NORTHSTAR_LIS"
+      },
+      "fillerOrderNumber": {
+        "value": "FILL-41220",
+        "namespaceId": "NORTHSTAR_LAB"
+      },
+      "status": "SC",
+      "transactionAt": "2026-07-06T10:10:00-07:00",
+      "orderingProvider": {
+        "id": "12345",
+        "family": "Patel",
+        "given": "Anika"
+      },
+      "timing": {
+        "startAt": "2026-07-06T10:30:00-07:00",
+        "endAt": null,
+        "priority": {
+          "code": "R",
+          "display": "Routine"
+        }
+      },
+      "service": {
+        "code": "57021-8",
+        "display": "CBC W Auto Differential panel",
+        "system": "LN"
+      },
+      "specimens": [
+        {
+          "sequence": 1,
+          "placerId": {
+            "value": "SPM-90017",
+            "namespaceId": "NORTHSTAR_LIS"
+          },
+          "fillerId": {
+            "value": "SPM-41220",
+            "namespaceId": "NORTHSTAR_LAB"
+          },
+          "type": {
+            "code": "BLD",
+            "display": "Whole blood",
+            "system": "HL70487"
+          },
+          "role": {
+            "code": "P",
+            "display": "Patient specimen"
+          },
+          "collected": {
+            "startAt": "2026-07-06T10:00:00-07:00",
+            "endAt": "2026-07-06T10:05:00-07:00"
+          },
+          "receivedAt": "2026-07-06T10:20:00-07:00",
+          "containerType": {
+            "code": "TUBE",
+            "display": "Collection tube",
+            "system": "99DEMO"
+          }
+        }
+      ]
+    },
+    {
+      "controlCode": "NW",
+      "placerOrderNumber": {
+        "value": "ORD-90018",
+        "namespaceId": "NORTHSTAR_LIS"
+      },
+      "fillerOrderNumber": {
+        "value": "FILL-41221",
+        "namespaceId": "NORTHSTAR_LAB"
+      },
+      "status": "SC",
+      "transactionAt": "2026-07-06T10:11:00-07:00",
+      "orderingProvider": {
+        "id": "12345",
+        "family": "Patel",
+        "given": "Anika"
+      },
+      "timing": {
+        "startAt": "2026-07-06T10:35:00-07:00",
+        "endAt": null,
+        "priority": {
+          "code": "R",
+          "display": "Routine"
+        }
+      },
+      "service": {
+        "code": "24323-8",
+        "display": "Comprehensive metabolic 2000 panel - Serum or Plasma",
+        "system": "LN"
+      },
+      "specimens": [
+        {
+          "sequence": 1,
+          "placerId": {
+            "value": "SPM-90018",
+            "namespaceId": "NORTHSTAR_LIS"
+          },
+          "fillerId": {
+            "value": "SPM-41221",
+            "namespaceId": "NORTHSTAR_LAB"
+          },
+          "type": {
+            "code": "SER",
+            "display": "Serum",
+            "system": "HL70487"
+          },
+          "role": {
+            "code": "P",
+            "display": "Patient specimen"
+          },
+          "collected": {
+            "startAt": "2026-07-06T10:02:00-07:00",
+            "endAt": "2026-07-06T10:07:00-07:00"
+          },
+          "receivedAt": "2026-07-06T10:22:00-07:00",
+          "containerType": {
+            "code": "TUBE",
+            "display": "Collection tube",
+            "system": "99DEMO"
+          }
+        }
+      ]
+    }
+  ]
+}
