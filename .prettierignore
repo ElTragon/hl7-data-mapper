@@ -1,0 +1,5 @@
+node_modules/
+dist/
+coverage/
+apps/web/src/routeTree.gen.ts
+pnpm-lock.yaml

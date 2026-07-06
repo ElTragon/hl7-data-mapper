@@ -1,0 +1,43 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Builds and tests
+dist/
+dist-ssr/
+coverage/
+.vite/
+*.tsbuildinfo
+
+# Environment and secrets
+.env
+.env.*
+!.env.example
+*.local
+.dev.vars
+.dev.vars.*
+
+# Cloudflare local state
+.wrangler/
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# Local healthcare data and reports
+.local-data/
+uploads/
+reports/
+fixtures/private/
+
+# Editors and operating systems
+.vscode/*
+!.vscode/extensions.json
+.idea/
+.DS_Store
+
+# Temporary files
+tmp/
+*.tmp
