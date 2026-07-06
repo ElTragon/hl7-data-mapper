@@ -15,7 +15,7 @@ function Progress({
       data-slot="progress"
       className={cn(
         "relative flex h-1 w-full items-center overflow-x-hidden rounded-full bg-muted",
-        className
+        className,
       )}
       {...props}
     >

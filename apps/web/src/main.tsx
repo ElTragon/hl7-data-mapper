@@ -3,10 +3,13 @@ import { createRoot } from "react-dom/client"
 import { RouterProvider } from "@tanstack/react-router"
 
 import "./index.css"
+import { AppProviders } from "./providers/app-providers"
 import { router } from "./router"
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
-    <RouterProvider router={router} />
+    <AppProviders>
+      <RouterProvider router={router} />
+    </AppProviders>
   </StrictMode>,
 )
