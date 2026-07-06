@@ -40,9 +40,10 @@ pnpm dev
 Run the project checks:
 
 ```bash
+pnpm typecheck
+pnpm build
 pnpm lint
 pnpm test
-pnpm build
 pnpm format:check
 ```
 
@@ -51,10 +52,15 @@ pnpm format:check
 ```text
 apps/
   web/                 React application
-packages/              Shared domain packages added in later phases
+packages/
+  contracts/           Shared schemas and TypeScript types
+  hl7-parser/          Raw HL7 v2 parser
+  mapping-engine/      Client-specific extraction and mapping logic
 docs/                  Product, architecture, and security documentation
 fixtures/              Explicitly synthetic HL7 test fixtures
 ```
+
+More detail: [docs/project-structure.md](docs/project-structure.md)
 
 ## Security position
 
