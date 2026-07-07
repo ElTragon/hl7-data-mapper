@@ -96,6 +96,16 @@ Execution rules:
 The contracts expose `sortHl7ItemsForExecution()` so the mapping engine has one
 shared rule for execution order.
 
+The mapping engine also exposes source lookup helpers for deterministic reads:
+
+- `readSource()`
+- `readSourceValue()`
+- `getSegmentsByName()`
+- `getOrderGroups()`
+
+These helpers keep raw HL7 traversal out of the item executor and make future
+coverage, guarantor, and lab-order composers easier to test.
+
 ## Mapping execution result
 
 The mapping engine exposes `executeMapping()`.
@@ -121,6 +131,18 @@ executionTrace
 executor can run simple source reads and validations before the specialized
 object composers are complete. `normalizedFields` and `executionTrace` are the
 review/report evidence that show what each `hl7Item` read and produced.
+
+Each execution trace entry records:
+
+- item ID;
+- sequence;
+- target normalized path;
+- execution status;
+- source references;
+- resolved source-read evidence;
+- input values;
+- output value; and
+- validation issues.
 
 ## Why this matters
 

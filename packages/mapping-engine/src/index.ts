@@ -16,6 +16,18 @@ export type {
 } from "./execute-mapping.js"
 
 export {
+  getOrderGroups,
+  getSegmentsByName,
+  readSource,
+  readSourceValue,
+} from "./source-lookup.js"
+export type {
+  Hl7OrderGroup,
+  Hl7SourceRead,
+  Hl7SourceReadStatus,
+} from "./source-lookup.js"
+
+export {
   defaultOmlO21ClientProfile,
   defaultOmlO21Items,
 } from "./profiles/default-oml-o21-profile.js"

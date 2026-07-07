@@ -12,6 +12,8 @@ import {
 } from "@hl7-data-mapper/contracts"
 import type { ParsedHl7Message } from "@hl7-data-mapper/hl7-parser"
 
+import { readSource, type Hl7SourceRead } from "./source-lookup.js"
+
 export type MappingExecutionStatus =
   "completed" | "completed_with_warnings" | "error" | "pending_transform"
 
@@ -21,6 +23,7 @@ export type MappingExecutionTraceEntry = {
   readonly targetPath: string
   readonly status: MappingExecutionStatus
   readonly sourcesRead: readonly SourceReference[]
+  readonly sourceReads: readonly Hl7SourceRead[]
   readonly inputValues: readonly unknown[]
   readonly outputValue: unknown
   readonly validationIssues: readonly ValidationIssue[]
@@ -120,12 +123,12 @@ function executeItem({
   parsedMessage: ParsedHl7Message
   itemOutputs: ReadonlyMap<string, unknown>
 }): MappingExecutionTraceEntry {
-  const inputValues = readItemInputValues(item, parsedMessage, itemOutputs)
+  const input = readItemInput(item, parsedMessage, itemOutputs)
   const issues: ValidationIssue[] = []
   const pendingTransform = isPendingTransform(item)
   const outputValue = pendingTransform
     ? null
-    : applySupportedAction(item, inputValues)
+    : applySupportedAction(item, input.values)
 
   if (pendingTransform) {
     issues.push({
@@ -172,69 +175,36 @@ function executeItem({
     targetPath: item.targetPath,
     status,
     sourcesRead: item.sources,
-    inputValues,
+    sourceReads: input.sourceReads,
+    inputValues: input.values,
     outputValue,
     validationIssues: issues,
   }
 }
 
-function readItemInputValues(
+function readItemInput(
   item: Hl7Item,
   parsedMessage: ParsedHl7Message,
   itemOutputs: ReadonlyMap<string, unknown>,
-): unknown[] {
+): {
+  readonly values: readonly unknown[]
+  readonly sourceReads: readonly Hl7SourceRead[]
+} {
   if (item.sources.length > 0) {
-    return item.sources.map((source) => readSourceValue(parsedMessage, source))
+    const sourceReads = item.sources.map((source) =>
+      readSource(parsedMessage, source),
+    )
+
+    return {
+      values: sourceReads.map((sourceRead) => sourceRead.value),
+      sourceReads,
+    }
   }
 
-  return item.dependsOn.map((dependencyId) => itemOutputs.get(dependencyId))
-}
-
-function readSourceValue(
-  parsedMessage: ParsedHl7Message,
-  source: SourceReference,
-): string | null {
-  const segment =
-    source.segmentIndex !== undefined && source.segmentIndex !== null
-      ? parsedMessage.segments.find(
-          (candidate) =>
-            candidate.index === source.segmentIndex &&
-            candidate.name === source.segment,
-        )
-      : parsedMessage.segments.find(
-          (candidate) => candidate.name === source.segment,
-        )
-
-  const field = segment?.fields.find(
-    (candidate) => candidate.index === source.field,
-  )
-
-  if (!field) {
-    return null
+  return {
+    values: item.dependsOn.map((dependencyId) => itemOutputs.get(dependencyId)),
+    sourceReads: [],
   }
-
-  const repetitionIndex = (source.repetition ?? 1) - 1
-  const repetition = field.repetitions[repetitionIndex]
-
-  if (!repetition) {
-    return null
-  }
-
-  if (!source.component) {
-    return emptyToNull(repetition.value)
-  }
-
-  const component = repetition.components[source.component - 1]
-
-  if (!component) {
-    return null
-  }
-
-  if (!source.subComponent) {
-    return emptyToNull(component.value)
-  }
-
-  return emptyToNull(component.subComponents[source.subComponent - 1] ?? "")
 }
 
 function applySupportedAction(item: Hl7Item, inputValues: readonly unknown[]) {
@@ -380,8 +350,4 @@ function setValueAtPath(
 
 function isMissingValue(value: unknown): boolean {
   return value === null || value === undefined || value === ""
-}
-
-function emptyToNull(value: string): string | null {
-  return value.length > 0 ? value : null
 }

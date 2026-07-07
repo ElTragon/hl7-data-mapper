@@ -27,6 +27,22 @@ describe("executeMapping", () => {
     )
   })
 
+  it("returns identical output and trace for repeated runs", () => {
+    const parsedMessage = parseHl7Message(sampleMessage)
+    const firstRun = executeMapping({
+      parsedMessage,
+      profile: defaultOmlO21ClientProfile,
+    })
+    const secondRun = executeMapping({
+      parsedMessage,
+      profile: defaultOmlO21ClientProfile,
+    })
+
+    expect(secondRun.normalizedDraft).toEqual(firstRun.normalizedDraft)
+    expect(secondRun.executionTrace).toEqual(firstRun.executionTrace)
+    expect(secondRun.validation).toEqual(firstRun.validation)
+  })
+
   it("reads source values and builds a normalized draft", () => {
     const result = executeMapping({
       parsedMessage: parseHl7Message(sampleMessage),
@@ -77,6 +93,24 @@ describe("executeMapping", () => {
     expect(messageTypeField?.sources[0]?.path).toBe("MSH-9.1")
   })
 
+  it("includes source-read evidence in the execution trace", () => {
+    const result = executeMapping({
+      parsedMessage: parseHl7Message(sampleMessage),
+      profile: defaultOmlO21ClientProfile,
+    })
+
+    const messageTypeTrace = result.executionTrace.find(
+      (entry) => entry.itemId === "message-type",
+    )
+
+    expect(messageTypeTrace?.sourceReads[0]).toMatchObject({
+      value: "OML",
+      status: "found",
+      segmentIndex: 0,
+      rawField: "OML^O21^OML_O21",
+    })
+  })
+
   it("returns validation errors for profile mismatches", () => {
     const badProfile = ClientProfileSchema.parse({
       ...defaultOmlO21ClientProfile,
@@ -114,6 +148,44 @@ describe("executeMapping", () => {
     })
 
     expect(result.validation.errors).toHaveLength(1)
+    expect(result.executionTrace[0]?.status).toBe("error")
+  })
+
+  it("returns validation errors for missing required source values", () => {
+    const profile = ClientProfileSchema.parse({
+      ...defaultOmlO21ClientProfile,
+      itemSet: {
+        ...defaultOmlO21ClientProfile.itemSet,
+        items: [
+          {
+            id: "required-missing-field",
+            clientId: defaultOmlO21ClientProfile.clientId,
+            sequence: 1,
+            section: "patient",
+            targetPath: "patient.missing",
+            label: "Required missing field",
+            action: "extract",
+            sources: [
+              createSourceReference({
+                segment: "PID",
+                field: 99,
+              }),
+            ],
+            required: true,
+          },
+        ],
+      },
+    })
+
+    const result = executeMapping({
+      parsedMessage: parseHl7Message(sampleMessage),
+      profile,
+    })
+
+    expect(result.validation.errors).toHaveLength(1)
+    expect(result.executionTrace[0]?.sourceReads[0]?.status).toBe(
+      "missing_field",
+    )
     expect(result.executionTrace[0]?.status).toBe("error")
   })
 
