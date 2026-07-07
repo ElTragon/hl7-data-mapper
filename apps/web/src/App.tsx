@@ -17,6 +17,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
+import { Hl7IngestionPanel } from "@/features/ingestion/hl7-ingestion-panel"
 
 const workflow = [
   {
@@ -83,13 +84,13 @@ function App() {
               </p>
               <div className="mt-8 flex flex-wrap gap-3">
                 <Button asChild size="lg">
-                  <a href="#workflow">
-                    Explore the workflow
+                  <a href="#ingestion">
+                    Inspect an HL7 message.
                     <ArrowRight data-icon="inline-end" />
                   </a>
                 </Button>
                 <Button asChild size="lg" variant="outline">
-                  <a href="#architecture">View the approach</a>
+                  <a href="#workflow">Explore the workflow</a>
                 </Button>
               </div>
               <div className="mt-8 flex flex-wrap gap-x-6 gap-y-3 text-sm text-muted-foreground">
@@ -135,6 +136,8 @@ function App() {
             </Card>
           </div>
         </section>
+
+        <Hl7IngestionPanel />
 
         <section id="workflow" className="scroll-mt-8 border-b py-20">
           <div className="mx-auto max-w-6xl px-5 lg:px-8">
