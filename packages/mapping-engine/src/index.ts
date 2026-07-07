@@ -6,3 +6,22 @@ export const mappingEnginePackage = {
 } as const
 
 export type MappingEnginePackage = typeof mappingEnginePackage
+
+export {
+  chooseIdentifier,
+  componentValue,
+  firstNonEmpty,
+  firstRepetition,
+  mapAddress,
+  mapCodedValue,
+  mapEntityIdentifier,
+  mapEntityIdentifierFromComponent,
+  mapIdentifier,
+  mapPersonName,
+  mapProvider,
+  mapTelecom,
+  normalizeHl7Date,
+  normalizeHl7Timestamp,
+  parseInteger,
+  subComponentValue,
+} from "./hl7-value-helpers.js"

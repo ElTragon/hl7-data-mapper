@@ -10,3 +10,9 @@ This package will sit between the raw HL7 parser and the normalized contracts:
 4. preserve evidence about how each field was collected for review and reporting
 
 It should not parse raw HL7 text directly and should not render UI. Its main job is to make the extraction workflow explainable, repeatable, and client-aware.
+
+## Current utilities
+
+- `hl7-value-helpers.ts`: shared helpers for mapping common HL7 datatypes such
+  as CX identifiers, XPN names, XAD addresses, XTN telecom values, CE/CWE coded
+  values, EI identifiers, XCN providers, and TS dates/timestamps.
