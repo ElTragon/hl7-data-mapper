@@ -34,6 +34,8 @@ In plain English:
 - `mapping-engine` uses parsed HL7 data and `hl7Item` rules to produce normalized output.
 - `web` is the user interface that guides upload, edit, review, and report export.
 
+Data-model details: [normalized-data-model.md](normalized-data-model.md)
+
 ## Package rules
 
 ### `@hl7-data-mapper/contracts`
@@ -41,6 +43,9 @@ In plain English:
 Allowed:
 
 - normalized output schemas
+- `hl7Item` mapping schemas
+- source-reference schemas
+- review-status schemas
 - shared TypeScript types
 - validation helpers
 
