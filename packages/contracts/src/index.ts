@@ -27,11 +27,20 @@ export type {
 } from "./common.js"
 
 export {
+  canEditClientProfile,
+  canExecuteClientProfile,
+  ClientProfileSchema,
+  ClientProfileStatusSchema,
+} from "./client-profile.js"
+export type { ClientProfile, ClientProfileStatus } from "./client-profile.js"
+
+export {
   Hl7ItemActionSchema,
   Hl7ItemSchema,
   Hl7ItemSetSchema,
   Hl7ItemTransformSchema,
   Hl7ItemValueTypeSchema,
+  sortHl7ItemsForExecution,
 } from "./hl7-item.js"
 export type {
   Hl7Item,

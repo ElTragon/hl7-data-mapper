@@ -5,12 +5,16 @@ import normalizedOutputFixture from "../../../fixtures/expected/oml-o21-basic.no
 
 import {
   buildSourcePath,
+  canEditClientProfile,
+  canExecuteClientProfile,
+  ClientProfileSchema,
   createSourceReference,
   createValidationSummary,
   hasBlockingValidationErrors,
   Hl7ItemSetSchema,
   NormalizedFieldSchema,
   NormalizedOutputSchema,
+  sortHl7ItemsForExecution,
   SourceReferenceSchema,
 } from "./index.js"
 
@@ -138,6 +142,160 @@ describe("hl7Item contracts", () => {
         ],
       }),
     ).toThrow()
+  })
+
+  it("rejects dependencies on later items", () => {
+    expect(() =>
+      Hl7ItemSetSchema.parse({
+        clientId: "northstar-lab",
+        messageType: "OML^O21",
+        hl7Version: "2.5.1",
+        items: [
+          {
+            id: "patient-family-name",
+            clientId: "northstar-lab",
+            sequence: 1,
+            section: "patient",
+            targetPath: "patient.name.family",
+            label: "Patient family name",
+            action: "split",
+            dependsOn: ["patient-name-raw"],
+          },
+          {
+            id: "patient-name-raw",
+            clientId: "northstar-lab",
+            sequence: 2,
+            section: "patient",
+            targetPath: "patient.name",
+            label: "Patient name",
+            action: "extract",
+            valueType: "person_name",
+            sources: [
+              createSourceReference({
+                segment: "PID",
+                field: 5,
+              }),
+            ],
+          },
+        ],
+      }),
+    ).toThrow()
+  })
+
+  it("sorts hl7Items by sequence for deterministic execution", () => {
+    const itemSet = Hl7ItemSetSchema.parse({
+      clientId: "northstar-lab",
+      messageType: "OML^O21",
+      hl7Version: "2.5.1",
+      items: [
+        {
+          id: "patient-given-name",
+          clientId: "northstar-lab",
+          sequence: 3,
+          section: "patient",
+          targetPath: "patient.name.given",
+          label: "Patient given name",
+          action: "split",
+          dependsOn: ["patient-name-raw"],
+        },
+        {
+          id: "patient-name-raw",
+          clientId: "northstar-lab",
+          sequence: 1,
+          section: "patient",
+          targetPath: "patient.name",
+          label: "Patient name",
+          action: "extract",
+          valueType: "person_name",
+          sources: [
+            createSourceReference({
+              segment: "PID",
+              field: 5,
+            }),
+          ],
+        },
+        {
+          id: "patient-family-name",
+          clientId: "northstar-lab",
+          sequence: 2,
+          section: "patient",
+          targetPath: "patient.name.family",
+          label: "Patient family name",
+          action: "split",
+          dependsOn: ["patient-name-raw"],
+        },
+      ],
+    })
+
+    expect(
+      sortHl7ItemsForExecution(itemSet.items).map((item) => item.id),
+    ).toEqual(["patient-name-raw", "patient-family-name", "patient-given-name"])
+  })
+})
+
+describe("client profile contracts", () => {
+  const draftProfile = {
+    clientId: "northstar-lab",
+    profileId: "northstar-oml-o21",
+    profileVersion: 1,
+    status: "draft",
+    displayName: "Northstar OML O21 default profile",
+    hl7Version: "2.5.1",
+    messageType: "OML^O21",
+    messageStructure: "OML_O21",
+    createdAt: "2026-07-07T11:00:00-07:00",
+    updatedAt: "2026-07-07T11:00:00-07:00",
+    itemSet: {
+      clientId: "northstar-lab",
+      messageType: "OML^O21",
+      hl7Version: "2.5.1",
+      items: [
+        {
+          id: "patient-name-raw",
+          clientId: "northstar-lab",
+          sequence: 1,
+          section: "patient",
+          targetPath: "patient.name",
+          label: "Patient name",
+          action: "extract",
+          valueType: "person_name",
+          sources: [
+            createSourceReference({
+              segment: "PID",
+              field: 5,
+            }),
+          ],
+        },
+      ],
+    },
+  } as const
+
+  it("validates a draft client profile", () => {
+    const profile = ClientProfileSchema.parse(draftProfile)
+
+    expect(canEditClientProfile(profile)).toBe(true)
+    expect(canExecuteClientProfile(profile)).toBe(true)
+  })
+
+  it("requires published profiles to include publishedAt", () => {
+    expect(() =>
+      ClientProfileSchema.parse({
+        ...draftProfile,
+        status: "published",
+      }),
+    ).toThrow()
+  })
+
+  it("prevents archived profiles from being executed", () => {
+    const profile = ClientProfileSchema.parse({
+      ...draftProfile,
+      status: "archived",
+      publishedAt: "2026-07-07T12:00:00-07:00",
+      archivedAt: "2026-07-07T13:00:00-07:00",
+    })
+
+    expect(canEditClientProfile(profile)).toBe(false)
+    expect(canExecuteClientProfile(profile)).toBe(false)
   })
 })
 

@@ -36,6 +36,10 @@ In plain English:
 
 Data-model details: [normalized-data-model.md](normalized-data-model.md)
 
+Client profile rules: [client-profiles.md](client-profiles.md)
+
+Mapping execution rules: [mapping-execution.md](mapping-execution.md)
+
 ## Package rules
 
 ### `@hl7-data-mapper/contracts`

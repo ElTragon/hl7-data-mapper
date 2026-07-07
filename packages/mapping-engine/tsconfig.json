@@ -9,5 +9,6 @@
     "composite": true
   },
   "include": ["src"],
+  "exclude": ["src/**/*.test.ts"],
   "references": [{ "path": "../contracts" }, { "path": "../hl7-parser" }]
 }

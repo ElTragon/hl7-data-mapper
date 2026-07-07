@@ -66,6 +66,7 @@ export const Hl7ItemSetSchema = z
   .superRefine(({ clientId, items }, context) => {
     const itemIds = new Set<string>()
     const sequences = new Set<number>()
+    const sequenceByItemId = new Map<string, number>()
 
     for (const item of items) {
       if (item.clientId !== clientId) {
@@ -94,8 +95,37 @@ export const Hl7ItemSetSchema = z
 
       itemIds.add(item.id)
       sequences.add(item.sequence)
+      sequenceByItemId.set(item.id, item.sequence)
+    }
+
+    for (const item of items) {
+      for (const dependencyId of item.dependsOn) {
+        const dependencySequence = sequenceByItemId.get(dependencyId)
+
+        if (dependencySequence === undefined) {
+          context.addIssue({
+            code: "custom",
+            message: `Item "${item.id}" depends on unknown hl7Item "${dependencyId}".`,
+            path: ["items"],
+          })
+
+          continue
+        }
+
+        if (dependencySequence >= item.sequence) {
+          context.addIssue({
+            code: "custom",
+            message: `Item "${item.id}" depends on "${dependencyId}", but dependencies must have lower sequence numbers.`,
+            path: ["items"],
+          })
+        }
+      }
     }
   })
+
+export function sortHl7ItemsForExecution(items: readonly Hl7Item[]): Hl7Item[] {
+  return [...items].sort((left, right) => left.sequence - right.sequence)
+}
 
 export type Hl7ItemAction = z.infer<typeof Hl7ItemActionSchema>
 export type Hl7ItemValueType = z.infer<typeof Hl7ItemValueTypeSchema>
