@@ -8,6 +8,7 @@ This package owns the validated shapes that the rest of the app agrees on:
 - `hl7Item` mapping steps
 - source references back to HL7 fields
 - normalized field review metadata
+- versioned client profile metadata
 - review statuses
 - validation summaries
 
@@ -20,6 +21,9 @@ It should stay free of UI, file-upload, and parser implementation details. That 
 - `NormalizedFieldSchema`: review/provenance wrapper for collected values.
 - `Hl7ItemSchema`: one atomic client-specific mapping instruction.
 - `Hl7ItemSetSchema`: ordered mapping rules for one client and profile.
+- `ClientProfileSchema`: versioned client profile metadata and `hl7Item` set.
 - `ValidationIssueSchema`: structured errors, warnings, and info messages.
 
 More detail: [../../docs/normalized-data-model.md](../../docs/normalized-data-model.md)
+
+Client profile rules: [../../docs/client-profiles.md](../../docs/client-profiles.md)

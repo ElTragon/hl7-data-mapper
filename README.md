@@ -66,6 +66,8 @@ HL7 ingestion scope: [docs/hl7-ingestion.md](docs/hl7-ingestion.md)
 
 Normalized contracts: [docs/normalized-data-model.md](docs/normalized-data-model.md)
 
+Client profile versioning: [docs/client-profiles.md](docs/client-profiles.md)
+
 ## Security position
 
 This repository demonstrates a HIPAA-aware architecture; it does not claim
