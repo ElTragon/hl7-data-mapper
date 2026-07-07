@@ -6,3 +6,8 @@ export const mappingEnginePackage = {
 } as const
 
 export type MappingEnginePackage = typeof mappingEnginePackage
+
+export {
+  defaultOmlO21ClientProfile,
+  defaultOmlO21Items,
+} from "./profiles/default-oml-o21-profile.js"

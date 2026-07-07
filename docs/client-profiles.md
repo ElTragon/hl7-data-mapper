@@ -38,6 +38,25 @@ The MVP profile is intentionally narrow:
 The `itemSet` contains the ordered `hl7Item` rules that map parsed HL7 values
 into normalized output fields.
 
+## Built-in default profile
+
+The mapping engine includes a published default profile:
+
+```text
+packages/mapping-engine/src/profiles/default-oml-o21-profile.ts
+```
+
+This profile is the starting point for every OML^O21 client. It covers:
+
+- message and sender metadata from `MSH`;
+- patient identifiers, demographics, addresses, and telecom from `PID`;
+- coverage records from repeating `IN1`;
+- optional guarantor data from `GT1`; and
+- laboratory order groups from `ORC`, `TQ1`, `OBR`, and `SPM`.
+
+Client-specific profiles should begin as a draft copy of this default profile.
+The default profile itself is published and read-only.
+
 ## Profile statuses
 
 Profiles can be:
