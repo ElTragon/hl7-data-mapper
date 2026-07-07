@@ -11,31 +11,24 @@ This package will sit between the raw HL7 parser and the normalized contracts:
 
 It should not parse raw HL7 text directly and should not render UI. Its main job is to make the extraction workflow explainable, repeatable, and client-aware.
 
-## Current utilities
+## Current contents
 
-- `hl7-value-helpers.ts`: shared helpers for mapping common HL7 datatypes such
-  as CX identifiers, XPN names, XAD addresses, XTN telecom values, CE/CWE coded
-  values, EI identifiers, XCN providers, and TS dates/timestamps.
-- `default-composers.ts`: default composers for normalized MSH message/sender
-  metadata, PID patient data, IN1 coverage, GT1 guarantor data, ORC/OBR/TQ1
-  lab orders, and SPM specimen data.
+- `profiles/default-oml-o21-profile.ts`: built-in published profile for the
+  MVP HL7 v2.5.1 `OML^O21` laboratory-order workflow.
+- `execute-mapping.ts`: deterministic executor that runs profile `hl7Item`s in
+  sequence and returns a normalized draft, field-level evidence, validation,
+  and execution trace.
+- `source-lookup.ts`: source lookup helpers for reading HL7 fields,
+  components, subcomponents, segments, and ORC order groups.
 
-Use `composeDefaultNormalizedOutput(parsedMessage)` to produce the complete
-default normalized JSON for the MVP OML^O21 workflow.
+The current executor supports source reads, simple extraction, validation,
+date/timestamp normalization, and execution tracing. Complex object composers
+such as order-group assembly are declared by the default profile and reported
+as pending transforms until the specialized mapping helpers are implemented.
 
-## Default composer coverage
-
-The current default mapping path covers:
-
-- `MSH` message metadata and sender/client routing;
-- `PID` patient identifiers, demographics, address, and telecom values;
-- `IN1` coverage and subscriber values;
-- `GT1` guarantor values;
-- `ORC` and `OBR` lab-order identifiers, status, provider, and service values;
-- `TQ1` timing values; and
-- `SPM` specimen identifiers, type, collection, receipt, and container values.
-
-Tests compare the generated normalized output against the canonical expected
-fixture in `fixtures/expected/oml-o21-basic.normalized.json`.
+The execution trace records source-read evidence, including source path,
+resolved value, lookup status, segment index, raw segment, and raw field. This
+is the data the guided review UI and report export can use to explain how each
+field was collected.
 
 More detail: [../../docs/mapping-execution.md](../../docs/mapping-execution.md)

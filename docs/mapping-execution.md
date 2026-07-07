@@ -1,84 +1,168 @@
-# Default mapping composers
+# Mapping execution
 
-The mapping engine turns a parsed HL7 message into the normalized JSON shape
-defined by `@hl7-data-mapper/contracts`.
+Mapping execution turns the normalized contracts into repeatable behavior.
 
-For the current MVP scope, the default entry point is:
+The goal is deterministic execution: the same parsed HL7 message plus the same
+client profile version should produce the same draft output, review evidence,
+validation summary, and execution trace.
 
-```ts
-composeDefaultNormalizedOutput(parsedMessage)
+## Inputs
+
+`executeMapping()` accepts:
+
+```text
+parsedMessage
+profile
 ```
 
-It accepts a `ParsedHl7Message` from `@hl7-data-mapper/hl7-parser` and returns a
-`NormalizedOutput` object for the supported synthetic `OML^O21` laboratory
-order workflow.
+- `parsedMessage` comes from `@hl7-data-mapper/hl7-parser`.
+- `profile` is a validated `ClientProfile`.
+
+Archived profiles cannot be executed. Draft and published profiles can be
+executed, but published profiles are treated as immutable by the workflow.
+
+## Outputs
+
+`executeMapping()` returns:
+
+```text
+profile
+normalizedDraft
+normalizedFields
+validation
+executionTrace
+```
+
+### `normalizedDraft`
+
+A partial normalized object created by generic `hl7Item` execution.
+
+It is called a draft because complex object composers are not complete yet.
+For example, lab-order grouping requires ORC, TQ1, OBR, and SPM-specific logic.
+
+### `normalizedFields`
+
+Review-ready field wrappers. Each field includes:
+
+- normalized key;
+- label;
+- value;
+- source references;
+- primary source;
+- transform history;
+- validation issues;
+- review status; and
+- warnings.
+
+### `validation`
+
+Grouped validation issues:
+
+```text
+errors
+warnings
+info
+```
+
+Errors block review. Warnings and info messages can be shown while allowing
+the user to continue.
+
+### `executionTrace`
+
+The audit trail for every executed `hl7Item`.
+
+Each trace entry records:
+
+- item ID;
+- sequence;
+- target path;
+- execution status;
+- source references;
+- source-read evidence;
+- input values;
+- output value; and
+- validation issues.
+
+Source-read evidence includes:
+
+- source path, such as `PID-5.1`;
+- resolved value;
+- lookup status;
+- segment index;
+- raw segment; and
+- raw field.
+
+## Source lookup helpers
+
+The mapping engine exposes helper functions so HL7 traversal stays in one
+place:
+
+```text
+readSource()
+readSourceValue()
+getSegmentsByName()
+getOrderGroups()
+```
+
+These helpers support field, component, and subcomponent reads. They also
+return non-throwing missing statuses such as `missing_segment`,
+`missing_field`, and `missing_component`.
+
+## Deterministic rules
+
+The executor follows these rules:
+
+- Validate the profile before execution.
+- Reject archived profiles.
+- Sort `hl7Item`s by ascending `sequence`.
+- Read all declared sources through `source-lookup`.
+- Write values to `normalizedDraft` by target path.
+- Record a trace entry for every item.
+- Convert missing required values into validation errors.
+- Convert declared but unimplemented complex transforms into info issues.
+
+## Current implemented actions
+
+The generic executor currently supports:
+
+- `extract`
+- `validate`
+- `default_value`
+- `normalize_date`
+- `normalize_timestamp`
+- `join`
+
+The default profile also declares future complex transforms, such as:
+
+- `preferIdentifierType`
+- `mapXpnName`
+- `mapRepeatingXadAddresses`
+- `mapRepeatingXtnTelecom`
+- `mapRepeatingIn1Coverage`
+- `mapOptionalGt1Guarantor`
+- `mapOrcOrderGroups`
+
+These are intentionally reported as pending transforms until specialized
+mapping helpers are implemented.
 
 ## Current scope
 
-The default composers support the standard places this project expects data to
-appear in an HL7 v2.5.1 OML/O21 message:
+Currently implemented:
 
-| Normalized section    | Composer                 | Source segments            |
-| --------------------- | ------------------------ | -------------------------- |
-| Message metadata      | `composeMessageMetadata` | `MSH`                      |
-| Sender/client routing | `composeSender`          | `MSH`                      |
-| Patient               | `composePatient`         | `PID`                      |
-| Coverage              | `composeCoverages`       | `IN1`                      |
-| Guarantor             | `composeGuarantor`       | `GT1`                      |
-| Lab orders            | `composeLabOrders`       | `ORC`, `OBR`, `TQ1`, `SPM` |
-| Specimens             | `composeSpecimens`       | `SPM`                      |
+- versioned client profile contract;
+- draft, published, and archived profile rules;
+- deterministic `hl7Item` ordering and dependency validation;
+- built-in default OML^O21 profile;
+- generic mapping executor;
+- source lookup helpers;
+- source-read execution evidence;
+- deterministic execution tests; and
+- documentation for profile and execution behavior.
 
-These functions intentionally compose business objects, not UI state. They do
-not parse raw HL7 text, render review screens, write files, or claim full HL7
-conformance.
+Known next work:
 
-## Helper layer
-
-`hl7-value-helpers.ts` holds reusable datatype helpers for common HL7 values:
-
-- identifiers such as `CX` and `EI`;
-- person names such as `XPN` and compact name values;
-- addresses such as `XAD`;
-- telecom values such as `XTN`;
-- coded values such as `CE` and `CWE`;
-- providers such as `XCN`;
-- dates and timestamps such as `DT`, `TS`, and timestamp ranges.
-
-This keeps the composer functions readable. The composer decides which HL7
-field should populate a normalized property, while the helper decides how that
-HL7 datatype is converted.
-
-## Deterministic behavior
-
-The default composer path is deterministic:
-
-1. parse the source HL7 message once;
-2. read known source segments and fields;
-3. normalize values using shared helper functions;
-4. group each `ORC` with its related `OBR`, `TQ1`, and `SPM` segments; and
-5. return the same normalized JSON for the same parsed message.
-
-That determinism matters because users will later review each section and
-decide whether the default extraction is correct for a specific client.
-
-## Fixture-backed acceptance
-
-The mapping-engine tests compare the full generated normalized object against:
-
-```text
-fixtures/expected/oml-o21-basic.normalized.json
-```
-
-That gives the project a stable contract: when default mapping behavior changes,
-the expected normalized fixture must change with it.
-
-## Future work
-
-The default composers are the foundation for client-specific mapping execution.
-Future work should add:
-
-- versioned client profiles;
-- ordered `hl7Item` execution;
-- field-level mapping evidence for review screens;
-- user-confirmed mapping overrides; and
-- downloadable report generation.
+- implement specialized patient mapping helpers;
+- implement coverage and guarantor object composers;
+- implement ORC/TQ1/OBR/SPM lab-order grouping;
+- compare full normalized output against the expected fixture; and
+- connect mapping results to the guided review UI.
