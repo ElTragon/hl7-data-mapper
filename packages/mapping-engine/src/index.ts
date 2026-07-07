@@ -8,6 +8,16 @@ export const mappingEnginePackage = {
 export type MappingEnginePackage = typeof mappingEnginePackage
 
 export {
+  composeCoverages,
+  composeGuarantor,
+  composeLabOrders,
+  composeMessageMetadata,
+  composePatient,
+  composeSender,
+  composeSpecimens,
+} from "./default-composers.js"
+
+export {
   chooseIdentifier,
   componentValue,
   firstNonEmpty,

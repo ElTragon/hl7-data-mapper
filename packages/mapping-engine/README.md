@@ -16,3 +16,6 @@ It should not parse raw HL7 text directly and should not render UI. Its main job
 - `hl7-value-helpers.ts`: shared helpers for mapping common HL7 datatypes such
   as CX identifiers, XPN names, XAD addresses, XTN telecom values, CE/CWE coded
   values, EI identifiers, XCN providers, and TS dates/timestamps.
+- `default-composers.ts`: default composers for normalized MSH message/sender
+  metadata, PID patient data, IN1 coverage, GT1 guarantor data, ORC/OBR/TQ1
+  lab orders, and SPM specimen data.
