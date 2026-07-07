@@ -28,12 +28,18 @@ export type {
 } from "./source-lookup.js"
 
 export {
+  applyReviewFieldCorrectionToProfile,
   buildReviewableFields,
   confirmReviewableField,
   markReviewableFieldIncorrect,
   markReviewableFieldUnavailable,
+  selectAlternateSourceForReviewableField,
 } from "./review-fields.js"
-export type { BuildReviewableFieldsInput } from "./review-fields.js"
+export type {
+  ApplyReviewCorrectionInput,
+  BuildReviewableFieldsInput,
+  SelectAlternateSourceInput,
+} from "./review-fields.js"
 
 export {
   defaultOmlO21ClientProfile,

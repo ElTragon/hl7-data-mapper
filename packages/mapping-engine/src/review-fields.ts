@@ -1,8 +1,12 @@
-import type {
-  ClientProfile,
-  Hl7Item,
-  NormalizedOutputSection,
-  ReviewableField,
+import {
+  canEditClientProfile,
+  ClientProfileSchema,
+  SourceReferenceSchema,
+  type ClientProfile,
+  type Hl7Item,
+  type NormalizedOutputSection,
+  type ReviewableField,
+  type SourceReference,
 } from "@hl7-data-mapper/contracts"
 
 import type {
@@ -13,6 +17,21 @@ import type {
 export type BuildReviewableFieldsInput = {
   readonly mappingResult: MappingExecutionResult
   readonly profile: ClientProfile
+}
+
+export type SelectAlternateSourceInput = {
+  readonly field: ReviewableField
+  readonly replacementSource: SourceReference
+  readonly rawSegment?: string | null
+  readonly previewValue?: unknown
+  readonly reason?: string | null
+  readonly notes?: string
+}
+
+export type ApplyReviewCorrectionInput = {
+  readonly profile: ClientProfile
+  readonly field: ReviewableField
+  readonly updatedAt: string
 }
 
 export function buildReviewableFields({
@@ -101,6 +120,111 @@ export function markReviewableFieldUnavailable(
   }
 }
 
+export function selectAlternateSourceForReviewableField({
+  field,
+  replacementSource,
+  rawSegment,
+  previewValue,
+  reason,
+  notes,
+}: SelectAlternateSourceInput): ReviewableField {
+  if (!field.hl7ItemId) {
+    throw new Error(
+      `Cannot select an alternate source for "${field.label}" because it is not linked to an hl7Item.`,
+    )
+  }
+
+  const parsedSource = SourceReferenceSchema.parse(replacementSource)
+  const candidateAlreadyExists = field.sourceCandidates.some(
+    (candidate) => candidate.source.path === parsedSource.path,
+  )
+
+  return {
+    ...field,
+    reviewStatus: "incorrect",
+    sourceCandidates: candidateAlreadyExists
+      ? field.sourceCandidates
+      : [
+          ...field.sourceCandidates,
+          {
+            source: parsedSource,
+            rawSegment: rawSegment ?? parsedSource.raw ?? null,
+            previewValue: previewValue ?? null,
+            reason: reason ?? "User-selected alternate HL7 source.",
+          },
+        ],
+    correctionIntent: {
+      targetHl7ItemId: field.hl7ItemId,
+      replacementSource: parsedSource,
+      notes: notes ?? null,
+    },
+  }
+}
+
+export function applyReviewFieldCorrectionToProfile({
+  profile,
+  field,
+  updatedAt,
+}: ApplyReviewCorrectionInput): ClientProfile {
+  const parsedProfile = ClientProfileSchema.parse(profile)
+
+  if (!canEditClientProfile(parsedProfile)) {
+    throw new Error(
+      `Client profile "${parsedProfile.profileId}" cannot be edited while status is "${parsedProfile.status}".`,
+    )
+  }
+
+  const targetHl7ItemId =
+    field.correctionIntent?.targetHl7ItemId ?? field.hl7ItemId
+  const replacementSource = field.correctionIntent?.replacementSource
+
+  if (!targetHl7ItemId) {
+    throw new Error(
+      `Cannot apply a correction for "${field.label}" because it is not linked to an hl7Item.`,
+    )
+  }
+
+  if (!replacementSource) {
+    throw new Error(
+      `Cannot apply a source correction for "${field.label}" because no replacement source was selected.`,
+    )
+  }
+
+  let didUpdateItem = false
+  const updatedItems = parsedProfile.itemSet.items.map((item) => {
+    if (item.id !== targetHl7ItemId) {
+      return item
+    }
+
+    didUpdateItem = true
+
+    return {
+      ...item,
+      sources: [replacementSource],
+      notes: appendNote(
+        item.notes,
+        field.correctionIntent?.notes ??
+          `Updated source from guided review for ${field.normalizedPath}.`,
+      ),
+    }
+  })
+
+  if (!didUpdateItem) {
+    throw new Error(
+      `Could not find hl7Item "${targetHl7ItemId}" in profile "${parsedProfile.profileId}".`,
+    )
+  }
+
+  return ClientProfileSchema.parse({
+    ...parsedProfile,
+    updatedAt,
+    itemSet: {
+      ...parsedProfile.itemSet,
+      items: updatedItems,
+    },
+  })
+}
+
 function stepIdFromSection(
   section: NormalizedOutputSection,
 ): ReviewableField["stepId"] {
@@ -161,4 +285,12 @@ function sourceCandidateReason(
   }
 
   return `Source read for "${item.label}".`
+}
+
+function appendNote(existingNote: string | null | undefined, nextNote: string) {
+  if (!existingNote) {
+    return nextNote
+  }
+
+  return `${existingNote}\n${nextNote}`
 }

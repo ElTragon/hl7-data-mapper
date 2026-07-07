@@ -54,6 +54,16 @@ Selecting another source should create or update an `hl7Item` correction. The
 normalized value should then be regenerated from mapping rules instead of being
 manually overwritten in UI state.
 
+The correction flow is intentionally two-step:
+
+1. `selectAlternateSourceForReviewableField` records the selected HL7 source as
+   a correction intent on the review field.
+2. `applyReviewFieldCorrectionToProfile` updates the linked `hl7Item` source in
+   the draft client profile.
+
+The UI should then re-run mapping with the updated profile so the displayed
+value comes from mapping execution, not from a one-off manual override.
+
 ## Generated review fields
 
 `buildReviewableFields` in `@hl7-data-mapper/mapping-engine` turns a mapping

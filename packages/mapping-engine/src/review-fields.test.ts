@@ -1,13 +1,19 @@
 import { parseHl7Message } from "@hl7-data-mapper/hl7-parser"
+import {
+  ClientProfileSchema,
+  createSourceReference,
+} from "@hl7-data-mapper/contracts"
 import { describe, expect, it } from "vitest"
 
 import { executeMapping } from "./execute-mapping.js"
 import { defaultOmlO21ClientProfile } from "./profiles/default-oml-o21-profile.js"
 import {
+  applyReviewFieldCorrectionToProfile,
   buildReviewableFields,
   confirmReviewableField,
   markReviewableFieldIncorrect,
   markReviewableFieldUnavailable,
+  selectAlternateSourceForReviewableField,
 } from "./review-fields.js"
 
 const sampleMessage = `MSH|^~\\&|NORTHSTAR_LIS|NORTHSTAR_LAB|HL7_MAPPER|DEMO_FACILITY|20260706101500-0700||OML^O21^OML_O21|MSG-20260706-0001|P|2.5.1|||AL|NE|USA|ASCII
@@ -123,6 +129,111 @@ describe("review fields", () => {
         targetHl7ItemId: field.hl7ItemId,
         replacementSource: null,
       },
+    })
+  })
+
+  it("records a selected alternate HL7 source as a correction intent", () => {
+    const mappingResult = executeMapping({
+      parsedMessage: parseHl7Message(sampleMessage),
+      profile: defaultOmlO21ClientProfile,
+    })
+    const field = buildReviewableFields({
+      mappingResult,
+      profile: defaultOmlO21ClientProfile,
+    }).find((candidate) => candidate.normalizedPath === "patient.name")
+
+    if (!field) {
+      throw new Error("Expected patient.name review field.")
+    }
+
+    const replacementSource = createSourceReference({
+      segment: "PID",
+      field: 5,
+      component: 2,
+      raw: "Lopez^Elena^M",
+    })
+
+    const correctedField = selectAlternateSourceForReviewableField({
+      field,
+      replacementSource,
+      rawSegment: field.rawSegment,
+      previewValue: "Elena",
+      notes: "Client wants the given name source for this demo correction.",
+    })
+
+    expect(correctedField.value).toBe(field.value)
+    expect(correctedField.reviewStatus).toBe("incorrect")
+    expect(correctedField.correctionIntent).toMatchObject({
+      targetHl7ItemId: "patient-name",
+      replacementSource: {
+        path: "PID-5.2",
+      },
+      notes: "Client wants the given name source for this demo correction.",
+    })
+    expect(
+      correctedField.sourceCandidates.some(
+        (candidate) => candidate.source.path === "PID-5.2",
+      ),
+    ).toBe(true)
+  })
+
+  it("applies a selected source correction to the linked hl7Item", () => {
+    const draftProfile = ClientProfileSchema.parse({
+      ...defaultOmlO21ClientProfile,
+      status: "draft",
+      publishedAt: undefined,
+    })
+    const mappingResult = executeMapping({
+      parsedMessage: parseHl7Message(sampleMessage),
+      profile: draftProfile,
+    })
+    const field = buildReviewableFields({
+      mappingResult,
+      profile: draftProfile,
+    }).find((candidate) => candidate.normalizedPath === "patient.name")
+
+    if (!field) {
+      throw new Error("Expected patient.name review field.")
+    }
+
+    const correctedField = selectAlternateSourceForReviewableField({
+      field,
+      replacementSource: createSourceReference({
+        segment: "PID",
+        field: 5,
+        component: 2,
+      }),
+      notes: "Use PID-5.2 for this client profile.",
+    })
+
+    const updatedProfile = applyReviewFieldCorrectionToProfile({
+      profile: draftProfile,
+      field: correctedField,
+      updatedAt: "2026-07-07T16:45:00-07:00",
+    })
+    const updatedItem = updatedProfile.itemSet.items.find(
+      (item) => item.id === "patient-name",
+    )
+
+    expect(updatedProfile.updatedAt).toBe("2026-07-07T16:45:00-07:00")
+    expect(updatedItem?.sources.map((source) => source.path)).toEqual([
+      "PID-5.2",
+    ])
+    expect(updatedItem?.notes).toContain("Use PID-5.2 for this client profile.")
+
+    const rerun = executeMapping({
+      parsedMessage: parseHl7Message(sampleMessage),
+      profile: updatedProfile,
+    })
+    const patientNameTrace = rerun.executionTrace.find(
+      (entry) => entry.itemId === "patient-name",
+    )
+
+    expect(patientNameTrace?.sourceReads[0]).toMatchObject({
+      source: {
+        path: "PID-5.2",
+      },
+      value: "Elena",
     })
   })
 })
