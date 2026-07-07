@@ -160,31 +160,38 @@ An `hl7Item` represents one atomic mapping operation:
 ```json
 {
   "id": "patient-family-name",
+  "clientId": "northstar-lab",
+  "sequence": 2,
+  "section": "patient",
+  "targetPath": "patient.name.family",
   "label": "Patient family name",
-  "scope": "patient",
-  "outputPath": "patient.name.family",
-  "operation": "extract",
-  "source": {
-    "segment": "PID",
-    "field": 5,
-    "repetition": "first",
-    "component": 1
+  "action": "split",
+  "valueType": "string",
+  "sources": [],
+  "dependsOn": ["patient-name-raw"],
+  "transform": {
+    "name": "selectComponent",
+    "description": "Select the first XPN component as family name.",
+    "params": {
+      "component": 1
+    }
   },
-  "inputs": [],
-  "transforms": ["trim"],
-  "required": true
+  "required": true,
+  "reviewRequired": true
 }
 ```
 
 Supported MVP operations:
 
 - `extract`
-- `copy`
-- `constant`
-- `coalesce`
-- `combine`
-- `lookup`
-- `format`
+- `split`
+- `join`
+- `map_code`
+- `normalize_date`
+- `normalize_timestamp`
+- `default_value`
+- `validate`
+- `compose`
 
 Multiple items may contribute to one final field. Dependencies reference item
 IDs and must form an acyclic graph. Item execution must be deterministic.
@@ -234,6 +241,8 @@ The normalized output contains:
 
 ```text
 schemaVersion
+clientId
+generatedAt
 message
 sender
 patient
@@ -256,6 +265,8 @@ Rules:
 - Identifiers retain assigning authority and identifier type when supplied.
 - The normalized object contains business values; mapping provenance is
   emitted separately in the report.
+- Field-level review data uses the `NormalizedField` contract outside the clean
+  normalized business object.
 
 ## 8. Privacy and security requirements
 

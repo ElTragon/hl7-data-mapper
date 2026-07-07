@@ -64,6 +64,8 @@ More detail: [docs/project-structure.md](docs/project-structure.md)
 
 HL7 ingestion scope: [docs/hl7-ingestion.md](docs/hl7-ingestion.md)
 
+Normalized contracts: [docs/normalized-data-model.md](docs/normalized-data-model.md)
+
 ## Security position
 
 This repository demonstrates a HIPAA-aware architecture; it does not claim
