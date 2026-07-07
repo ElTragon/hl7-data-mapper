@@ -8,6 +8,7 @@ This package owns the validated shapes that the rest of the app agrees on:
 - `hl7Item` mapping steps
 - source references back to HL7 fields
 - normalized field review metadata
+- guided review workflow metadata
 - versioned client profile metadata
 - review statuses
 - validation summaries
@@ -19,6 +20,7 @@ It should stay free of UI, file-upload, and parser implementation details. That 
 - `NormalizedOutputSchema`: clean business data for OML^O21 lab orders.
 - `SourceReferenceSchema`: one-based HL7 source paths such as `PID-5.1`.
 - `NormalizedFieldSchema`: review/provenance wrapper for collected values.
+- `ReviewableFieldSchema`: UI-ready field evidence for guided review.
 - `Hl7ItemSchema`: one atomic client-specific mapping instruction.
 - `Hl7ItemSetSchema`: ordered mapping rules for one client and profile.
 - `ClientProfileSchema`: versioned client profile metadata and `hl7Item` set.
@@ -27,3 +29,5 @@ It should stay free of UI, file-upload, and parser implementation details. That 
 More detail: [../../docs/normalized-data-model.md](../../docs/normalized-data-model.md)
 
 Client profile rules: [../../docs/client-profiles.md](../../docs/client-profiles.md)
+
+Guided review workflow: [../../docs/guided-review.md](../../docs/guided-review.md)

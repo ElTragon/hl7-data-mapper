@@ -70,6 +70,8 @@ Client profile versioning: [docs/client-profiles.md](docs/client-profiles.md)
 
 Mapping execution: [docs/mapping-execution.md](docs/mapping-execution.md)
 
+Guided review workflow: [docs/guided-review.md](docs/guided-review.md)
+
 ## Security position
 
 This repository demonstrates a HIPAA-aware architecture; it does not claim

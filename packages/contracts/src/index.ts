@@ -35,6 +35,24 @@ export {
 export type { ClientProfile, ClientProfileStatus } from "./client-profile.js"
 
 export {
+  GUIDED_REVIEW_STEPS,
+  GuidedReviewProgressSchema,
+  GuidedReviewStepIdSchema,
+  GuidedReviewStepSchema,
+  ReviewableFieldSchema,
+  ReviewCorrectionIntentSchema,
+  ReviewSourceCandidateSchema,
+} from "./guided-review.js"
+export type {
+  GuidedReviewProgress,
+  GuidedReviewStep,
+  GuidedReviewStepId,
+  ReviewableField,
+  ReviewCorrectionIntent,
+  ReviewSourceCandidate,
+} from "./guided-review.js"
+
+export {
   Hl7ItemActionSchema,
   Hl7ItemSchema,
   Hl7ItemSetSchema,

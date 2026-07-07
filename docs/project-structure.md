@@ -49,6 +49,7 @@ Allowed:
 
 - normalized output schemas
 - `hl7Item` mapping schemas
+- guided review field schemas
 - source-reference schemas
 - review-status schemas
 - shared TypeScript types
