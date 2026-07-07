@@ -1,7 +1,16 @@
 export type Hl7Severity = "error" | "warning"
 
 export type Hl7IssueCode =
-  "empty_message" | "missing_msh" | "invalid_msh" | "malformed_segment_name"
+  | "empty_message"
+  | "missing_msh"
+  | "msh_not_first"
+  | "invalid_msh"
+  | "malformed_segment_name"
+  | "unsupported_message_type"
+  | "unsupported_hl7_version"
+  | "missing_pid"
+  | "missing_order"
+  | "missing_spm"
 
 export interface Hl7Issue {
   readonly code: Hl7IssueCode

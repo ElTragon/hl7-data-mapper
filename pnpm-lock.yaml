@@ -139,6 +139,9 @@ importers:
 
   packages/hl7-parser:
     devDependencies:
+      '@types/node':
+        specifier: ^24.13.2
+        version: 24.13.2
       typescript:
         specifier: ~6.0.2
         version: 6.0.3

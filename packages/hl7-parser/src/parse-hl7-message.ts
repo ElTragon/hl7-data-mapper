@@ -31,7 +31,26 @@ export function parseHl7Message(rawText: string): ParsedHl7Message {
     })
   }
 
-  if (rawSegments[0]?.slice(0, 3) !== "MSH") {
+  if (
+    rawSegments.length > 0 &&
+    rawSegments[0]?.slice(0, 3) !== "MSH" &&
+    rawSegments.some((segment) => segment.slice(0, 3) === "MSH")
+  ) {
+    issues.push({
+      code: "msh_not_first",
+      severity: "error",
+      message: "MSH segment must be the first segment.",
+      segmentIndex: rawSegments.findIndex(
+        (segment) => segment.slice(0, 3) === "MSH",
+      ),
+      segmentName: "MSH",
+    })
+  }
+
+  if (
+    rawSegments.length > 0 &&
+    !rawSegments.some((segment) => segment.slice(0, 3) === "MSH")
+  ) {
     issues.push({
       code: "missing_msh",
       severity: "error",
@@ -46,6 +65,8 @@ export function parseHl7Message(rawText: string): ParsedHl7Message {
   )
 
   const msh = segments.find((segment) => segment.name === "MSH")
+  validateMvpProfile(segments, msh, issues)
+
   const errors = issues.filter((issue) => issue.severity === "error")
   const warnings = issues.filter((issue) => issue.severity === "warning")
 
@@ -59,6 +80,89 @@ export function parseHl7Message(rawText: string): ParsedHl7Message {
     errors,
     warnings,
   }
+}
+
+function validateMvpProfile(
+  segments: readonly Hl7Segment[],
+  msh: Hl7Segment | undefined,
+  issues: Hl7Issue[],
+): void {
+  const messageType = getMessageType(msh)
+  const version = getFieldValue(msh, 12)
+
+  if (
+    msh &&
+    (messageType.code !== "OML" ||
+      messageType.triggerEvent !== "O21" ||
+      messageType.structure !== "OML_O21")
+  ) {
+    issues.push({
+      code: "unsupported_message_type",
+      severity: "error",
+      message: "Only OML^O21^OML_O21 messages are supported in the MVP.",
+      segmentIndex: msh.index,
+      segmentName: msh.name,
+    })
+  }
+
+  if (msh && version !== "2.5.1") {
+    issues.push({
+      code: "unsupported_hl7_version",
+      severity: "error",
+      message: "Only HL7 version 2.5.1 is supported in the MVP.",
+      segmentIndex: msh.index,
+      segmentName: msh.name,
+    })
+  }
+
+  if (!segments.some((segment) => segment.name === "PID")) {
+    issues.push({
+      code: "missing_pid",
+      severity: "error",
+      message: "The MVP application profile requires a PID segment.",
+    })
+  }
+
+  if (
+    !segments.some((segment) => segment.name === "ORC") ||
+    !segments.some((segment) => segment.name === "OBR")
+  ) {
+    issues.push({
+      code: "missing_order",
+      severity: "error",
+      message:
+        "The MVP application profile requires ORC and OBR order content.",
+    })
+  }
+
+  findOrcGroupsMissingSpm(segments).forEach((orcSegment) => {
+    issues.push({
+      code: "missing_spm",
+      severity: "warning",
+      message: "Order group has no SPM specimen segment.",
+      segmentIndex: orcSegment.index,
+      segmentName: orcSegment.name,
+    })
+  })
+}
+
+function findOrcGroupsMissingSpm(
+  segments: readonly Hl7Segment[],
+): readonly Hl7Segment[] {
+  return segments.filter((segment, index) => {
+    if (segment.name !== "ORC") {
+      return false
+    }
+
+    const nextOrcIndex = segments.findIndex(
+      (candidate, candidateIndex) =>
+        candidateIndex > index && candidate.name === "ORC",
+    )
+    const groupEndIndex = nextOrcIndex === -1 ? segments.length : nextOrcIndex
+    const orderGroup = segments.slice(index, groupEndIndex)
+
+    return !orderGroup.some((candidate) => candidate.name === "SPM")
+  })
 }
 
 function normalizeSegmentEndings(rawText: string): string {
