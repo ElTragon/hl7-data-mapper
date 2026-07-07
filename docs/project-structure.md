@@ -31,7 +31,8 @@ In plain English:
 
 - `contracts` defines the shapes everyone agrees on.
 - `hl7-parser` reads HL7 text and turns it into structured HL7 data.
-- `mapping-engine` uses parsed HL7 data and `hl7Item` rules to produce normalized output.
+- `mapping-engine` uses parsed HL7 data, default composers, and later
+  `hl7Item` rules to produce normalized output.
 - `web` is the user interface that guides upload, edit, review, and report export.
 
 Data-model details: [normalized-data-model.md](normalized-data-model.md)
@@ -78,6 +79,8 @@ Avoid:
 Allowed:
 
 - default mapping rules
+- normalized output composers
+- HL7 datatype value helpers
 - client-specific `hl7Item` steps
 - evidence showing how a normalized field was collected
 

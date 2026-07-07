@@ -153,3 +153,6 @@ Contract tests verify:
 - normalized field defaults;
 - validation summary grouping; and
 - the canonical normalized fixture.
+
+Mapping-engine tests also verify that the default composers can generate the
+canonical normalized fixture from the supported synthetic OML/O21 message.
