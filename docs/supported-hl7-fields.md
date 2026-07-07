@@ -6,8 +6,8 @@ This matrix defines the HL7 Data Mapper MVP application profile for
 `OML^O21^OML_O21`.
 
 “MVP required” describes this product profile, not the base HL7 standard.
-Fields not listed here may be parsed structurally in later phases but are not
-part of the default normalized output.
+Fields not listed here may still be parsed structurally, but they are not part
+of the default normalized output.
 
 ## Message and sender
 

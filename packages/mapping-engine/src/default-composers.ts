@@ -4,6 +4,7 @@ import type {
   Guarantor,
   LabOrder,
   MessageMetadata,
+  NormalizedOutput,
   Patient,
   PersonName,
   Provider,
@@ -11,6 +12,7 @@ import type {
   Specimen,
   Telecom,
 } from "@hl7-data-mapper/contracts"
+import { NORMALIZED_OUTPUT_SCHEMA_VERSION } from "@hl7-data-mapper/contracts"
 import type {
   Hl7Field,
   Hl7Repetition,
@@ -34,6 +36,20 @@ import {
   normalizeHl7Timestamp,
   parseInteger,
 } from "./hl7-value-helpers.js"
+
+export function composeDefaultNormalizedOutput(
+  parsedMessage: ParsedHl7Message,
+): NormalizedOutput {
+  return {
+    schemaVersion: NORMALIZED_OUTPUT_SCHEMA_VERSION,
+    message: composeMessageMetadata(parsedMessage),
+    sender: composeSender(parsedMessage),
+    patient: composePatient(parsedMessage),
+    coverages: composeCoverages(parsedMessage),
+    guarantor: composeGuarantor(parsedMessage),
+    labOrders: composeLabOrders(parsedMessage),
+  }
+}
 
 export function composeMessageMetadata(
   parsedMessage: ParsedHl7Message,

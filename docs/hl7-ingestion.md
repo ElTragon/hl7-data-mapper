@@ -1,9 +1,9 @@
 # HL7 Ingestion
 
-Phase 3 focuses on getting synthetic HL7 text into the application and turning
-it into a structured, inspectable message. This phase proves we can read the
-file correctly before we try to extract patient, coverage, guarantor, or lab
-order business data.
+HL7 ingestion focuses on getting synthetic HL7 text into the application and
+turning it into a structured, inspectable message. This work proves we can read
+the file correctly before we try to extract patient, coverage, guarantor, or
+lab order business data.
 
 ## Goal
 
@@ -27,7 +27,7 @@ In plain English, ingestion means:
 
 ## In scope
 
-Phase 3 includes:
+This section includes:
 
 - `.hl7` and `.txt` message input up to 1 MiB;
 - pasted message text;
@@ -42,7 +42,7 @@ Phase 3 includes:
 
 ## Out of scope
 
-Phase 3 does not include:
+This section does not include:
 
 - default patient, coverage, guarantor, or lab-order extraction;
 - executing `hl7Item` mapping rules;
@@ -55,7 +55,7 @@ Phase 3 does not include:
 - accepting real PHI; or
 - claiming complete HL7 conformance validation.
 
-Those belong to later phases.
+Those belong to later implementation sections.
 
 ## Basic validation rules
 
@@ -108,7 +108,7 @@ should return this kind of information:
 
 ## Acceptance criteria
 
-Phase 3 is complete when:
+HL7 ingestion is complete when:
 
 - a synthetic HL7 message can be pasted or loaded into the web app;
 - the message can be edited before parsing;

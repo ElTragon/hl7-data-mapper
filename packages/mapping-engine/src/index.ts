@@ -9,6 +9,7 @@ export type MappingEnginePackage = typeof mappingEnginePackage
 
 export {
   composeCoverages,
+  composeDefaultNormalizedOutput,
   composeGuarantor,
   composeLabOrders,
   composeMessageMetadata,

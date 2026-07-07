@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest"
 import expectedOutput from "../../../fixtures/expected/oml-o21-basic.normalized.json"
 import {
   composeCoverages,
+  composeDefaultNormalizedOutput,
   composeGuarantor,
   composeLabOrders,
   composeMessageMetadata,
@@ -28,6 +29,12 @@ SPM|1|SPM-90018&NORTHSTAR_LIS^SPM-41221&NORTHSTAR_LAB||SER^Serum^HL70487|||||||P
 describe("default composers", () => {
   const parsedMessage = parseHl7Message(fixture)
 
+  it("composes the full default normalized output", () => {
+    expect(composeDefaultNormalizedOutput(parsedMessage)).toEqual(
+      expectedOutput,
+    )
+  })
+
   it("composes MSH message metadata", () => {
     expect(composeMessageMetadata(parsedMessage)).toEqual(
       expectedOutput.message,
@@ -48,6 +55,16 @@ describe("default composers", () => {
 
   it("composes optional GT1 guarantor data", () => {
     expect(composeGuarantor(parsedMessage)).toEqual(expectedOutput.guarantor)
+  })
+
+  it("returns null when optional GT1 guarantor data is absent", () => {
+    const parsedMessageWithoutGuarantor =
+      parseHl7Message(`MSH|^~\\&|NORTHSTAR_LIS|NORTHSTAR_LAB|HL7_MAPPER|DEMO_FACILITY|20260706101500-0700||OML^O21^OML_O21|MSG-20260706-0001|P|2.5.1
+PID|1||MRN-104892^^^NORTHSTAR_LAB^MR||Lopez^Elena^M||19870514|F
+ORC|NW|ORD-90017^NORTHSTAR_LIS
+OBR|1|ORD-90017^NORTHSTAR_LIS|FILL-41220^NORTHSTAR_LAB|57021-8^CBC W Auto Differential panel^LN`)
+
+    expect(composeGuarantor(parsedMessageWithoutGuarantor)).toBeNull()
   })
 
   it("composes ORC OBR TQ1 lab orders with SPM specimens", () => {
