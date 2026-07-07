@@ -12,13 +12,24 @@ import {
 } from "./common.js"
 import { ValidationSummarySchema } from "./validation.js"
 
+export const NORMALIZED_OUTPUT_SCHEMA_VERSION = "1.0.0" as const
+
+export const NormalizedOutputSectionSchema = z.enum([
+  "patient",
+  "sender",
+  "coverage",
+  "guarantor",
+  "labOrders",
+  "exceptions",
+])
+
 export const MessageMetadataSchema = z.object({
-  type: z.string(),
-  triggerEvent: z.string(),
-  structure: z.string(),
+  type: z.literal("OML"),
+  triggerEvent: z.literal("O21"),
+  structure: z.literal("OML_O21"),
   controlId: z.string().nullable(),
   processingId: z.string().nullable(),
-  version: z.string(),
+  version: z.literal("2.5.1"),
   sentAt: z.string().nullable(),
 })
 
@@ -103,7 +114,9 @@ export const LabOrderSchema = z.object({
 })
 
 export const NormalizedOutputSchema = z.object({
-  schemaVersion: z.string(),
+  schemaVersion: z.literal(NORMALIZED_OUTPUT_SCHEMA_VERSION),
+  clientId: NullableStringSchema.optional(),
+  generatedAt: NullableStringSchema.optional(),
   message: MessageMetadataSchema,
   sender: SenderSchema,
   patient: PatientSchema,
@@ -114,6 +127,9 @@ export const NormalizedOutputSchema = z.object({
 })
 
 export type MessageMetadata = z.infer<typeof MessageMetadataSchema>
+export type NormalizedOutputSection = z.infer<
+  typeof NormalizedOutputSectionSchema
+>
 export type SenderEndpoint = z.infer<typeof SenderEndpointSchema>
 export type Sender = z.infer<typeof SenderSchema>
 export type Patient = z.infer<typeof PatientSchema>

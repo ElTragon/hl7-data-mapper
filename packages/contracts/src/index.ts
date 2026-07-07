@@ -26,14 +26,34 @@ export type {
   Telecom,
 } from "./common.js"
 
-export { NormalizedFieldSchema } from "./normalized-field.js"
-export type { NormalizedField } from "./normalized-field.js"
+export {
+  Hl7ItemActionSchema,
+  Hl7ItemSchema,
+  Hl7ItemSetSchema,
+  Hl7ItemTransformSchema,
+  Hl7ItemValueTypeSchema,
+} from "./hl7-item.js"
+export type {
+  Hl7Item,
+  Hl7ItemAction,
+  Hl7ItemSet,
+  Hl7ItemTransform,
+  Hl7ItemValueType,
+} from "./hl7-item.js"
+
+export {
+  NormalizedFieldSchema,
+  TransformStepSchema,
+} from "./normalized-field.js"
+export type { NormalizedField, TransformStep } from "./normalized-field.js"
 
 export {
   CoverageSchema,
   GuarantorSchema,
   LabOrderSchema,
   MessageMetadataSchema,
+  NORMALIZED_OUTPUT_SCHEMA_VERSION,
+  NormalizedOutputSectionSchema,
   NormalizedOutputSchema,
   OrderTimingSchema,
   PatientSchema,
@@ -48,6 +68,7 @@ export type {
   LabOrder,
   MessageMetadata,
   NormalizedOutput,
+  NormalizedOutputSection,
   OrderTiming,
   Patient,
   Sender,
@@ -56,13 +77,27 @@ export type {
   Subscriber,
 } from "./normalized-output.js"
 
-export { ReviewStatusSchema } from "./review-status.js"
+export {
+  REVIEW_STATUSES,
+  REVIEW_STATUS_LABELS,
+  ReviewStatusSchema,
+} from "./review-status.js"
 export type { ReviewStatus } from "./review-status.js"
 
-export { SourceReferenceSchema } from "./source-reference.js"
-export type { SourceReference } from "./source-reference.js"
+export {
+  buildSourcePath,
+  createSourceReference,
+  SourceReferenceInputSchema,
+  SourceReferenceSchema,
+} from "./source-reference.js"
+export type {
+  SourceReference,
+  SourceReferenceInput,
+} from "./source-reference.js"
 
 export {
+  createValidationSummary,
+  hasBlockingValidationErrors,
   ValidationIssueSchema,
   ValidationSeveritySchema,
   ValidationSummarySchema,
