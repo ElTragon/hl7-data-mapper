@@ -22,7 +22,7 @@ rules.
 - TanStack Router and TanStack Query
 - Vitest and React Testing Library
 - pnpm workspaces
-- Cloudflare Pages, Workers, and D1 in later phases
+- Cloudflare Pages, Workers, and D1 for future hosted features
 
 ## Local development
 
@@ -67,6 +67,8 @@ HL7 ingestion scope: [docs/hl7-ingestion.md](docs/hl7-ingestion.md)
 Normalized contracts: [docs/normalized-data-model.md](docs/normalized-data-model.md)
 
 Client profile versioning: [docs/client-profiles.md](docs/client-profiles.md)
+
+Mapping execution: [docs/mapping-execution.md](docs/mapping-execution.md)
 
 ## Security position
 

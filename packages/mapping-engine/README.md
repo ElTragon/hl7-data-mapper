@@ -30,3 +30,5 @@ The execution trace records source-read evidence, including source path,
 resolved value, lookup status, segment index, raw segment, and raw field. This
 is the data the guided review UI and report export can use to explain how each
 field was collected.
+
+More detail: [../../docs/mapping-execution.md](../../docs/mapping-execution.md)

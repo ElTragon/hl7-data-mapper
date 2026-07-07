@@ -282,7 +282,7 @@ Rules:
 
 ## 9. MVP acceptance criteria
 
-Phase 1 is accepted when:
+The MVP requirements are accepted when:
 
 - the supported field matrix is documented;
 - the normalized example matches that matrix;
