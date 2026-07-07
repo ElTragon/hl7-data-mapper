@@ -114,6 +114,7 @@ Review statuses are:
 ```text
 unreviewed
 confirmed
+incorrect
 mapping_changed
 unavailable
 ```

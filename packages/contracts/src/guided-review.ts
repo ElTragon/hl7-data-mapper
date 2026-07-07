@@ -86,6 +86,7 @@ export const GuidedReviewProgressSchema = z.object({
   total: z.number().int().nonnegative(),
   unreviewed: z.number().int().nonnegative(),
   confirmed: z.number().int().nonnegative(),
+  incorrect: z.number().int().nonnegative(),
   mappingChanged: z.number().int().nonnegative(),
   unavailable: z.number().int().nonnegative(),
 })

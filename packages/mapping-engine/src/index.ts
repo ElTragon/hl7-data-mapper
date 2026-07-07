@@ -28,6 +28,14 @@ export type {
 } from "./source-lookup.js"
 
 export {
+  buildReviewableFields,
+  confirmReviewableField,
+  markReviewableFieldIncorrect,
+  markReviewableFieldUnavailable,
+} from "./review-fields.js"
+export type { BuildReviewableFieldsInput } from "./review-fields.js"
+
+export {
   defaultOmlO21ClientProfile,
   defaultOmlO21Items,
 } from "./profiles/default-oml-o21-profile.js"

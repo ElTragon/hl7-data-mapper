@@ -19,7 +19,7 @@ The initial guided workflow uses five sections:
 5. Warnings and missing fields
 
 Each section should show a short progress summary, such as how many fields are
-confirmed, changed, unavailable, or still unreviewed.
+confirmed, incorrect, changed, unavailable, or still unreviewed.
 
 ## Review field model
 
@@ -53,6 +53,22 @@ For each field, the user can:
 Selecting another source should create or update an `hl7Item` correction. The
 normalized value should then be regenerated from mapping rules instead of being
 manually overwritten in UI state.
+
+## Generated review fields
+
+`buildReviewableFields` in `@hl7-data-mapper/mapping-engine` turns a mapping
+execution result into `ReviewableField` objects.
+
+That function combines:
+
+- the normalized field value;
+- the client profile `hl7Item`;
+- the execution trace;
+- source-read evidence; and
+- validation warnings.
+
+This gives the UI a ready-to-render checklist while keeping mapping logic inside
+the mapping package.
 
 ## Source selection
 
