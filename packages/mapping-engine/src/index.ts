@@ -7,6 +7,14 @@ export const mappingEnginePackage = {
 
 export type MappingEnginePackage = typeof mappingEnginePackage
 
+export { executeMapping } from "./execute-mapping.js"
+export type {
+  ExecuteMappingInput,
+  MappingExecutionResult,
+  MappingExecutionStatus,
+  MappingExecutionTraceEntry,
+} from "./execute-mapping.js"
+
 export {
   defaultOmlO21ClientProfile,
   defaultOmlO21Items,

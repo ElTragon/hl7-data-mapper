@@ -15,7 +15,11 @@ It should not parse raw HL7 text directly and should not render UI. Its main job
 
 - `profiles/default-oml-o21-profile.ts`: built-in published profile for the
   MVP HL7 v2.5.1 `OML^O21` laboratory-order workflow.
+- `execute-mapping.ts`: deterministic executor that runs profile `hl7Item`s in
+  sequence and returns a normalized draft, field-level evidence, validation,
+  and execution trace.
 
-The default profile is declarative. It lists ordered `hl7Item`s and their HL7
-source references, but it does not execute them yet. Execution is added in the
-next step of Phase 5.
+The current executor supports source reads, simple extraction, validation,
+date/timestamp normalization, and execution tracing. Complex object composers
+such as order-group assembly are declared by the default profile and reported
+as pending transforms until the specialized mapping helpers are implemented.

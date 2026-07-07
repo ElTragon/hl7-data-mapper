@@ -96,6 +96,32 @@ Execution rules:
 The contracts expose `sortHl7ItemsForExecution()` so the mapping engine has one
 shared rule for execution order.
 
+## Mapping execution result
+
+The mapping engine exposes `executeMapping()`.
+
+It accepts:
+
+```text
+parsedMessage
+profile
+```
+
+It returns:
+
+```text
+profile
+normalizedDraft
+normalizedFields
+validation
+executionTrace
+```
+
+`normalizedDraft` is intentionally named as a draft because the generic
+executor can run simple source reads and validations before the specialized
+object composers are complete. `normalizedFields` and `executionTrace` are the
+review/report evidence that show what each `hl7Item` read and produced.
+
 ## Why this matters
 
 Versioned profiles make the project feel like a real implementation tool:
