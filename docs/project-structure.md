@@ -33,6 +33,8 @@ In plain English:
 - `hl7-parser` reads HL7 text and turns it into structured HL7 data.
 - `mapping-engine` uses parsed HL7 data, default composers, and later
   `hl7Item` rules to produce normalized output.
+- `mapping-engine` also creates guided-review fields, progress summaries, and
+  rule-driven correction updates for draft client profiles.
 - `web` is the user interface that guides upload, edit, review, and report export.
 
 Data-model details: [normalized-data-model.md](normalized-data-model.md)
@@ -49,6 +51,7 @@ Allowed:
 
 - normalized output schemas
 - `hl7Item` mapping schemas
+- guided review field schemas
 - source-reference schemas
 - review-status schemas
 - shared TypeScript types

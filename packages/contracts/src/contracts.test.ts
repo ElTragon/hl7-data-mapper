@@ -10,10 +10,12 @@ import {
   ClientProfileSchema,
   createSourceReference,
   createValidationSummary,
+  GUIDED_REVIEW_STEPS,
   hasBlockingValidationErrors,
   Hl7ItemSetSchema,
   NormalizedFieldSchema,
   NormalizedOutputSchema,
+  ReviewableFieldSchema,
   sortHl7ItemsForExecution,
   SourceReferenceSchema,
 } from "./index.js"
@@ -318,6 +320,59 @@ describe("normalized field contracts", () => {
 
     expect(field.reviewStatus).toBe("unreviewed")
     expect(field.transformHistory).toEqual([])
+  })
+})
+
+describe("guided review contracts", () => {
+  it("defines the guided review walkthrough in order", () => {
+    expect(GUIDED_REVIEW_STEPS.map((step) => step.id)).toEqual([
+      "patient",
+      "sender",
+      "coverageGuarantor",
+      "labOrders",
+      "warnings",
+    ])
+  })
+
+  it("validates a reviewable field with source evidence and an hl7Item link", () => {
+    const source = createSourceReference({
+      segment: "PID",
+      field: 5,
+      component: 1,
+      segmentIndex: 1,
+      raw: "SYNTHETIC^RILEY",
+    })
+
+    const field = ReviewableFieldSchema.parse({
+      id: "patient-name-family",
+      stepId: "patient",
+      section: "patient",
+      normalizedPath: "patient.name.family",
+      label: "Patient family name",
+      value: "SYNTHETIC",
+      hl7ItemId: "patient-name-family",
+      primarySource: source,
+      sources: [source],
+      rawSegment: "PID|1||...||SYNTHETIC^RILEY",
+      transformHistory: [
+        {
+          name: "selectComponent",
+          description: "Selected XPN component 1.",
+        },
+      ],
+      sourceCandidates: [
+        {
+          source,
+          rawSegment: "PID|1||...||SYNTHETIC^RILEY",
+          previewValue: "SYNTHETIC",
+          reason: "Default PID patient name source.",
+        },
+      ],
+    })
+
+    expect(field.reviewStatus).toBe("unreviewed")
+    expect(field.primarySource?.path).toBe("PID-5.1")
+    expect(field.hl7ItemId).toBe("patient-name-family")
   })
 })
 

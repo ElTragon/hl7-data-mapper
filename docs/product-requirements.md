@@ -129,12 +129,11 @@ These checks validate the application profile, not the entire HL7 standard.
 
 Review sections appear in this order:
 
-1. Patient
-2. Sender and message
-3. Coverage
-4. Guarantor
-5. Laboratory orders and specimens
-6. Exceptions
+1. Patient information
+2. Sender/client information
+3. Coverage and guarantor
+4. Lab orders
+5. Warnings and missing fields
 
 Every collected field must expose:
 
@@ -150,8 +149,15 @@ Review statuses are:
 
 - `unreviewed`
 - `confirmed`
+- `incorrect`
 - `mapping_changed`
 - `unavailable`
+
+Corrections must update or create `hl7Item` mapping instructions. The UI must
+not treat a corrected value as a one-off display override.
+
+Warnings and missing-field review must include validation issues and
+non-successful HL7 source reads, including missing fields and empty values.
 
 ### FR-5: hl7Item mapping model
 

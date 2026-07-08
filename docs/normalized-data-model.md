@@ -88,6 +88,25 @@ It stores:
 The normalized output remains a clean business object. `NormalizedField` is
 used for review screens, mapping evidence, and report files.
 
+## Guided review fields
+
+`ReviewableFieldSchema` turns normalized values into UI-ready review items.
+
+Each reviewable field includes:
+
+- the guided review step, such as patient or lab orders;
+- the normalized path, such as `patient.name.family`;
+- the extracted value;
+- the related `hl7Item` ID;
+- source evidence, including HL7 path and raw segment;
+- transform history;
+- validation issues and warnings;
+- review status; and
+- possible alternate HL7 sources.
+
+This keeps the review UI focused on evidence while preserving the rule-driven
+mapping model.
+
 ## Review statuses
 
 Review statuses are:
@@ -95,12 +114,14 @@ Review statuses are:
 ```text
 unreviewed
 confirmed
+incorrect
 mapping_changed
 unavailable
 ```
 
 These represent the user's decision about a collected field during guided
-review.
+review. `incorrect` means the user found a problem before the mapping rule is
+changed. `mapping_changed` means the linked `hl7Item` has been updated.
 
 ## hl7Item mapping rules
 

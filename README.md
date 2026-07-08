@@ -15,6 +15,10 @@ rules.
 4. Correct client-specific mappings through traceable `hl7Item` steps.
 5. Export the reviewed data and mapping documentation.
 
+Corrections are rule-driven: changing a source during review updates the
+client's `hl7Item` mapping and reruns extraction instead of only overwriting a
+displayed value.
+
 ## Technology
 
 - React, TypeScript, and Vite
@@ -69,6 +73,8 @@ Normalized contracts: [docs/normalized-data-model.md](docs/normalized-data-model
 Client profile versioning: [docs/client-profiles.md](docs/client-profiles.md)
 
 Mapping execution: [docs/mapping-execution.md](docs/mapping-execution.md)
+
+Guided review workflow: [docs/guided-review.md](docs/guided-review.md)
 
 ## Security position
 
