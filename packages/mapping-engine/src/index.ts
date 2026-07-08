@@ -28,16 +28,25 @@ export type {
 } from "./source-lookup.js"
 
 export {
+  applyReviewCorrectionAndRerunMapping,
   applyReviewFieldCorrectionToProfile,
   buildReviewableFields,
+  buildGuidedReviewNavigation,
+  buildWarningReviewFields,
+  calculateGuidedReviewProgress,
   confirmReviewableField,
   markReviewableFieldIncorrect,
   markReviewableFieldUnavailable,
   selectAlternateSourceForReviewableField,
 } from "./review-fields.js"
 export type {
+  ApplyReviewCorrectionAndRerunInput,
+  ApplyReviewCorrectionAndRerunResult,
   ApplyReviewCorrectionInput,
   BuildReviewableFieldsInput,
+  BuildGuidedReviewNavigationInput,
+  GuidedReviewNavigation,
+  GuidedReviewStepSummary,
   SelectAlternateSourceInput,
 } from "./review-fields.js"
 

@@ -1,14 +1,20 @@
 import {
   canEditClientProfile,
   ClientProfileSchema,
+  GUIDED_REVIEW_STEPS,
   SourceReferenceSchema,
   type ClientProfile,
+  type GuidedReviewProgress,
+  type GuidedReviewStepId,
   type Hl7Item,
   type NormalizedOutputSection,
   type ReviewableField,
   type SourceReference,
+  type ValidationIssue,
 } from "@hl7-data-mapper/contracts"
+import type { ParsedHl7Message } from "@hl7-data-mapper/hl7-parser"
 
+import { executeMapping } from "./execute-mapping.js"
 import type {
   MappingExecutionResult,
   MappingExecutionTraceEntry,
@@ -34,6 +40,35 @@ export type ApplyReviewCorrectionInput = {
   readonly updatedAt: string
 }
 
+export type ApplyReviewCorrectionAndRerunInput = ApplyReviewCorrectionInput & {
+  readonly parsedMessage: ParsedHl7Message
+}
+
+export type ApplyReviewCorrectionAndRerunResult = {
+  readonly profile: ClientProfile
+  readonly mappingResult: MappingExecutionResult
+  readonly reviewFields: readonly ReviewableField[]
+}
+
+export type GuidedReviewStepSummary = {
+  readonly id: GuidedReviewStepId
+  readonly title: string
+  readonly progress: GuidedReviewProgress
+  readonly isComplete: boolean
+  readonly hasBlockingIssues: boolean
+}
+
+export type GuidedReviewNavigation = {
+  readonly steps: readonly GuidedReviewStepSummary[]
+  readonly activeStepId: GuidedReviewStepId
+  readonly nextStepId: GuidedReviewStepId | null
+}
+
+export type BuildGuidedReviewNavigationInput = {
+  readonly fields: readonly ReviewableField[]
+  readonly activeStepId?: GuidedReviewStepId
+}
+
 export function buildReviewableFields({
   mappingResult,
   profile,
@@ -45,7 +80,7 @@ export function buildReviewableFields({
     mappingResult.executionTrace.map((entry) => [entry.targetPath, entry]),
   )
 
-  return mappingResult.normalizedFields.map((field) => {
+  const normalizedReviewFields = mappingResult.normalizedFields.map((field) => {
     const item = itemByTargetPath.get(field.key)
     const trace = traceByTargetPath.get(field.key)
     const section = item?.section ?? sectionFromPath(field.key)
@@ -75,6 +110,8 @@ export function buildReviewableFields({
         : [],
     }
   })
+
+  return [...normalizedReviewFields, ...buildWarningReviewFields(mappingResult)]
 }
 
 export function confirmReviewableField(
@@ -225,6 +262,101 @@ export function applyReviewFieldCorrectionToProfile({
   })
 }
 
+export function applyReviewCorrectionAndRerunMapping({
+  parsedMessage,
+  profile,
+  field,
+  updatedAt,
+}: ApplyReviewCorrectionAndRerunInput): ApplyReviewCorrectionAndRerunResult {
+  const updatedProfile = applyReviewFieldCorrectionToProfile({
+    profile,
+    field,
+    updatedAt,
+  })
+  const mappingResult = executeMapping({
+    parsedMessage,
+    profile: updatedProfile,
+  })
+
+  return {
+    profile: updatedProfile,
+    mappingResult,
+    reviewFields: buildReviewableFields({
+      mappingResult,
+      profile: updatedProfile,
+    }),
+  }
+}
+
+export function buildWarningReviewFields(
+  mappingResult: MappingExecutionResult,
+): ReviewableField[] {
+  return [
+    ...mappingResult.validation.errors.map((issue, index) =>
+      validationIssueToReviewableField(issue, "error", index),
+    ),
+    ...mappingResult.validation.warnings.map((issue, index) =>
+      validationIssueToReviewableField(issue, "warning", index),
+    ),
+    ...mappingResult.validation.info.map((issue, index) =>
+      validationIssueToReviewableField(issue, "info", index),
+    ),
+  ]
+}
+
+export function calculateGuidedReviewProgress(
+  fields: readonly ReviewableField[],
+): GuidedReviewProgress {
+  return {
+    total: fields.length,
+    unreviewed: fields.filter((field) => field.reviewStatus === "unreviewed")
+      .length,
+    confirmed: fields.filter((field) => field.reviewStatus === "confirmed")
+      .length,
+    incorrect: fields.filter((field) => field.reviewStatus === "incorrect")
+      .length,
+    mappingChanged: fields.filter(
+      (field) => field.reviewStatus === "mapping_changed",
+    ).length,
+    unavailable: fields.filter((field) => field.reviewStatus === "unavailable")
+      .length,
+  }
+}
+
+export function buildGuidedReviewNavigation({
+  fields,
+  activeStepId = "patient",
+}: BuildGuidedReviewNavigationInput): GuidedReviewNavigation {
+  const steps = GUIDED_REVIEW_STEPS.map((step) => {
+    const stepFields = fields.filter((field) => field.stepId === step.id)
+    const progress = calculateGuidedReviewProgress(stepFields)
+
+    return {
+      id: step.id,
+      title: step.title,
+      progress,
+      isComplete:
+        progress.total > 0 &&
+        progress.unreviewed === 0 &&
+        progress.incorrect === 0,
+      hasBlockingIssues: stepFields.some((field) =>
+        field.validation.some((issue) => issue.severity === "error"),
+      ),
+    }
+  })
+  const nextStepId =
+    steps.find(
+      (step) =>
+        step.id !== activeStepId && !step.isComplete && step.progress.total > 0,
+    )?.id ?? null
+
+  return {
+    steps,
+    activeStepId,
+    nextStepId,
+  }
+}
+
 function stepIdFromSection(
   section: NormalizedOutputSection,
 ): ReviewableField["stepId"] {
@@ -293,4 +425,44 @@ function appendNote(existingNote: string | null | undefined, nextNote: string) {
   }
 
   return `${existingNote}\n${nextNote}`
+}
+
+function validationIssueToReviewableField(
+  issue: ValidationIssue,
+  group: "error" | "warning" | "info",
+  index: number,
+): ReviewableField {
+  const normalizedPath =
+    issue.fieldKey ?? issue.path ?? `validation.${group}.${index}`
+  const source = issue.source ?? null
+
+  return {
+    id: `validation-${group}-${index}-${issue.code}`,
+    stepId: "warnings",
+    section: "exceptions",
+    normalizedPath,
+    label: validationLabel(issue),
+    value: issue.message,
+    hl7ItemId: null,
+    primarySource: source,
+    sources: source ? [source] : [],
+    rawSegment: source?.raw ?? null,
+    transformHistory: [],
+    validation: [issue],
+    warnings: issue.severity === "warning" ? [issue.message] : [],
+    reviewStatus: "unreviewed",
+    sourceCandidates: [],
+  }
+}
+
+function validationLabel(issue: ValidationIssue): string {
+  if (issue.fieldKey) {
+    return `Review ${issue.fieldKey}`
+  }
+
+  if (issue.segment) {
+    return `Review ${issue.segment} issue`
+  }
+
+  return "Review mapping issue"
 }

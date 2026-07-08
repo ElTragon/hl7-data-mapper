@@ -64,6 +64,15 @@ The correction flow is intentionally two-step:
 The UI should then re-run mapping with the updated profile so the displayed
 value comes from mapping execution, not from a one-off manual override.
 
+`applyReviewCorrectionAndRerunMapping` handles that full loop for the app:
+
+1. apply the selected source correction to the draft client profile;
+2. execute mapping again with the updated profile;
+3. regenerate review fields from the new mapping result.
+
+This keeps the review screen deterministic. If the same message and same
+profile are used again, the same corrected source will be read again.
+
 ## Generated review fields
 
 `buildReviewableFields` in `@hl7-data-mapper/mapping-engine` turns a mapping
@@ -79,6 +88,30 @@ That function combines:
 
 This gives the UI a ready-to-render checklist while keeping mapping logic inside
 the mapping package.
+
+## Guided navigation
+
+`buildGuidedReviewNavigation` groups review fields by workflow step and returns
+progress counts for each section:
+
+- total fields;
+- unreviewed fields;
+- confirmed fields;
+- incorrect fields;
+- mapping-changed fields; and
+- unavailable fields.
+
+The UI can use this to show progress such as “Patient information complete” or
+“Lab orders still need review.”
+
+## Warnings and missing fields
+
+`buildWarningReviewFields` converts validation issues into reviewable fields in
+the warnings step.
+
+This means missing required values, unsupported transforms, and other validation
+issues are not hidden in logs. They become part of the same guided review flow
+as patient, sender, coverage, guarantor, and lab-order data.
 
 ## Source selection
 

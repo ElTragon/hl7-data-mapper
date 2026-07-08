@@ -8,8 +8,12 @@ import { describe, expect, it } from "vitest"
 import { executeMapping } from "./execute-mapping.js"
 import { defaultOmlO21ClientProfile } from "./profiles/default-oml-o21-profile.js"
 import {
+  applyReviewCorrectionAndRerunMapping,
   applyReviewFieldCorrectionToProfile,
   buildReviewableFields,
+  buildGuidedReviewNavigation,
+  buildWarningReviewFields,
+  calculateGuidedReviewProgress,
   confirmReviewableField,
   markReviewableFieldIncorrect,
   markReviewableFieldUnavailable,
@@ -235,5 +239,148 @@ describe("review fields", () => {
       },
       value: "Elena",
     })
+  })
+
+  it("applies a correction and reruns mapping in one deterministic review flow", () => {
+    const draftProfile = ClientProfileSchema.parse({
+      ...defaultOmlO21ClientProfile,
+      status: "draft",
+      publishedAt: undefined,
+    })
+    const parsedMessage = parseHl7Message(sampleMessage)
+    const firstRun = executeMapping({
+      parsedMessage,
+      profile: draftProfile,
+    })
+    const field = buildReviewableFields({
+      mappingResult: firstRun,
+      profile: draftProfile,
+    }).find((candidate) => candidate.normalizedPath === "patient.name")
+
+    if (!field) {
+      throw new Error("Expected patient.name review field.")
+    }
+
+    const correctedField = selectAlternateSourceForReviewableField({
+      field,
+      replacementSource: createSourceReference({
+        segment: "PID",
+        field: 5,
+        component: 2,
+      }),
+    })
+
+    const result = applyReviewCorrectionAndRerunMapping({
+      parsedMessage,
+      profile: draftProfile,
+      field: correctedField,
+      updatedAt: "2026-07-07T17:00:00-07:00",
+    })
+
+    expect(result.profile.updatedAt).toBe("2026-07-07T17:00:00-07:00")
+    expect(
+      result.mappingResult.executionTrace.find(
+        (entry) => entry.itemId === "patient-name",
+      )?.sourceReads[0],
+    ).toMatchObject({
+      source: {
+        path: "PID-5.2",
+      },
+      value: "Elena",
+    })
+    expect(
+      result.reviewFields.find(
+        (reviewField) => reviewField.normalizedPath === "patient.name",
+      )?.primarySource?.path,
+    ).toBe("PID-5.2")
+  })
+
+  it("calculates progress and guided navigation by review section", () => {
+    const mappingResult = executeMapping({
+      parsedMessage: parseHl7Message(sampleMessage),
+      profile: defaultOmlO21ClientProfile,
+    })
+    const fields = buildReviewableFields({
+      mappingResult,
+      profile: defaultOmlO21ClientProfile,
+    })
+    const updatedFields = fields.map((field) => {
+      if (field.stepId === "patient") {
+        return confirmReviewableField(field)
+      }
+
+      return field
+    })
+    const patientFields = updatedFields.filter(
+      (field) => field.stepId === "patient",
+    )
+    const patientProgress = calculateGuidedReviewProgress(patientFields)
+    const navigation = buildGuidedReviewNavigation({
+      fields: updatedFields,
+      activeStepId: "patient",
+    })
+
+    expect(patientProgress).toMatchObject({
+      total: patientFields.length,
+      confirmed: patientFields.length,
+      unreviewed: 0,
+    })
+    expect(
+      navigation.steps.find((step) => step.id === "patient"),
+    ).toMatchObject({
+      title: "Patient information",
+      isComplete: true,
+    })
+    expect(navigation.nextStepId).toBe("sender")
+  })
+
+  it("creates warning review fields for missing fields and validation issues", () => {
+    const profile = ClientProfileSchema.parse({
+      ...defaultOmlO21ClientProfile,
+      itemSet: {
+        ...defaultOmlO21ClientProfile.itemSet,
+        items: [
+          {
+            id: "required-missing-field",
+            clientId: defaultOmlO21ClientProfile.clientId,
+            sequence: 1,
+            section: "patient",
+            targetPath: "patient.missing",
+            label: "Required missing field",
+            action: "extract",
+            sources: [
+              createSourceReference({
+                segment: "PID",
+                field: 99,
+              }),
+            ],
+            required: true,
+          },
+        ],
+      },
+    })
+    const mappingResult = executeMapping({
+      parsedMessage: parseHl7Message(sampleMessage),
+      profile,
+    })
+    const warningFields = buildWarningReviewFields(mappingResult)
+    const allReviewFields = buildReviewableFields({
+      mappingResult,
+      profile,
+    })
+
+    expect(warningFields[0]).toMatchObject({
+      stepId: "warnings",
+      section: "exceptions",
+      normalizedPath: "patient.missing",
+      label: "Review patient.missing",
+      value:
+        'Required mapping item "Required missing field" did not produce a value.',
+      reviewStatus: "unreviewed",
+    })
+    expect(warningFields[0]?.validation[0]?.severity).toBe("error")
+    expect(allReviewFields.some((field) => field.stepId === "warnings")).toBe(
+      true,
+    )
   })
 })
