@@ -383,4 +383,158 @@ describe("review fields", () => {
       true,
     )
   })
+
+  it("creates warning review fields for optional missing HL7 sources", () => {
+    const profile = ClientProfileSchema.parse({
+      ...defaultOmlO21ClientProfile,
+      itemSet: {
+        ...defaultOmlO21ClientProfile.itemSet,
+        items: [
+          {
+            id: "optional-missing-field",
+            clientId: defaultOmlO21ClientProfile.clientId,
+            sequence: 1,
+            section: "patient",
+            targetPath: "patient.optional",
+            label: "Optional missing field",
+            action: "extract",
+            sources: [
+              createSourceReference({
+                segment: "PID",
+                field: 98,
+              }),
+            ],
+            required: false,
+          },
+        ],
+      },
+    })
+    const mappingResult = executeMapping({
+      parsedMessage: parseHl7Message(sampleMessage),
+      profile,
+    })
+    const warningFields = buildWarningReviewFields(mappingResult)
+
+    expect(warningFields[0]).toMatchObject({
+      stepId: "warnings",
+      section: "exceptions",
+      normalizedPath: "patient.optional",
+      label: "Review patient.optional source",
+      hl7ItemId: "optional-missing-field",
+      primarySource: {
+        path: "PID-98",
+      },
+      reviewStatus: "unreviewed",
+    })
+    expect(warningFields[0]?.validation[0]).toMatchObject({
+      code: "source-read-missing_field",
+      severity: "warning",
+      fieldKey: "patient.optional",
+    })
+  })
+
+  it("marks the warnings step as blocking when it contains validation errors", () => {
+    const profile = ClientProfileSchema.parse({
+      ...defaultOmlO21ClientProfile,
+      itemSet: {
+        ...defaultOmlO21ClientProfile.itemSet,
+        items: [
+          {
+            id: "required-missing-field",
+            clientId: defaultOmlO21ClientProfile.clientId,
+            sequence: 1,
+            section: "patient",
+            targetPath: "patient.missing",
+            label: "Required missing field",
+            action: "extract",
+            sources: [
+              createSourceReference({
+                segment: "PID",
+                field: 99,
+              }),
+            ],
+            required: true,
+          },
+        ],
+      },
+    })
+    const mappingResult = executeMapping({
+      parsedMessage: parseHl7Message(sampleMessage),
+      profile,
+    })
+    const navigation = buildGuidedReviewNavigation({
+      fields: buildReviewableFields({
+        mappingResult,
+        profile,
+      }),
+      activeStepId: "warnings",
+    })
+
+    expect(
+      navigation.steps.find((step) => step.id === "warnings"),
+    ).toMatchObject({
+      hasBlockingIssues: true,
+      progress: {
+        total: 1,
+        unreviewed: 1,
+      },
+    })
+  })
+
+  it("rejects alternate-source selection for review fields without an hl7Item", () => {
+    const mappingResult = executeMapping({
+      parsedMessage: parseHl7Message(sampleMessage),
+      profile: defaultOmlO21ClientProfile,
+    })
+    const warningField = buildWarningReviewFields(mappingResult).find(
+      (field) => field.hl7ItemId === null,
+    )
+
+    if (!warningField) {
+      throw new Error("Expected a warning review field without an hl7Item.")
+    }
+
+    expect(() =>
+      selectAlternateSourceForReviewableField({
+        field: warningField,
+        replacementSource: createSourceReference({
+          segment: "PID",
+          field: 5,
+          component: 1,
+        }),
+      }),
+    ).toThrow("not linked to an hl7Item")
+  })
+
+  it("rejects applying corrections to published profiles", () => {
+    const mappingResult = executeMapping({
+      parsedMessage: parseHl7Message(sampleMessage),
+      profile: defaultOmlO21ClientProfile,
+    })
+    const field = buildReviewableFields({
+      mappingResult,
+      profile: defaultOmlO21ClientProfile,
+    }).find((candidate) => candidate.normalizedPath === "patient.name")
+
+    if (!field) {
+      throw new Error("Expected patient.name review field.")
+    }
+
+    const correctedField = selectAlternateSourceForReviewableField({
+      field,
+      replacementSource: createSourceReference({
+        segment: "PID",
+        field: 5,
+        component: 2,
+      }),
+    })
+
+    expect(() =>
+      applyReviewFieldCorrectionToProfile({
+        profile: defaultOmlO21ClientProfile,
+        field: correctedField,
+        updatedAt: "2026-07-07T17:20:00-07:00",
+      }),
+    ).toThrow("cannot be edited")
+  })
 })

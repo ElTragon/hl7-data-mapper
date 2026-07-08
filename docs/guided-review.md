@@ -18,8 +18,14 @@ The initial guided workflow uses five sections:
 4. Lab orders
 5. Warnings and missing fields
 
-Each section should show a short progress summary, such as how many fields are
-confirmed, incorrect, changed, unavailable, or still unreviewed.
+Each section shows a short progress summary:
+
+- total fields;
+- unreviewed fields;
+- confirmed fields;
+- incorrect fields;
+- mapping-changed fields; and
+- unavailable fields.
 
 ## Review field model
 
@@ -40,6 +46,9 @@ Each field shows:
 
 The shared contract for this shape lives in
 `packages/contracts/src/guided-review.ts`.
+
+The mapping-engine implementation that produces these fields lives in
+`packages/mapping-engine/src/review-fields.ts`.
 
 ## Review actions
 
@@ -109,9 +118,36 @@ The UI can use this to show progress such as “Patient information complete” 
 `buildWarningReviewFields` converts validation issues into reviewable fields in
 the warnings step.
 
-This means missing required values, unsupported transforms, and other validation
-issues are not hidden in logs. They become part of the same guided review flow
-as patient, sender, coverage, guarantor, and lab-order data.
+It also turns non-successful HL7 source reads into reviewable warning cards.
+That includes:
+
+- missing segments;
+- missing fields;
+- missing repetitions;
+- missing components;
+- missing subcomponents; and
+- empty source values.
+
+This means missing required values, optional-but-empty fields, unsupported
+transforms, and other validation issues are not hidden in logs. They become part
+of the same guided review flow as patient, sender, coverage, guarantor, and
+lab-order data.
+
+## Review status meanings
+
+Review statuses are intentionally separate:
+
+- `unreviewed`: the user has not made a decision yet.
+- `confirmed`: the user agrees with the extracted value and source.
+- `incorrect`: the user found a problem, but the mapping has not been changed
+  yet.
+- `mapping_changed`: the mapping rule has been changed.
+- `unavailable`: the source message does not contain the needed value.
+
+The distinction between `incorrect` and `mapping_changed` matters. A field can
+be marked incorrect before the user selects a replacement source. Once the
+replacement source updates the linked `hl7Item`, the app can treat the mapping
+as changed.
 
 ## Source selection
 
@@ -133,3 +169,7 @@ The guided review demo remains synthetic-data-only. Review state, raw segments,
 and generated correction metadata may contain patient-like values from the
 fixture, so the app should continue to avoid real PHI, analytics capture,
 server logs, or external persistence.
+
+The project is HIPAA-aware in design language, not HIPAA compliant by source
+code alone. Real PHI would require appropriate infrastructure, agreements,
+access controls, audit controls, policies, and organizational risk assessment.

@@ -291,7 +291,7 @@ export function applyReviewCorrectionAndRerunMapping({
 export function buildWarningReviewFields(
   mappingResult: MappingExecutionResult,
 ): ReviewableField[] {
-  return [
+  const validationFields = [
     ...mappingResult.validation.errors.map((issue, index) =>
       validationIssueToReviewableField(issue, "error", index),
     ),
@@ -300,6 +300,25 @@ export function buildWarningReviewFields(
     ),
     ...mappingResult.validation.info.map((issue, index) =>
       validationIssueToReviewableField(issue, "info", index),
+    ),
+  ]
+  const validationSourcePaths = new Set(
+    validationFields.flatMap((field) =>
+      field.sources.map((source) => source.path),
+    ),
+  )
+
+  return [
+    ...validationFields,
+    ...mappingResult.executionTrace.flatMap((entry) =>
+      entry.sourceReads
+        .filter((sourceRead) => sourceRead.status !== "found")
+        .filter(
+          (sourceRead) => !validationSourcePaths.has(sourceRead.source.path),
+        )
+        .map((sourceRead, index) =>
+          sourceReadToReviewableField(entry, sourceRead, index),
+        ),
     ),
   ]
 }
@@ -465,4 +484,54 @@ function validationLabel(issue: ValidationIssue): string {
   }
 
   return "Review mapping issue"
+}
+
+function sourceReadToReviewableField(
+  trace: MappingExecutionTraceEntry,
+  sourceRead: MappingExecutionTraceEntry["sourceReads"][number],
+  index: number,
+): ReviewableField {
+  const issue = sourceReadIssue(trace, sourceRead)
+
+  return {
+    id: `source-read-${trace.itemId}-${index}-${sourceRead.status}`,
+    stepId: "warnings",
+    section: "exceptions",
+    normalizedPath: trace.targetPath,
+    label: `Review ${trace.targetPath} source`,
+    value: issue.message,
+    hl7ItemId: trace.itemId,
+    primarySource: sourceRead.source,
+    sources: [sourceRead.source],
+    rawSegment: sourceRead.rawSegment,
+    transformHistory: [],
+    validation: [issue],
+    warnings: issue.severity === "warning" ? [issue.message] : [],
+    reviewStatus: "unreviewed",
+    sourceCandidates: [
+      {
+        source: sourceRead.source,
+        rawSegment: sourceRead.rawSegment,
+        previewValue: sourceRead.value,
+        reason: `Source read status: ${sourceRead.status}.`,
+      },
+    ],
+  }
+}
+
+function sourceReadIssue(
+  trace: MappingExecutionTraceEntry,
+  sourceRead: MappingExecutionTraceEntry["sourceReads"][number],
+): ValidationIssue {
+  const severity = sourceRead.status === "empty" ? "info" : "warning"
+
+  return {
+    code: `source-read-${sourceRead.status}`,
+    severity,
+    message: `Source ${sourceRead.source.path} for ${trace.targetPath} returned ${sourceRead.status}.`,
+    fieldKey: trace.targetPath,
+    section: "exceptions",
+    segment: sourceRead.source.segment,
+    source: sourceRead.source,
+  }
 }

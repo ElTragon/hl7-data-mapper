@@ -21,6 +21,7 @@ It should stay free of UI, file-upload, and parser implementation details. That 
 - `SourceReferenceSchema`: one-based HL7 source paths such as `PID-5.1`.
 - `NormalizedFieldSchema`: review/provenance wrapper for collected values.
 - `ReviewableFieldSchema`: UI-ready field evidence for guided review.
+- `GuidedReviewProgressSchema`: section-level counts for review navigation.
 - `Hl7ItemSchema`: one atomic client-specific mapping instruction.
 - `Hl7ItemSetSchema`: ordered mapping rules for one client and profile.
 - `ClientProfileSchema`: versioned client profile metadata and `hl7Item` set.

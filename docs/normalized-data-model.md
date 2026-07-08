@@ -120,7 +120,8 @@ unavailable
 ```
 
 These represent the user's decision about a collected field during guided
-review.
+review. `incorrect` means the user found a problem before the mapping rule is
+changed. `mapping_changed` means the linked `hl7Item` has been updated.
 
 ## hl7Item mapping rules
 

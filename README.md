@@ -15,6 +15,10 @@ rules.
 4. Correct client-specific mappings through traceable `hl7Item` steps.
 5. Export the reviewed data and mapping documentation.
 
+Corrections are rule-driven: changing a source during review updates the
+client's `hl7Item` mapping and reruns extraction instead of only overwriting a
+displayed value.
+
 ## Technology
 
 - React, TypeScript, and Vite
