@@ -17,6 +17,7 @@ import {
   type ReportSourcePolicy,
   type ValidationSummary,
 } from "@hl7-data-mapper/contracts"
+import { strToU8, zipSync } from "fflate"
 
 export type ReportFile = {
   readonly fileName: ReportFileName
@@ -84,6 +85,22 @@ export type ReportPackage = {
   readonly files: readonly ReportFile[]
 }
 
+export type ReportZipOptions = {
+  readonly rootFolderName?: string
+}
+
+export type ReportZipEntry = {
+  readonly path: string
+  readonly uncompressedSize: number
+}
+
+export type ReportZipPackage = {
+  readonly fileName: string
+  readonly mediaType: "application/zip"
+  readonly content: Uint8Array
+  readonly entries: readonly ReportZipEntry[]
+}
+
 export async function buildReportPackage(
   input: BuildReportPackageInput,
   hashContent: ReportContentHasher,
@@ -117,6 +134,37 @@ export async function buildReportPackage(
   return {
     manifest,
     files: orderReportFiles([...payloadFiles, manifestFile]),
+  }
+}
+
+export function buildReportZip(
+  reportPackage: ReportPackage,
+  options: ReportZipOptions = {},
+): ReportZipPackage {
+  const rootFolderName = normalizeZipFolderName(
+    options.rootFolderName ?? "hl7-data-mapper-report",
+  )
+  const zipEntries = reportPackage.files.map((file) => {
+    const path = `${rootFolderName}/${file.fileName}`
+    const bytes = strToU8(file.content)
+
+    return {
+      path,
+      bytes,
+    }
+  })
+  const zippedFiles = Object.fromEntries(
+    zipEntries.map((entry) => [entry.path, entry.bytes]),
+  )
+
+  return {
+    fileName: `${rootFolderName}.zip`,
+    mediaType: "application/zip",
+    content: zipSync(zippedFiles),
+    entries: zipEntries.map((entry) => ({
+      path: entry.path,
+      uncompressedSize: entry.bytes.byteLength,
+    })),
   }
 }
 
@@ -423,4 +471,15 @@ function escapeCsvCell(value: string): string {
   }
 
   return `"${value.replaceAll('"', '""')}"`
+}
+
+function normalizeZipFolderName(folderName: string): string {
+  return (
+    folderName
+      .trim()
+      .replaceAll("\\", "/")
+      .split("/")
+      .filter(Boolean)
+      .join("-") || "hl7-data-mapper-report"
+  )
 }

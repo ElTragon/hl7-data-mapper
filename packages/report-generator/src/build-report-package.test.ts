@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest"
+import { strFromU8, unzipSync } from "fflate"
 
 import {
   Hl7ItemSchema,
@@ -11,7 +12,7 @@ import {
 
 import normalizedOutputFixture from "../../../fixtures/expected/oml-o21-basic.normalized.json"
 
-import { buildReportPackage } from "./index.js"
+import { buildReportPackage, buildReportZip } from "./index.js"
 
 const fakeHash: MessageHash =
   "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789"
@@ -125,7 +126,7 @@ describe("buildReportPackage", () => {
             reviewStatus: "confirmed",
             sourcePath: "PID-5.1",
             updatedAt: "2026-07-09T00:36:00-07:00",
-            correctionApplied: false
+            correctionApplied: false,
           },
         ],
         validationResults: {
@@ -234,5 +235,82 @@ describe("buildReportPackage", () => {
     expect(csv).toContain(
       'labOrders,labOrders.0.service.display,confirmed,"OBR-4.2,""alternate""",lab-service-display,confirmed,',
     )
+  })
+
+  it("builds a downloadable ZIP archive with the report files", async () => {
+    const reportPackage = await buildReportPackage(
+      {
+        appVersion: "0.1.0",
+        generatedAt: "2026-07-09T00:50:00-07:00",
+        clientId: "northstar-lab",
+        profileId: "northstar-oml-o21",
+        profileVersion: 3,
+        messageHash,
+        normalizedData: NormalizedOutputSchema.parse(normalizedOutputFixture),
+        hl7Items: [],
+        reviewDecisions: [],
+        validationResults: {
+          errors: [],
+          warnings: [],
+          info: [],
+        },
+      },
+      () => fakeHash,
+    )
+    const zipPackage = buildReportZip(reportPackage)
+    const unzippedFiles = unzipSync(zipPackage.content)
+
+    expect(zipPackage).toMatchObject({
+      fileName: "hl7-data-mapper-report.zip",
+      mediaType: "application/zip",
+    })
+    expect(zipPackage.entries.map((entry) => entry.path)).toEqual(
+      REQUIRED_REPORT_FILE_NAMES.map(
+        (fileName) => `hl7-data-mapper-report/${fileName}`,
+      ),
+    )
+    expect(Object.keys(unzippedFiles).sort()).toEqual(
+      REQUIRED_REPORT_FILE_NAMES.map(
+        (fileName) => `hl7-data-mapper-report/${fileName}`,
+      ).sort(),
+    )
+    expect(
+      strFromU8(unzippedFiles["hl7-data-mapper-report/manifest.json"] ?? []),
+    ).toContain('"appName": "HL7 Data Mapper"')
+    expect(
+      strFromU8(unzippedFiles["hl7-data-mapper-report/REPORT.md"] ?? []),
+    ).toContain("# HL7 Data Mapper Report")
+    expect(
+      zipPackage.entries.every((entry) => entry.uncompressedSize > 0),
+    ).toBe(true)
+    expect(zipPackage.content.byteLength).toBeGreaterThan(0)
+  })
+
+  it("supports custom ZIP folder names", async () => {
+    const reportPackage = await buildReportPackage(
+      {
+        appVersion: "0.1.0",
+        generatedAt: "2026-07-09T00:55:00-07:00",
+        clientId: "northstar-lab",
+        profileId: "northstar-oml-o21",
+        profileVersion: 3,
+        messageHash,
+        normalizedData: NormalizedOutputSchema.parse(normalizedOutputFixture),
+        hl7Items: [],
+        reviewDecisions: [],
+        validationResults: {
+          errors: [],
+          warnings: [],
+          info: [],
+        },
+      },
+      () => fakeHash,
+    )
+    const zipPackage = buildReportZip(reportPackage, {
+      rootFolderName: "custom/report",
+    })
+
+    expect(zipPackage.fileName).toBe("custom-report.zip")
+    expect(zipPackage.entries[0]?.path).toBe("custom-report/REPORT.md")
   })
 })

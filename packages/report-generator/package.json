@@ -19,7 +19,8 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@hl7-data-mapper/contracts": "workspace:*"
+    "@hl7-data-mapper/contracts": "workspace:*",
+    "fflate": "^0.8.3"
   },
   "devDependencies": {
     "typescript": "~6.0.2",

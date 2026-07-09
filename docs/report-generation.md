@@ -26,6 +26,11 @@ hl7-data-mapper-report/
 These files are represented by `REQUIRED_REPORT_FILE_NAMES` in
 `packages/contracts/src/report.ts`.
 
+The report generator creates the ZIP archive in memory with
+`buildReportZip(reportPackage)`. It uses `fflate`, a small browser-friendly ZIP
+library. The web app can later pass the returned `Uint8Array` to the browser
+download flow.
+
 ### `REPORT.md`
 
 Human-readable summary of the mapping run.
@@ -143,6 +148,8 @@ Real PHI must never be included in the public report package.
 Report contracts live in `packages/contracts/src/report.ts`.
 
 Report file generation lives in `packages/report-generator`.
+
+ZIP generation also lives in `packages/report-generator`.
 
 Current contracts:
 
