@@ -17,9 +17,18 @@ importers:
       '@fontsource-variable/geist':
         specifier: ^5.2.9
         version: 5.2.9
+      '@hl7-data-mapper/contracts':
+        specifier: workspace:*
+        version: link:../../packages/contracts
       '@hl7-data-mapper/hl7-parser':
         specifier: workspace:*
         version: link:../../packages/hl7-parser
+      '@hl7-data-mapper/mapping-engine':
+        specifier: workspace:*
+        version: link:../../packages/mapping-engine
+      '@hl7-data-mapper/report-generator':
+        specifier: workspace:*
+        version: link:../../packages/report-generator
       '@hookform/resolvers':
         specifier: ^5.4.0
         version: 5.4.0(react-hook-form@7.81.0(react@19.2.7))

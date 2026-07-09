@@ -28,8 +28,25 @@ These files are represented by `REQUIRED_REPORT_FILE_NAMES` in
 
 The report generator creates the ZIP archive in memory with
 `buildReportZip(reportPackage)`. It uses `fflate`, a small browser-friendly ZIP
-library. The web app can later pass the returned `Uint8Array` to the browser
-download flow.
+library. The web app passes the returned `Uint8Array` to the browser download
+flow.
+
+## Web download flow
+
+The React app exposes a `Download report ZIP` button after a message has been
+successfully parsed.
+
+For the public demo, the button:
+
+- runs the default OML/O21 client profile locally;
+- uses the canonical synthetic normalized output fixture;
+- converts reviewable fields into report review decisions;
+- hashes the source message and generated report files in the browser;
+- creates the ZIP with `buildReportZip`; and
+- triggers a browser download with an object URL.
+
+The browser download is intentionally local. It does not upload the message,
+store raw HL7 text, or write report data to a public database.
 
 ### `REPORT.md`
 

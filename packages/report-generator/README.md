@@ -37,5 +37,5 @@ version, profile version, message hash, source policy, and SHA-256 hashes for
 each payload file.
 
 `buildReportZip(reportPackage)` uses `fflate` to package the generated files
-into a browser-safe ZIP archive in memory. The web app download button will
-later hand those bytes to the browser.
+into a browser-safe ZIP archive in memory. The web app download button hands
+those bytes to the browser.

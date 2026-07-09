@@ -1,11 +1,22 @@
 import { useMemo, useState, type ChangeEvent } from "react"
-import { AlertCircle, CheckCircle2, FileText } from "lucide-react"
+import { AlertCircle, CheckCircle2, Download, FileText } from "lucide-react"
 
+import { NormalizedOutputSchema } from "@hl7-data-mapper/contracts"
 import {
   parseHl7Message,
   type ParsedHl7Message,
 } from "@hl7-data-mapper/hl7-parser"
+import {
+  buildReviewableFields,
+  defaultOmlO21ClientProfile,
+  executeMapping,
+} from "@hl7-data-mapper/mapping-engine"
+import {
+  buildReportPackage,
+  buildReportZip,
+} from "@hl7-data-mapper/report-generator"
 
+import normalizedOutputFixture from "../../../../../fixtures/expected/oml-o21-basic.normalized.json"
 import sampleHl7Message from "../../../../../fixtures/valid/oml-o21-basic.hl7?raw"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
@@ -30,6 +41,7 @@ import {
 import { Textarea } from "@/components/ui/textarea"
 
 const MAX_FILE_SIZE_BYTES = 1024 * 1024
+const REPORT_APP_VERSION = "0.1.0"
 
 function getSegmentCount(parsed: ParsedHl7Message, segmentName: string) {
   return parsed.segments.filter((segment) => segment.name === segmentName)
@@ -42,6 +54,10 @@ export function Hl7IngestionPanel() {
     null,
   )
   const [inputError, setInputError] = useState<string | null>(null)
+  const [reportStatus, setReportStatus] = useState<
+    "idle" | "generating" | "downloaded"
+  >("idle")
+  const [reportError, setReportError] = useState<string | null>(null)
 
   const summary = useMemo(() => {
     if (!parsedMessage) {
@@ -72,17 +88,73 @@ export function Hl7IngestionPanel() {
     setRawMessage(text)
     setParsedMessage(null)
     setInputError(null)
+    setReportStatus("idle")
+    setReportError(null)
   }
 
   function handleLoadSample() {
     setRawMessage(sampleHl7Message.trim())
     setParsedMessage(null)
     setInputError(null)
+    setReportStatus("idle")
+    setReportError(null)
   }
 
   function handleParse() {
     setParsedMessage(parseHl7Message(rawMessage))
     setInputError(null)
+    setReportStatus("idle")
+    setReportError(null)
+  }
+
+  async function handleDownloadReport() {
+    if (!parsedMessage || parsedMessage.errors.length > 0) {
+      setReportError("Parse a valid synthetic OML/O21 message first.")
+      return
+    }
+
+    setReportStatus("generating")
+    setReportError(null)
+
+    try {
+      const mappingResult = executeMapping({
+        parsedMessage,
+        profile: defaultOmlO21ClientProfile,
+      })
+      const reportPackage = await buildReportPackage(
+        {
+          appVersion: REPORT_APP_VERSION,
+          generatedAt: new Date().toISOString(),
+          clientId: defaultOmlO21ClientProfile.clientId,
+          profileId: defaultOmlO21ClientProfile.profileId,
+          profileVersion: defaultOmlO21ClientProfile.profileVersion,
+          messageHash: await sha256Hex(rawMessage),
+          messageControlId: parsedMessage.segments
+            .find((segment) => segment.name === "MSH")
+            ?.fields.find((field) => field.index === 10)?.raw,
+          normalizedData: NormalizedOutputSchema.parse(normalizedOutputFixture),
+          hl7Items: defaultOmlO21ClientProfile.itemSet.items,
+          reviewDecisions: buildReportReviewDecisions(mappingResult),
+          validationResults: mappingResult.validation,
+        },
+        async ({ content }) => sha256Hex(content),
+      )
+      const zipPackage = buildReportZip(reportPackage)
+
+      downloadBytes({
+        bytes: zipPackage.content,
+        fileName: zipPackage.fileName,
+        mediaType: zipPackage.mediaType,
+      })
+      setReportStatus("downloaded")
+    } catch (error) {
+      setReportStatus("idle")
+      setReportError(
+        error instanceof Error
+          ? error.message
+          : "Could not generate the report ZIP.",
+      )
+    }
   }
 
   return (
@@ -143,6 +215,8 @@ export function Hl7IngestionPanel() {
                     setRawMessage(event.target.value)
                     setParsedMessage(null)
                     setInputError(null)
+                    setReportStatus("idle")
+                    setReportError(null)
                   }}
                   spellCheck={false}
                 />
@@ -225,6 +299,45 @@ export function Hl7IngestionPanel() {
 
                 <IssueList parsedMessage={parsedMessage} />
 
+                <Card className="bg-teal-50/70">
+                  <CardHeader>
+                    <CardTitle>Report export</CardTitle>
+                    <CardDescription>
+                      Build a browser-only ZIP report from the synthetic
+                      normalized output, default mapping profile, review
+                      decisions, and validation results.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="text-sm text-muted-foreground">
+                      {reportStatus === "downloaded"
+                        ? "Report ZIP generated successfully."
+                        : "Raw HL7 source text is excluded from the report."}
+                    </div>
+                    <Button
+                      type="button"
+                      onClick={() => void handleDownloadReport()}
+                      disabled={
+                        parsedMessage.errors.length > 0 ||
+                        reportStatus === "generating"
+                      }
+                    >
+                      <Download data-icon="inline-start" />
+                      {reportStatus === "generating"
+                        ? "Building report..."
+                        : "Download report ZIP"}
+                    </Button>
+                  </CardContent>
+                </Card>
+
+                {reportError ? (
+                  <Alert variant="destructive">
+                    <AlertCircle />
+                    <AlertTitle>Report issue</AlertTitle>
+                    <AlertDescription>{reportError}</AlertDescription>
+                  </Alert>
+                ) : null}
+
                 <Separator />
 
                 <div className="flex flex-col gap-3">
@@ -265,6 +378,61 @@ export function Hl7IngestionPanel() {
       </div>
     </section>
   )
+}
+
+function buildReportReviewDecisions(
+  mappingResult: ReturnType<typeof executeMapping>,
+) {
+  const reviewFields = buildReviewableFields({
+    mappingResult,
+    profile: defaultOmlO21ClientProfile,
+  })
+
+  return reviewFields.map((field) => ({
+    fieldId: field.id,
+    normalizedPath: field.normalizedPath,
+    hl7ItemId: field.hl7ItemId,
+    reviewStatus: field.reviewStatus,
+    sourcePath: field.primarySource?.path ?? null,
+    correctionApplied: field.reviewStatus === "mapping_changed",
+    updatedAt: new Date().toISOString(),
+  }))
+}
+
+async function sha256Hex(value: string) {
+  const encodedValue = new TextEncoder().encode(value)
+  const digest = await crypto.subtle.digest("SHA-256", encodedValue)
+
+  return Array.from(new Uint8Array(digest))
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join("")
+}
+
+function downloadBytes({
+  bytes,
+  fileName,
+  mediaType,
+}: {
+  bytes: Uint8Array
+  fileName: string
+  mediaType: string
+}) {
+  const arrayBuffer = bytes.buffer.slice(
+    bytes.byteOffset,
+    bytes.byteOffset + bytes.byteLength,
+  ) as ArrayBuffer
+  const blob = new Blob([arrayBuffer], { type: mediaType })
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement("a")
+
+  link.href = url
+  link.download = fileName
+  link.style.display = "none"
+
+  document.body.append(link)
+  link.click()
+  link.remove()
+  URL.revokeObjectURL(url)
 }
 
 function SummaryItem({
