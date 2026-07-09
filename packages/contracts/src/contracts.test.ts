@@ -5,9 +5,11 @@ import normalizedOutputFixture from "../../../fixtures/expected/oml-o21-basic.no
 
 import {
   buildSourcePath,
+  archivePublishedClientProfile,
   canEditClientProfile,
   canExecuteClientProfile,
   ClientProfileSchema,
+  createDraftClientProfileVersion,
   createSourceReference,
   createValidationSummary,
   GUIDED_REVIEW_STEPS,
@@ -15,6 +17,7 @@ import {
   Hl7ItemSetSchema,
   NormalizedFieldSchema,
   NormalizedOutputSchema,
+  publishDraftClientProfile,
   ReviewableFieldSchema,
   sortHl7ItemsForExecution,
   SourceReferenceSchema,
@@ -279,6 +282,21 @@ describe("client profile contracts", () => {
     expect(canExecuteClientProfile(profile)).toBe(true)
   })
 
+  it("publishes a draft profile version", () => {
+    const profile = publishDraftClientProfile(
+      ClientProfileSchema.parse(draftProfile),
+      "2026-07-07T12:00:00-07:00",
+    )
+
+    expect(profile).toMatchObject({
+      status: "published",
+      updatedAt: "2026-07-07T12:00:00-07:00",
+      publishedAt: "2026-07-07T12:00:00-07:00",
+    })
+    expect(canEditClientProfile(profile)).toBe(false)
+    expect(canExecuteClientProfile(profile)).toBe(true)
+  })
+
   it("requires published profiles to include publishedAt", () => {
     expect(() =>
       ClientProfileSchema.parse({
@@ -286,6 +304,74 @@ describe("client profile contracts", () => {
         status: "published",
       }),
     ).toThrow()
+  })
+
+  it("creates a new draft version from a published profile", () => {
+    const publishedProfile = publishDraftClientProfile(
+      ClientProfileSchema.parse(draftProfile),
+      "2026-07-07T12:00:00-07:00",
+    )
+
+    const nextDraft = createDraftClientProfileVersion({
+      sourceProfile: publishedProfile,
+      nextProfileVersion: 2,
+      createdAt: "2026-07-07T13:00:00-07:00",
+    })
+
+    expect(nextDraft).toMatchObject({
+      profileVersion: 2,
+      status: "draft",
+      basedOnProfileVersion: 1,
+      createdAt: "2026-07-07T13:00:00-07:00",
+      updatedAt: "2026-07-07T13:00:00-07:00",
+    })
+    expect(nextDraft.publishedAt).toBeUndefined()
+    expect(nextDraft.archivedAt).toBeUndefined()
+    expect(nextDraft.itemSet.items).toEqual(publishedProfile.itemSet.items)
+  })
+
+  it("rejects creating a draft version from a draft profile", () => {
+    expect(() =>
+      createDraftClientProfileVersion({
+        sourceProfile: ClientProfileSchema.parse(draftProfile),
+        nextProfileVersion: 2,
+        createdAt: "2026-07-07T13:00:00-07:00",
+      }),
+    ).toThrow("Only published profiles")
+  })
+
+  it("rejects version numbers that do not move forward", () => {
+    const publishedProfile = publishDraftClientProfile(
+      ClientProfileSchema.parse(draftProfile),
+      "2026-07-07T12:00:00-07:00",
+    )
+
+    expect(() =>
+      createDraftClientProfileVersion({
+        sourceProfile: publishedProfile,
+        nextProfileVersion: 1,
+        createdAt: "2026-07-07T13:00:00-07:00",
+      }),
+    ).toThrow("must be greater")
+  })
+
+  it("archives a published profile version", () => {
+    const publishedProfile = publishDraftClientProfile(
+      ClientProfileSchema.parse(draftProfile),
+      "2026-07-07T12:00:00-07:00",
+    )
+    const archivedProfile = archivePublishedClientProfile(
+      publishedProfile,
+      "2026-07-07T14:00:00-07:00",
+    )
+
+    expect(archivedProfile).toMatchObject({
+      status: "archived",
+      publishedAt: "2026-07-07T12:00:00-07:00",
+      archivedAt: "2026-07-07T14:00:00-07:00",
+    })
+    expect(canEditClientProfile(archivedProfile)).toBe(false)
+    expect(canExecuteClientProfile(archivedProfile)).toBe(false)
   })
 
   it("prevents archived profiles from being executed", () => {

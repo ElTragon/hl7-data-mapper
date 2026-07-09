@@ -112,5 +112,85 @@ export function canExecuteClientProfile(profile: ClientProfile): boolean {
   return profile.status === "draft" || profile.status === "published"
 }
 
+export type CreateDraftProfileVersionInput = {
+  readonly sourceProfile: ClientProfile
+  readonly nextProfileVersion: number
+  readonly createdAt: string
+  readonly updatedAt?: string
+}
+
+export function publishDraftClientProfile(
+  profile: ClientProfile,
+  publishedAt: string,
+): ClientProfile {
+  const parsedProfile = ClientProfileSchema.parse(profile)
+
+  if (parsedProfile.status !== "draft") {
+    throw new Error(
+      `Only draft profiles can be published. Profile "${parsedProfile.profileId}" is "${parsedProfile.status}".`,
+    )
+  }
+
+  return ClientProfileSchema.parse({
+    ...parsedProfile,
+    status: "published",
+    updatedAt: publishedAt,
+    publishedAt,
+    archivedAt: undefined,
+  })
+}
+
+export function createDraftClientProfileVersion({
+  sourceProfile,
+  nextProfileVersion,
+  createdAt,
+  updatedAt,
+}: CreateDraftProfileVersionInput): ClientProfile {
+  const parsedProfile = ClientProfileSchema.parse(sourceProfile)
+
+  if (parsedProfile.status !== "published") {
+    throw new Error(
+      `Only published profiles can be used to create a new draft version. Profile "${parsedProfile.profileId}" is "${parsedProfile.status}".`,
+    )
+  }
+
+  if (nextProfileVersion <= parsedProfile.profileVersion) {
+    throw new Error(
+      `Next profile version must be greater than ${parsedProfile.profileVersion}. Received ${nextProfileVersion}.`,
+    )
+  }
+
+  return ClientProfileSchema.parse({
+    ...parsedProfile,
+    profileVersion: nextProfileVersion,
+    status: "draft",
+    createdAt,
+    updatedAt: updatedAt ?? createdAt,
+    publishedAt: undefined,
+    archivedAt: undefined,
+    basedOnProfileVersion: parsedProfile.profileVersion,
+  })
+}
+
+export function archivePublishedClientProfile(
+  profile: ClientProfile,
+  archivedAt: string,
+): ClientProfile {
+  const parsedProfile = ClientProfileSchema.parse(profile)
+
+  if (parsedProfile.status !== "published") {
+    throw new Error(
+      `Only published profiles can be archived. Profile "${parsedProfile.profileId}" is "${parsedProfile.status}".`,
+    )
+  }
+
+  return ClientProfileSchema.parse({
+    ...parsedProfile,
+    status: "archived",
+    updatedAt: archivedAt,
+    archivedAt,
+  })
+}
+
 export type ClientProfileStatus = z.infer<typeof ClientProfileStatusSchema>
 export type ClientProfile = z.infer<typeof ClientProfileSchema>

@@ -209,6 +209,9 @@ IDs and must form an acyclic graph. Item execution must be deterministic.
 - Draft versions may change.
 - Published versions are immutable.
 - Creating a change from a published version creates a new draft.
+- New draft versions must record which published version they were based on.
+- Version numbers must only move forward.
+- Archived versions can be read for history but cannot run new mappings.
 - The public demo stores user-created drafts in browser storage only.
 - Built-in sample profiles are read-only.
 - A mapping run records the profile version and SHA-256 source-message hash,

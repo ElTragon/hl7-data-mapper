@@ -27,12 +27,19 @@ export type {
 } from "./common.js"
 
 export {
+  archivePublishedClientProfile,
   canEditClientProfile,
   canExecuteClientProfile,
   ClientProfileSchema,
   ClientProfileStatusSchema,
+  createDraftClientProfileVersion,
+  publishDraftClientProfile,
 } from "./client-profile.js"
-export type { ClientProfile, ClientProfileStatus } from "./client-profile.js"
+export type {
+  ClientProfile,
+  ClientProfileStatus,
+  CreateDraftProfileVersionInput,
+} from "./client-profile.js"
 
 export {
   GUIDED_REVIEW_STEPS,

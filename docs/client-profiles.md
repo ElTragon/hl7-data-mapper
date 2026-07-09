@@ -77,6 +77,44 @@ Rules:
 - Archived profiles must have both `publishedAt` and `archivedAt`.
 - Archived profiles can be read for audit/history but cannot run new mappings.
 
+The contracts expose helper functions for these transitions:
+
+- `publishDraftClientProfile(profile, publishedAt)`;
+- `createDraftClientProfileVersion({ sourceProfile, nextProfileVersion, createdAt })`;
+- `archivePublishedClientProfile(profile, archivedAt)`;
+- `canEditClientProfile(profile)`; and
+- `canExecuteClientProfile(profile)`.
+
+## Version behavior
+
+Each mapping profile can have many versions. The version number is part of the
+identity of the mapping rules.
+
+Version rules:
+
+- Version numbers only move forward.
+- A draft profile can be edited in place.
+- A published profile cannot be edited in place.
+- Changing a published profile creates a new draft version.
+- The new draft records `basedOnProfileVersion`.
+- Publishing a draft preserves the same version number and sets `publishedAt`.
+- Archiving a published version sets `archivedAt` and prevents future mapping
+  execution.
+
+Example lifecycle:
+
+```text
+version 1 draft
+  -> publish
+version 1 published
+  -> create new draft from published version
+version 2 draft based on version 1
+  -> publish
+version 2 published
+```
+
+This lets reports and audit events point to the exact profile version that ran.
+
 ## Deterministic mapping execution
 
 The same HL7 input plus the same profile version must produce the same output

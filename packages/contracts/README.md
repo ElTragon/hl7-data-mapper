@@ -25,6 +25,8 @@ It should stay free of UI, file-upload, and parser implementation details. That 
 - `Hl7ItemSchema`: one atomic client-specific mapping instruction.
 - `Hl7ItemSetSchema`: ordered mapping rules for one client and profile.
 - `ClientProfileSchema`: versioned client profile metadata and `hl7Item` set.
+- Client profile lifecycle helpers: publish drafts, create new draft versions,
+  archive published versions, and check edit/execution permissions.
 - `ValidationIssueSchema`: structured errors, warnings, and info messages.
 
 More detail: [../../docs/normalized-data-model.md](../../docs/normalized-data-model.md)

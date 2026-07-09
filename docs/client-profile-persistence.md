@@ -246,6 +246,8 @@ Rules:
 - Publishing a draft sets `published_at`.
 - Editing a published version creates a new draft with
   `based_on_profile_version` set.
+- Version numbers must only move forward.
+- A mapping run references the exact `profile_id` and `profile_version` used.
 
 D1 does not enforce all lifecycle rules by itself. Application code must enforce
 immutability and draft creation rules.
