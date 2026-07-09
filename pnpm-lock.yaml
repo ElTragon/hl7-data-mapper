@@ -17,9 +17,18 @@ importers:
       '@fontsource-variable/geist':
         specifier: ^5.2.9
         version: 5.2.9
+      '@hl7-data-mapper/contracts':
+        specifier: workspace:*
+        version: link:../../packages/contracts
       '@hl7-data-mapper/hl7-parser':
         specifier: workspace:*
         version: link:../../packages/hl7-parser
+      '@hl7-data-mapper/mapping-engine':
+        specifier: workspace:*
+        version: link:../../packages/mapping-engine
+      '@hl7-data-mapper/report-generator':
+        specifier: workspace:*
+        version: link:../../packages/report-generator
       '@hookform/resolvers':
         specifier: ^5.4.0
         version: 5.4.0(react-hook-form@7.81.0(react@19.2.7))
@@ -163,6 +172,22 @@ importers:
       '@hl7-data-mapper/hl7-parser':
         specifier: workspace:*
         version: link:../hl7-parser
+    devDependencies:
+      typescript:
+        specifier: ~6.0.2
+        version: 6.0.3
+      vitest:
+        specifier: ^4.1.9
+        version: 4.1.9(@types/node@24.13.2)(jsdom@29.1.1)(vite@8.1.3(@types/node@24.13.2)(jiti@2.7.0))
+
+  packages/report-generator:
+    dependencies:
+      '@hl7-data-mapper/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      fflate:
+        specifier: ^0.8.3
+        version: 0.8.3
     devDependencies:
       typescript:
         specifier: ~6.0.2
@@ -2188,6 +2213,9 @@ packages:
     peerDependenciesMeta:
       picomatch:
         optional: true
+
+  fflate@0.8.3:
+    resolution: {integrity: sha512-tbZNuJrLwGUp3zshBtdy4W+ORxZuIh8a5ilyIEQDC5rY1f3U20JMry0Ll3WBzU58EZKsEuJFXhb5gwv8CsPvgA==}
 
   figures@6.1.0:
     resolution: {integrity: sha512-d+l3qxjSesT4V7v2fh+QnmFnUWv9lSpjarhShNTgBOfA0ttejbQUAlHLitbjkoRiDulW0OPoQPYIGhIC8ohejg==}
@@ -5633,6 +5661,8 @@ snapshots:
   fdir@6.5.0(picomatch@4.0.5):
     optionalDependencies:
       picomatch: 4.0.5
+
+  fflate@0.8.3: {}
 
   figures@6.1.0:
     dependencies:

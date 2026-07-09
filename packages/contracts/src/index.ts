@@ -154,6 +154,33 @@ export type {
 } from "./normalized-output.js"
 
 export {
+  HASHED_REPORT_FILE_NAMES,
+  MAPPING_SUMMARY_CSV_COLUMNS,
+  MappingSummaryCsvColumnSchema,
+  REPORT_CONTRACT_SCHEMA_VERSION,
+  REQUIRED_REPORT_FILE_NAMES,
+  ReportFileManifestEntrySchema,
+  ReportFileNameSchema,
+  ReportGenerationStatusSchema,
+  ReportManifestSchema,
+  ReportPackagePlanSchema,
+  ReportPayloadFileNameSchema,
+  ReportReviewDecisionSchema,
+  ReportSourcePolicySchema,
+} from "./report.js"
+export type {
+  MappingSummaryCsvColumn,
+  ReportFileManifestEntry,
+  ReportFileName,
+  ReportGenerationStatus,
+  ReportManifest,
+  ReportPackagePlan,
+  ReportPayloadFileName,
+  ReportReviewDecision,
+  ReportSourcePolicy,
+} from "./report.js"
+
+export {
   REVIEW_STATUSES,
   REVIEW_STATUS_LABELS,
   ReviewStatusSchema,

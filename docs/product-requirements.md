@@ -243,25 +243,31 @@ IDs and must form an acyclic graph. Item execution must be deterministic.
 The browser generates a ZIP containing:
 
 ```text
-source.hl7
-normalized-data.json
-hl7-items.json
-validation-results.json
-review-decisions.json
-mapping-summary.csv
-REPORT.md
-manifest.json
+hl7-data-mapper-report/
+  REPORT.md
+  manifest.json
+  normalized-data.json
+  hl7-items.json
+  review-decisions.json
+  validation-results.json
+  mapping-summary.csv
 ```
+
+The required public-demo report excludes raw HL7 source text by default. If a
+later demo flow includes a source file, it must be synthetic-only and clearly
+marked in the manifest source policy.
 
 The manifest includes:
 
 - client ID;
+- profile ID;
 - profile version;
 - application version;
 - message control ID;
 - generation timestamp;
-- source-message SHA-256 hash; and
-- SHA-256 hash for every report file.
+- source-message SHA-256 hash;
+- source policy; and
+- SHA-256 hash for every payload file listed by the manifest.
 
 The ZIP is generated on demand and is not persisted by the public demo.
 

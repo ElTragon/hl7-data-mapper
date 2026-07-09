@@ -29,6 +29,9 @@ describe("App", () => {
     expect(
       screen.getByText(/message can continue to review/i),
     ).toBeInTheDocument()
+    expect(
+      screen.getByRole("button", { name: /download report zip/i }),
+    ).toBeEnabled()
   })
 
   it("shows a blocking error for invalid HL7 input", async () => {
