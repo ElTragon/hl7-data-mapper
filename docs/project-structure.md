@@ -39,6 +39,9 @@ In plain English:
   audit events so storage code does not accept raw HL7 or patient payloads.
 - `contracts` also defines the public-demo persistence policy so demo storage
   stays local, temporary, and resettable.
+- `contracts` defines the browser demo snapshot shape so temporary profile
+  edits, review decisions, and correction intents stay separated from raw HL7
+  and patient data.
 - `web` is the user interface that guides upload, edit, review, and report export.
 
 Data-model details: [normalized-data-model.md](normalized-data-model.md)

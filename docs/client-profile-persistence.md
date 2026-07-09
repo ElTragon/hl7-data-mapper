@@ -441,6 +441,36 @@ resetClearsRecruiterChanges: true
 In plain English: reviewers can try the workflow, but they cannot permanently
 write to a public database. Demo edits are temporary, local, and safe to reset.
 
+## Browser storage strategy
+
+The public demo uses browser storage like a temporary whiteboard. It can remember
+what a recruiter changed during the session, but it must not become a patient
+database.
+
+The shared contract is `DemoBrowserStorageSnapshotSchema` in
+`packages/contracts/src/persistence.ts`.
+
+The browser snapshot may store:
+
+- editable draft profile copies created during the demo;
+- guided-review decisions, such as confirmed, incorrect, or unavailable;
+- correction intents, such as "use `PID-5.1` for this field";
+- temporary safe demo audit events; and
+- the snapshot update timestamp.
+
+The browser snapshot must not store:
+
+- raw HL7 message text;
+- uploaded source file contents;
+- normalized patient output;
+- extracted patient values;
+- real PHI; or
+- published built-in profiles as editable browser records.
+
+Built-in profiles stay in application code as read-only examples. If a reviewer
+changes a built-in profile, the app should create a draft browser copy instead
+of editing the built-in profile directly.
+
 ## Public demo reset behavior
 
 Reset should clear:
@@ -453,6 +483,14 @@ Reset should clear:
 
 Reset should not need a server call because the public demo does not depend on
 public database writes.
+
+The shared helpers are:
+
+- `createEmptyDemoBrowserStorageSnapshot(updatedAt)`
+- `resetDemoBrowserStorageSnapshot(updatedAt)`
+
+Both helpers return the same safe empty shape: no draft profiles, no review
+decisions, no correction intents, and no demo audit events.
 
 ## Privacy position
 

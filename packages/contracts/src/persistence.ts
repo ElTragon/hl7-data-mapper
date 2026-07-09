@@ -1,7 +1,9 @@
 import { z } from "zod"
 
+import { ClientProfileSchema } from "./client-profile.js"
 import { Hl7ItemActionSchema, Hl7ItemValueTypeSchema } from "./hl7-item.js"
 import { NormalizedOutputSectionSchema } from "./normalized-output.js"
+import { ReviewStatusSchema } from "./review-status.js"
 
 const SHA_256_HEX_PATTERN = /^[a-f0-9]{64}$/i
 
@@ -254,6 +256,49 @@ export const AuditEventRecordSchema = z
   })
   .strict()
 
+export const DemoStorageReviewDecisionSchema = z
+  .object({
+    fieldId: z.string().min(1),
+    normalizedPath: z.string().min(1),
+    reviewStatus: ReviewStatusSchema,
+    updatedAt: z.string().min(1),
+  })
+  .strict()
+
+export const DemoStorageCorrectionIntentSchema = z
+  .object({
+    fieldId: z.string().min(1),
+    targetHl7ItemId: z.string().min(1),
+    replacementSourcePath: z.string().min(1).nullable().optional(),
+    notes: z.string().nullable().optional(),
+    updatedAt: z.string().min(1),
+  })
+  .strict()
+
+export const DemoBrowserStorageSnapshotSchema = z
+  .object({
+    storageVersion: z.literal(1),
+    mode: z.literal("public_demo"),
+    draftProfiles: z.array(ClientProfileSchema).default([]),
+    reviewDecisions: z.array(DemoStorageReviewDecisionSchema).default([]),
+    correctionIntents: z.array(DemoStorageCorrectionIntentSchema).default([]),
+    demoAuditEvents: z.array(AuditEventSchema).default([]),
+    updatedAt: z.string().min(1),
+  })
+  .strict()
+  .superRefine((snapshot, context) => {
+    snapshot.draftProfiles.forEach((profile, index) => {
+      if (profile.status !== "draft") {
+        context.addIssue({
+          code: "custom",
+          message:
+            "Public demo storage may only contain editable draft profile copies.",
+          path: ["draftProfiles", index, "status"],
+        })
+      }
+    })
+  })
+
 export const DemoPersistencePolicySchema = z
   .object({
     mode: z.literal("public_demo"),
@@ -265,6 +310,26 @@ export const DemoPersistencePolicySchema = z
     resetClearsRecruiterChanges: z.literal(true),
   })
   .strict()
+
+export function createEmptyDemoBrowserStorageSnapshot(
+  updatedAt: string,
+): DemoBrowserStorageSnapshot {
+  return DemoBrowserStorageSnapshotSchema.parse({
+    storageVersion: 1,
+    mode: "public_demo",
+    draftProfiles: [],
+    reviewDecisions: [],
+    correctionIntents: [],
+    demoAuditEvents: [],
+    updatedAt,
+  })
+}
+
+export function resetDemoBrowserStorageSnapshot(
+  updatedAt: string,
+): DemoBrowserStorageSnapshot {
+  return createEmptyDemoBrowserStorageSnapshot(updatedAt)
+}
 
 export function isSafeAuditMetadata(metadata: unknown): boolean {
   return SafeAuditMetadataSchema.safeParse(metadata).success
@@ -321,4 +386,13 @@ export type AuditActorType = z.infer<typeof AuditActorTypeSchema>
 export type SafeAuditMetadata = z.infer<typeof SafeAuditMetadataSchema>
 export type AuditEvent = z.infer<typeof AuditEventSchema>
 export type AuditEventRecord = z.infer<typeof AuditEventRecordSchema>
+export type DemoStorageReviewDecision = z.infer<
+  typeof DemoStorageReviewDecisionSchema
+>
+export type DemoStorageCorrectionIntent = z.infer<
+  typeof DemoStorageCorrectionIntentSchema
+>
+export type DemoBrowserStorageSnapshot = z.infer<
+  typeof DemoBrowserStorageSnapshotSchema
+>
 export type DemoPersistencePolicy = z.infer<typeof DemoPersistencePolicySchema>

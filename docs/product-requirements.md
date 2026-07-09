@@ -234,6 +234,9 @@ IDs and must form an acyclic graph. Item execution must be deterministic.
   accessible database writes.
 - Public demo policy must reject raw-message persistence, extracted-patient-data
   persistence, and public database writes.
+- Public demo browser storage may keep draft profile copies, review decisions,
+  correction intents, and safe temporary demo events only.
+- Public demo reset must replace browser storage with an empty safe snapshot.
 
 ### FR-7: Report export
 

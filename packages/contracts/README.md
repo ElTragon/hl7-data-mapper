@@ -32,6 +32,9 @@ It should stay free of UI, file-upload, and parser implementation details. That 
 - `AuditEventSchema`: safe audit event metadata for profile and mapping events.
 - `DemoPersistencePolicySchema`: public-demo storage policy that keeps built-in
   profiles read-only and recruiter changes in browser storage.
+- `DemoBrowserStorageSnapshotSchema`: browser-only demo scratchpad for draft
+  profile copies, review decisions, correction intents, and safe demo events.
+- Demo browser storage helpers: create or reset an empty safe browser snapshot.
 - D1 record schemas: `ClientRecordSchema`, `MappingProfileRecordSchema`,
   `MappingVersionRecordSchema`, `Hl7ItemRecordSchema`, and
   `AuditEventRecordSchema`.

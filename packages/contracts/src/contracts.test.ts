@@ -9,9 +9,11 @@ import {
   canEditClientProfile,
   canExecuteClientProfile,
   ClientProfileSchema,
+  createEmptyDemoBrowserStorageSnapshot,
   createDraftClientProfileVersion,
   createSourceReference,
   createValidationSummary,
+  DemoBrowserStorageSnapshotSchema,
   GUIDED_REVIEW_STEPS,
   hasBlockingValidationErrors,
   Hl7ItemSetSchema,
@@ -28,6 +30,7 @@ import {
   MappingVersionRecordSchema,
   AuditEventRecordSchema,
   ReviewableFieldSchema,
+  resetDemoBrowserStorageSnapshot,
   sortHl7ItemsForExecution,
   SourceReferenceSchema,
 } from "./index.js"
@@ -497,6 +500,41 @@ describe("validation contracts", () => {
 describe("persistence contracts", () => {
   const messageHash =
     "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+  const demoDraftProfile = ClientProfileSchema.parse({
+    clientId: "northstar-lab",
+    profileId: "northstar-oml-o21",
+    profileVersion: 1,
+    status: "draft",
+    displayName: "Northstar OML O21 default profile",
+    hl7Version: "2.5.1",
+    messageType: "OML^O21",
+    messageStructure: "OML_O21",
+    createdAt: "2026-07-08T23:00:00-07:00",
+    updatedAt: "2026-07-08T23:00:00-07:00",
+    itemSet: {
+      clientId: "northstar-lab",
+      messageType: "OML^O21",
+      hl7Version: "2.5.1",
+      items: [
+        {
+          id: "patient-name",
+          clientId: "northstar-lab",
+          sequence: 1,
+          section: "patient",
+          targetPath: "patient.name",
+          label: "Patient name",
+          action: "extract",
+          valueType: "person_name",
+          sources: [
+            createSourceReference({
+              segment: "PID",
+              field: 5,
+            }),
+          ],
+        },
+      ],
+    },
+  })
 
   it("validates D1 client, profile, and version records", () => {
     expect(
@@ -759,6 +797,115 @@ describe("persistence contracts", () => {
         resetClearsRecruiterChanges: true,
       }),
     ).toThrow()
+  })
+
+  it("validates a browser-only public demo storage snapshot", () => {
+    const snapshot = DemoBrowserStorageSnapshotSchema.parse({
+      storageVersion: 1,
+      mode: "public_demo",
+      draftProfiles: [demoDraftProfile],
+      reviewDecisions: [
+        {
+          fieldId: "patient-name",
+          normalizedPath: "patient.name",
+          reviewStatus: "confirmed",
+          updatedAt: "2026-07-08T23:50:00-07:00",
+        },
+      ],
+      correctionIntents: [
+        {
+          fieldId: "patient-name",
+          targetHl7ItemId: "patient-name",
+          replacementSourcePath: "PID-5.1",
+          notes: "Reviewer confirmed the default patient-name source.",
+          updatedAt: "2026-07-08T23:51:00-07:00",
+        },
+      ],
+      demoAuditEvents: [
+        {
+          eventId: "demo-audit-001",
+          eventType: "source_changed",
+          actorType: "demo_user",
+          clientId: "northstar-lab",
+          profileId: "northstar-oml-o21",
+          profileVersion: 1,
+          metadata: {
+            fieldId: "patient-name",
+            previousSourcePath: "PID-5",
+            nextSourcePath: "PID-5.1",
+          },
+          createdAt: "2026-07-08T23:52:00-07:00",
+        },
+      ],
+      updatedAt: "2026-07-08T23:53:00-07:00",
+    })
+
+    expect(snapshot.mode).toBe("public_demo")
+    expect(snapshot.draftProfiles).toHaveLength(1)
+    expect(snapshot.reviewDecisions[0]?.reviewStatus).toBe("confirmed")
+  })
+
+  it("rejects browser demo snapshots with published profile records", () => {
+    const publishedProfile = publishDraftClientProfile(
+      demoDraftProfile,
+      "2026-07-08T23:54:00-07:00",
+    )
+
+    expect(() =>
+      DemoBrowserStorageSnapshotSchema.parse({
+        storageVersion: 1,
+        mode: "public_demo",
+        draftProfiles: [publishedProfile],
+        reviewDecisions: [],
+        correctionIntents: [],
+        demoAuditEvents: [],
+        updatedAt: "2026-07-08T23:55:00-07:00",
+      }),
+    ).toThrow()
+  })
+
+  it("rejects browser demo snapshots with raw HL7 in demo audit events", () => {
+    expect(() =>
+      DemoBrowserStorageSnapshotSchema.parse({
+        storageVersion: 1,
+        mode: "public_demo",
+        draftProfiles: [],
+        reviewDecisions: [],
+        correctionIntents: [],
+        demoAuditEvents: [
+          {
+            eventId: "demo-audit-unsafe",
+            eventType: "mapping_run_failed",
+            actorType: "demo_user",
+            metadata: {
+              rawMessage: "MSH|^~\\&|NORTHSTAR_LIS",
+            },
+            createdAt: "2026-07-08T23:56:00-07:00",
+          },
+        ],
+        updatedAt: "2026-07-08T23:57:00-07:00",
+      }),
+    ).toThrow()
+  })
+
+  it("creates and resets an empty browser demo storage snapshot", () => {
+    const emptySnapshot = createEmptyDemoBrowserStorageSnapshot(
+      "2026-07-08T23:58:00-07:00",
+    )
+    const resetSnapshot = resetDemoBrowserStorageSnapshot(
+      "2026-07-08T23:59:00-07:00",
+    )
+
+    expect(emptySnapshot).toMatchObject({
+      storageVersion: 1,
+      mode: "public_demo",
+      draftProfiles: [],
+      reviewDecisions: [],
+      correctionIntents: [],
+      demoAuditEvents: [],
+    })
+    expect(resetSnapshot.updatedAt).toBe("2026-07-08T23:59:00-07:00")
+    expect(resetSnapshot.draftProfiles).toEqual([])
   })
 })
 
