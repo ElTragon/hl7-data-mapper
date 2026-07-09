@@ -26,7 +26,7 @@ displayed value.
 - TanStack Router and TanStack Query
 - Vitest and React Testing Library
 - pnpm workspaces
-- Cloudflare Pages, Workers, and D1 for future hosted features
+- Cloudflare Pages, Workers, and D1 for hosted features
 
 ## Local development
 
@@ -39,6 +39,12 @@ Requirements:
 nvm use
 pnpm install
 pnpm dev
+```
+
+Run the Worker locally:
+
+```bash
+pnpm dev:api
 ```
 
 Run the project checks:
@@ -56,10 +62,12 @@ pnpm format:check
 ```text
 apps/
   web/                 React application
+  api/                 Cloudflare Worker API
 packages/
   contracts/           Shared schemas and TypeScript types
   hl7-parser/          Raw HL7 v2 parser
   mapping-engine/      Client-specific extraction and mapping logic
+  report-generator/    Report file generation
 docs/                  Product, architecture, and security documentation
 fixtures/              Explicitly synthetic HL7 test fixtures
 ```

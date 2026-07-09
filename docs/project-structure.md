@@ -7,6 +7,7 @@ This project is organized as a small TypeScript monorepo. Each folder has one jo
 ```text
 apps/
   web/                         React app and user workflow
+  api/                         Cloudflare Worker API
 
 packages/
   contracts/                   Shared schemas and TypeScript types
@@ -26,6 +27,8 @@ contracts
 mapping-engine ← hl7-parser
   ↑
 web → report-generator
+  ↑
+api
 ```
 
 In plain English:
@@ -38,6 +41,8 @@ In plain English:
   rule-driven correction updates for draft client profiles.
 - `report-generator` turns normalized data, `hl7Item`s, review decisions, and
   validation results into report files in memory.
+- `api` hosts Cloudflare Worker endpoints for health checks and later report
+  generation, profile metadata, rate limiting, and D1-backed audit metadata.
 - `contracts` defines safe persistence records for mapping-run metadata and
   audit events so storage code does not accept raw HL7 or patient payloads.
 - `contracts` also defines the public-demo persistence policy so demo storage
@@ -127,6 +132,23 @@ Avoid:
 - browser download APIs
 - parsing raw HL7 text
 - changing mapping results
+
+### `api`
+
+Allowed:
+
+- Cloudflare Worker request handling
+- health and metadata endpoints
+- report generation endpoints in later phases
+- D1-backed profile metadata in later phases
+- security headers, request IDs, rate limiting, and logging controls
+
+Avoid:
+
+- storing raw HL7 messages
+- storing extracted patient data
+- browser-only APIs
+- claiming HIPAA compliance
 
 ## Root commands
 

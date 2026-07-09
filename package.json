@@ -7,10 +7,12 @@
   },
   "scripts": {
     "dev": "pnpm --filter web dev",
+    "dev:api": "pnpm --filter api dev",
     "build": "pnpm -r --if-present build",
     "typecheck": "pnpm -r --if-present typecheck",
     "lint": "pnpm -r --if-present lint",
     "test": "pnpm -r --if-present test",
+    "deploy:api": "pnpm --filter api deploy",
     "format": "prettier --write .",
     "format:check": "prettier --check ."
   },
