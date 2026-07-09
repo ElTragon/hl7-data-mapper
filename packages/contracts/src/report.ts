@@ -17,7 +17,17 @@ export const REQUIRED_REPORT_FILE_NAMES = [
   "mapping-summary.csv",
 ] as const
 
+export const HASHED_REPORT_FILE_NAMES = [
+  "REPORT.md",
+  "normalized-data.json",
+  "hl7-items.json",
+  "review-decisions.json",
+  "validation-results.json",
+  "mapping-summary.csv",
+] as const
+
 export const ReportFileNameSchema = z.enum(REQUIRED_REPORT_FILE_NAMES)
+export const ReportPayloadFileNameSchema = z.enum(HASHED_REPORT_FILE_NAMES)
 
 export const ReportSourcePolicySchema = z.enum([
   "raw_source_excluded",
@@ -52,7 +62,7 @@ export const MAPPING_SUMMARY_CSV_COLUMNS = [
 
 export const ReportFileManifestEntrySchema = z
   .object({
-    fileName: ReportFileNameSchema,
+    fileName: ReportPayloadFileNameSchema,
     mediaType: z.string().min(1),
     byteLength: z.number().int().nonnegative(),
     sha256: MessageHashSchema,
@@ -78,7 +88,7 @@ export const ReportManifestSchema = z
   })
   .strict()
   .superRefine((manifest, context) => {
-    for (const requiredFileName of REQUIRED_REPORT_FILE_NAMES) {
+    for (const requiredFileName of HASHED_REPORT_FILE_NAMES) {
       const matchingFiles = manifest.includedFiles.filter(
         (file) => file.fileName === requiredFileName,
       )
@@ -127,6 +137,7 @@ export const ReportPackagePlanSchema = z
   .strict()
 
 export type ReportFileName = z.infer<typeof ReportFileNameSchema>
+export type ReportPayloadFileName = z.infer<typeof ReportPayloadFileNameSchema>
 export type ReportSourcePolicy = z.infer<typeof ReportSourcePolicySchema>
 export type ReportGenerationStatus = z.infer<
   typeof ReportGenerationStatusSchema

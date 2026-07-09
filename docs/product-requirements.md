@@ -267,7 +267,7 @@ The manifest includes:
 - generation timestamp;
 - source-message SHA-256 hash;
 - source policy; and
-- SHA-256 hash for every report file.
+- SHA-256 hash for every payload file listed by the manifest.
 
 The ZIP is generated on demand and is not persisted by the public demo.
 

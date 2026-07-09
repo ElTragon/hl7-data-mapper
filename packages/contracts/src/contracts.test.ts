@@ -30,6 +30,7 @@ import {
   MappingVersionRecordSchema,
   MAPPING_SUMMARY_CSV_COLUMNS,
   AuditEventRecordSchema,
+  HASHED_REPORT_FILE_NAMES,
   REQUIRED_REPORT_FILE_NAMES,
   ReportManifestSchema,
   ReportPackagePlanSchema,
@@ -933,7 +934,7 @@ describe("report contracts", () => {
     messageHash,
     sourcePolicy: "raw_source_excluded",
     generatedBy: "browser",
-    includedFiles: REQUIRED_REPORT_FILE_NAMES.map((fileName) => ({
+    includedFiles: HASHED_REPORT_FILE_NAMES.map((fileName) => ({
       fileName,
       mediaType: fileName.endsWith(".json") ? "application/json" : "text/plain",
       byteLength: 128,
@@ -946,7 +947,6 @@ describe("report contracts", () => {
 
     expect(manifest.includedFiles.map((file) => file.fileName)).toEqual([
       "REPORT.md",
-      "manifest.json",
       "normalized-data.json",
       "hl7-items.json",
       "review-decisions.json",
@@ -954,6 +954,7 @@ describe("report contracts", () => {
       "mapping-summary.csv",
     ])
     expect(manifest.sourcePolicy).toBe("raw_source_excluded")
+    expect(REQUIRED_REPORT_FILE_NAMES).toContain("manifest.json")
   })
 
   it("rejects report manifests that are missing a required file", () => {

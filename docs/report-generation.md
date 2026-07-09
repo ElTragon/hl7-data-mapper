@@ -57,9 +57,13 @@ It includes:
 - message control ID when available;
 - source-message SHA-256 hash;
 - source policy; and
-- SHA-256 hash, media type, and byte length for each report file.
+- SHA-256 hash, media type, and byte length for each payload file.
 
 The manifest is validated by `ReportManifestSchema`.
+
+The manifest does not hash itself. That avoids a circular problem where adding
+the manifest hash would change the manifest content and therefore change the
+hash again.
 
 ### `normalized-data.json`
 
@@ -120,6 +124,8 @@ Real PHI must never be included in the public report package.
 ## Shared contracts
 
 Report contracts live in `packages/contracts/src/report.ts`.
+
+Report file generation lives in `packages/report-generator`.
 
 Current contracts:
 

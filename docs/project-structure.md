@@ -12,6 +12,7 @@ packages/
   contracts/                   Shared schemas and TypeScript types
   hl7-parser/                  Raw HL7 text parser
   mapping-engine/              Client-specific extraction and mapping logic
+  report-generator/            Report file generation
 
 docs/                          Product, architecture, and security notes
 fixtures/                      Synthetic HL7 examples and expected output
@@ -24,7 +25,7 @@ contracts
   ↑
 mapping-engine ← hl7-parser
   ↑
-web
+web → report-generator
 ```
 
 In plain English:
@@ -35,6 +36,8 @@ In plain English:
   `hl7Item` rules to produce normalized output.
 - `mapping-engine` also creates guided-review fields, progress summaries, and
   rule-driven correction updates for draft client profiles.
+- `report-generator` turns normalized data, `hl7Item`s, review decisions, and
+  validation results into report files in memory.
 - `contracts` defines safe persistence records for mapping-run metadata and
   audit events so storage code does not accept raw HL7 or patient payloads.
 - `contracts` also defines the public-demo persistence policy so demo storage
@@ -107,6 +110,23 @@ Avoid:
 - React UI
 - direct DOM or browser APIs
 - parsing raw HL7 text without going through `hl7-parser`
+
+### `@hl7-data-mapper/report-generator`
+
+Allowed:
+
+- building report files in memory
+- creating `REPORT.md`
+- creating report JSON files
+- creating mapping-summary CSV content
+- validating report manifests through `contracts`
+
+Avoid:
+
+- ZIP compression
+- browser download APIs
+- parsing raw HL7 text
+- changing mapping results
 
 ## Root commands
 
