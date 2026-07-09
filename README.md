@@ -76,6 +76,8 @@ Mapping execution: [docs/mapping-execution.md](docs/mapping-execution.md)
 
 Guided review workflow: [docs/guided-review.md](docs/guided-review.md)
 
+Client profile persistence: [docs/client-profile-persistence.md](docs/client-profile-persistence.md)
+
 ## Security position
 
 This repository demonstrates a HIPAA-aware architecture; it does not claim

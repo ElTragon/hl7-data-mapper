@@ -39,6 +39,9 @@ In plain English:
 
 Data-model details: [normalized-data-model.md](normalized-data-model.md)
 
+Client profile persistence requirements:
+[client-profile-persistence.md](client-profile-persistence.md)
+
 Client profile rules: [client-profiles.md](client-profiles.md)
 
 Mapping execution rules: [mapping-execution.md](mapping-execution.md)

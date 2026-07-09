@@ -213,6 +213,15 @@ IDs and must form an acyclic graph. Item execution must be deterministic.
 - Built-in sample profiles are read-only.
 - A mapping run records the profile version and SHA-256 source-message hash,
   but not the source message or extracted PHI.
+- D1 may store clients, mapping profiles, mapping versions, `hl7Item`s, and
+  audit events.
+- D1 must not store raw messages, extracted patient data, normalized patient
+  payloads, or real PHI.
+- D1 tables must support immutable published profile versions, ordered
+  `hl7Item` lookup, and safe audit-event search by client, profile version, and
+  message hash.
+- Public demo changes remain in browser storage and must not perform publicly
+  accessible database writes.
 
 ### FR-7: Report export
 

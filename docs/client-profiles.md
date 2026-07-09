@@ -152,3 +152,18 @@ Versioned profiles make the project feel like a real implementation tool:
 - published mappings do not silently change;
 - review and report artifacts can reference a stable profile version; and
 - deterministic execution makes tests, debugging, and client handoff easier.
+
+## Persistence boundary
+
+Profile persistence may store client records, profile metadata, version
+metadata, ordered `hl7Item` rules, and safe audit events.
+
+It must not store raw HL7 messages, uploaded source files, normalized patient
+output, or extracted patient data.
+
+The planned D1 schema includes `clients`, `mapping_profiles`,
+`mapping_versions`, `hl7_items`, and `audit_events`, with indexes for client
+lookup, profile-version lookup, deterministic `hl7Item` ordering, and audit
+history.
+
+Persistence requirements: [client-profile-persistence.md](client-profile-persistence.md)
