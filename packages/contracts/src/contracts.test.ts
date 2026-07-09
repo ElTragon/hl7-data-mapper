@@ -18,6 +18,7 @@ import {
   NormalizedFieldSchema,
   NormalizedOutputSchema,
   AuditEventSchema,
+  DemoPersistencePolicySchema,
   publishDraftClientProfile,
   isSafeAuditMetadata,
   MappingRunMetadataSchema,
@@ -578,6 +579,38 @@ describe("persistence contracts", () => {
   it("rejects audit metadata that stores patient-like payload keys", () => {
     expect(isSafeAuditMetadata({ patientName: "Elena Lopez" })).toBe(false)
     expect(isSafeAuditMetadata({ validationWarningCount: 2 })).toBe(true)
+  })
+
+  it("validates the public demo persistence policy", () => {
+    const policy = DemoPersistencePolicySchema.parse({
+      mode: "public_demo",
+      builtInProfilesReadOnly: true,
+      recruiterChangesStorage: "browser",
+      allowPublicDatabaseWrites: false,
+      persistRawMessages: false,
+      persistExtractedPatientData: false,
+      resetClearsRecruiterChanges: true,
+    })
+
+    expect(policy).toMatchObject({
+      builtInProfilesReadOnly: true,
+      allowPublicDatabaseWrites: false,
+      resetClearsRecruiterChanges: true,
+    })
+  })
+
+  it("rejects public demo policies that allow database writes", () => {
+    expect(() =>
+      DemoPersistencePolicySchema.parse({
+        mode: "public_demo",
+        builtInProfilesReadOnly: true,
+        recruiterChangesStorage: "browser",
+        allowPublicDatabaseWrites: true,
+        persistRawMessages: false,
+        persistExtractedPatientData: false,
+        resetClearsRecruiterChanges: true,
+      }),
+    ).toThrow()
   })
 })
 

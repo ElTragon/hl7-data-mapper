@@ -30,6 +30,8 @@ It should stay free of UI, file-upload, and parser implementation details. That 
 - `MappingRunMetadataSchema`: safe mapping-run receipt with profile version and
   message hash but no message payload.
 - `AuditEventSchema`: safe audit event metadata for profile and mapping events.
+- `DemoPersistencePolicySchema`: public-demo storage policy that keeps built-in
+  profiles read-only and recruiter changes in browser storage.
 - `ValidationIssueSchema`: structured errors, warnings, and info messages.
 
 More detail: [../../docs/normalized-data-model.md](../../docs/normalized-data-model.md)

@@ -403,6 +403,37 @@ The public demo has stricter rules than the production-style design:
 The public demo may simulate profile edits so reviewers can see the workflow,
 but those edits should not write to D1.
 
+The shared contract is `DemoPersistencePolicySchema` in
+`packages/contracts/src/persistence.ts`.
+
+The public demo policy is:
+
+```text
+mode: public_demo
+builtInProfilesReadOnly: true
+recruiterChangesStorage: browser
+allowPublicDatabaseWrites: false
+persistRawMessages: false
+persistExtractedPatientData: false
+resetClearsRecruiterChanges: true
+```
+
+In plain English: reviewers can try the workflow, but they cannot permanently
+write to a public database. Demo edits are temporary, local, and safe to reset.
+
+## Public demo reset behavior
+
+Reset should clear:
+
+- draft profile edits created during the demo;
+- guided-review decisions;
+- selected alternate sources;
+- correction intents; and
+- temporary audit-like browser events.
+
+Reset should not need a server call because the public demo does not depend on
+public database writes.
+
 ## Privacy position
 
 This project is HIPAA-aware, not HIPAA compliant by source code alone. Real PHI

@@ -37,6 +37,8 @@ In plain English:
   rule-driven correction updates for draft client profiles.
 - `contracts` defines safe persistence records for mapping-run metadata and
   audit events so storage code does not accept raw HL7 or patient payloads.
+- `contracts` also defines the public-demo persistence policy so demo storage
+  stays local, temporary, and resettable.
 - `web` is the user interface that guides upload, edit, review, and report export.
 
 Data-model details: [normalized-data-model.md](normalized-data-model.md)

@@ -214,6 +214,8 @@ IDs and must form an acyclic graph. Item execution must be deterministic.
 - Archived versions can be read for history but cannot run new mappings.
 - The public demo stores user-created drafts in browser storage only.
 - Built-in sample profiles are read-only.
+- Public demo reset clears browser-stored drafts, review decisions, selected
+  alternate sources, correction intents, and temporary demo events.
 - A mapping run records the profile version and SHA-256 source-message hash,
   but not the source message or extracted PHI.
 - Mapping run metadata may include validation counts, result status, message
@@ -229,6 +231,8 @@ IDs and must form an acyclic graph. Item execution must be deterministic.
   message hash.
 - Public demo changes remain in browser storage and must not perform publicly
   accessible database writes.
+- Public demo policy must reject raw-message persistence, extracted-patient-data
+  persistence, and public database writes.
 
 ### FR-7: Report export
 

@@ -94,6 +94,18 @@ export const AuditEventSchema = z
   })
   .strict()
 
+export const DemoPersistencePolicySchema = z
+  .object({
+    mode: z.literal("public_demo"),
+    builtInProfilesReadOnly: z.literal(true),
+    recruiterChangesStorage: z.literal("browser"),
+    allowPublicDatabaseWrites: z.literal(false),
+    persistRawMessages: z.literal(false),
+    persistExtractedPatientData: z.literal(false),
+    resetClearsRecruiterChanges: z.literal(true),
+  })
+  .strict()
+
 export function isSafeAuditMetadata(metadata: unknown): boolean {
   return SafeAuditMetadataSchema.safeParse(metadata).success
 }
@@ -143,3 +155,4 @@ export type AuditEventType = z.infer<typeof AuditEventTypeSchema>
 export type AuditActorType = z.infer<typeof AuditActorTypeSchema>
 export type SafeAuditMetadata = z.infer<typeof SafeAuditMetadataSchema>
 export type AuditEvent = z.infer<typeof AuditEventSchema>
+export type DemoPersistencePolicy = z.infer<typeof DemoPersistencePolicySchema>
