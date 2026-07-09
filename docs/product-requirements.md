@@ -199,6 +199,18 @@ Supported MVP operations:
 - `validate`
 - `compose`
 
+Operation naming is intentionally implementation-oriented:
+
+| Original planning term | Current `hl7Item` representation                                 |
+| ---------------------- | ---------------------------------------------------------------- |
+| `copy`                 | `extract` with one source and no transform                       |
+| `constant`             | `default_value`                                                  |
+| `combine`              | `join` for scalar values or `compose` for objects/arrays         |
+| `coalesce`             | planned transform pipeline behavior, not a standalone action yet |
+| `lookup`               | source lookup via `sources` and `source-lookup` helpers          |
+| `format`               | `normalize_date`, `normalize_timestamp`, or a named transform    |
+| `map-code`             | `map_code`                                                       |
+
 Multiple items may contribute to one final field. Dependencies reference item
 IDs and must form an acyclic graph. Item execution must be deterministic.
 
@@ -222,8 +234,8 @@ IDs and must form an acyclic graph. Item execution must be deterministic.
   type, HL7 version, and message structure.
 - Audit events may include safe configuration metadata but must reject raw HL7
   text and patient-like payload keys.
-- D1 may store clients, mapping profiles, mapping versions, `hl7Item`s, and
-  audit events.
+- The planned D1 persistence layer may store clients, mapping profiles, mapping
+  versions, `hl7Item`s, and audit events.
 - D1 must not store raw messages, extracted patient data, normalized patient
   payloads, or real PHI.
 - D1 tables must support immutable published profile versions, ordered

@@ -132,6 +132,13 @@ The generic executor currently supports:
 - `normalize_timestamp`
 - `join`
 
+These names deliberately differ slightly from the original planning shorthand:
+`copy` maps to `extract`, `constant` maps to `default_value`, `combine` maps to
+`join` or `compose`, `lookup` is handled through source references and
+`source-lookup`, `format` maps to normalization actions or named transforms,
+and `map-code` is represented as `map_code`. `coalesce` is still planned as
+transform-pipeline behavior rather than a standalone action.
+
 The default profile also declares future complex transforms, such as:
 
 - `preferIdentifierType`

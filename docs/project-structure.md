@@ -42,7 +42,8 @@ In plain English:
 - `report-generator` turns normalized data, `hl7Item`s, review decisions, and
   validation results into report files in memory.
 - `api` hosts Cloudflare Worker endpoints for health checks and later report
-  generation, profile metadata, rate limiting, and D1-backed audit metadata.
+  generation, profile metadata, rate limiting, and planned D1-backed audit
+  metadata.
 - `contracts` defines safe persistence records for mapping-run metadata and
   audit events so storage code does not accept raw HL7 or patient payloads.
 - `contracts` also defines the public-demo persistence policy so demo storage
@@ -140,7 +141,7 @@ Allowed:
 - Cloudflare Worker request handling
 - health and metadata endpoints
 - report generation endpoints in later phases
-- D1-backed profile metadata in later phases
+- planned D1-backed profile metadata in later phases
 - security headers, request IDs, rate limiting, and logging controls
 
 Avoid:
