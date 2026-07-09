@@ -32,6 +32,9 @@ It should stay free of UI, file-upload, and parser implementation details. That 
 - `AuditEventSchema`: safe audit event metadata for profile and mapping events.
 - `DemoPersistencePolicySchema`: public-demo storage policy that keeps built-in
   profiles read-only and recruiter changes in browser storage.
+- D1 record schemas: `ClientRecordSchema`, `MappingProfileRecordSchema`,
+  `MappingVersionRecordSchema`, `Hl7ItemRecordSchema`, and
+  `AuditEventRecordSchema`.
 - `ValidationIssueSchema`: structured errors, warnings, and info messages.
 
 More detail: [../../docs/normalized-data-model.md](../../docs/normalized-data-model.md)

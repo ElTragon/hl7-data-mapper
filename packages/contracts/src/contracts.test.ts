@@ -18,10 +18,15 @@ import {
   NormalizedFieldSchema,
   NormalizedOutputSchema,
   AuditEventSchema,
+  ClientRecordSchema,
   DemoPersistencePolicySchema,
+  Hl7ItemRecordSchema,
   publishDraftClientProfile,
   isSafeAuditMetadata,
+  MappingProfileRecordSchema,
   MappingRunMetadataSchema,
+  MappingVersionRecordSchema,
+  AuditEventRecordSchema,
   ReviewableFieldSchema,
   sortHl7ItemsForExecution,
   SourceReferenceSchema,
@@ -492,6 +497,149 @@ describe("validation contracts", () => {
 describe("persistence contracts", () => {
   const messageHash =
     "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+
+  it("validates D1 client, profile, and version records", () => {
+    expect(
+      ClientRecordSchema.parse({
+        clientId: "northstar-lab",
+        displayName: "Northstar Lab",
+        status: "active",
+        createdAt: "2026-07-08T23:40:00-07:00",
+        updatedAt: "2026-07-08T23:40:00-07:00",
+      }),
+    ).toMatchObject({
+      clientId: "northstar-lab",
+      status: "active",
+    })
+
+    expect(
+      MappingProfileRecordSchema.parse({
+        profileId: "northstar-oml-o21",
+        clientId: "northstar-lab",
+        displayName: "Northstar OML O21",
+        hl7Version: "2.5.1",
+        messageType: "OML^O21",
+        messageStructure: "OML_O21",
+        currentPublishedVersion: 1,
+        createdAt: "2026-07-08T23:40:00-07:00",
+        updatedAt: "2026-07-08T23:40:00-07:00",
+      }),
+    ).toMatchObject({
+      profileId: "northstar-oml-o21",
+      currentPublishedVersion: 1,
+    })
+
+    expect(
+      MappingVersionRecordSchema.parse({
+        profileId: "northstar-oml-o21",
+        profileVersion: 2,
+        status: "draft",
+        basedOnProfileVersion: 1,
+        createdAt: "2026-07-08T23:41:00-07:00",
+        updatedAt: "2026-07-08T23:41:00-07:00",
+      }),
+    ).toMatchObject({
+      profileVersion: 2,
+      status: "draft",
+      basedOnProfileVersion: 1,
+    })
+  })
+
+  it("rejects invalid mapping version lifecycle records", () => {
+    expect(() =>
+      MappingVersionRecordSchema.parse({
+        profileId: "northstar-oml-o21",
+        profileVersion: 1,
+        status: "published",
+        createdAt: "2026-07-08T23:41:00-07:00",
+        updatedAt: "2026-07-08T23:41:00-07:00",
+      }),
+    ).toThrow()
+  })
+
+  it("validates D1 hl7 item records without storing extracted values", () => {
+    const itemRecord = Hl7ItemRecordSchema.parse({
+      profileId: "northstar-oml-o21",
+      profileVersion: 2,
+      itemId: "patient-name",
+      clientId: "northstar-lab",
+      sequence: 10,
+      section: "patient",
+      targetPath: "patient.name",
+      label: "Patient name",
+      action: "extract",
+      valueType: "person_name",
+      sourcesJson: JSON.stringify([{ path: "PID-5.1" }]),
+      dependsOnJson: "[]",
+      transformJson: JSON.stringify({ name: "mapXpnName" }),
+      required: true,
+      reviewRequired: true,
+      createdAt: "2026-07-08T23:42:00-07:00",
+      updatedAt: "2026-07-08T23:42:00-07:00",
+    })
+
+    expect(itemRecord).toMatchObject({
+      itemId: "patient-name",
+      targetPath: "patient.name",
+    })
+  })
+
+  it("rejects D1 hl7 item records with unsafe default values", () => {
+    expect(() =>
+      Hl7ItemRecordSchema.parse({
+        profileId: "northstar-oml-o21",
+        profileVersion: 2,
+        itemId: "unsafe-default",
+        clientId: "northstar-lab",
+        sequence: 11,
+        section: "patient",
+        targetPath: "patient.name",
+        label: "Unsafe default",
+        action: "default_value",
+        valueType: "string",
+        defaultValueJson: JSON.stringify({ patientName: "Elena Lopez" }),
+        createdAt: "2026-07-08T23:42:00-07:00",
+        updatedAt: "2026-07-08T23:42:00-07:00",
+      }),
+    ).toThrow()
+  })
+
+  it("validates D1 audit event records with safe JSON metadata", () => {
+    const auditRecord = AuditEventRecordSchema.parse({
+      eventId: "audit-001",
+      eventType: "profile_published",
+      actorType: "implementation_user",
+      actorId: "user-001",
+      clientId: "northstar-lab",
+      profileId: "northstar-oml-o21",
+      profileVersion: 2,
+      metadataJson: JSON.stringify({
+        previousStatus: "draft",
+        nextStatus: "published",
+      }),
+      createdAt: "2026-07-08T23:43:00-07:00",
+    })
+
+    expect(auditRecord).toMatchObject({
+      eventId: "audit-001",
+      eventType: "profile_published",
+    })
+  })
+
+  it("rejects D1 audit event records with unsafe JSON metadata", () => {
+    expect(() =>
+      AuditEventRecordSchema.parse({
+        eventId: "audit-002",
+        eventType: "mapping_run_failed",
+        actorType: "system",
+        clientId: "northstar-lab",
+        metadataJson: JSON.stringify({
+          rawHl7: "MSH|^~\\&|NORTHSTAR_LIS",
+        }),
+        createdAt: "2026-07-08T23:43:00-07:00",
+      }),
+    ).toThrow()
+  })
 
   it("validates safe mapping run metadata without storing message content", () => {
     const metadata = MappingRunMetadataSchema.parse({

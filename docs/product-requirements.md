@@ -229,6 +229,7 @@ IDs and must form an acyclic graph. Item execution must be deterministic.
 - D1 tables must support immutable published profile versions, ordered
   `hl7Item` lookup, and safe audit-event search by client, profile version, and
   message hash.
+- D1 row contracts must reject extra fields and unsafe JSON metadata.
 - Public demo changes remain in browser storage and must not perform publicly
   accessible database writes.
 - Public demo policy must reject raw-message persistence, extracted-patient-data

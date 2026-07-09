@@ -161,6 +161,21 @@ and when, but it does not copy the whole book into the receipt.
 The schema below is the planned production-style D1 shape. It is intentionally
 limited to configuration and safe metadata.
 
+## TypeScript record contracts
+
+The D1 row shapes are represented in `packages/contracts/src/persistence.ts`.
+
+| D1 table           | TypeScript schema            | Purpose                                       |
+| ------------------ | ---------------------------- | --------------------------------------------- |
+| `clients`          | `ClientRecordSchema`         | Non-PHI client configuration                  |
+| `mapping_profiles` | `MappingProfileRecordSchema` | Long-lived profile container                  |
+| `mapping_versions` | `MappingVersionRecordSchema` | Draft, published, or archived profile version |
+| `hl7_items`        | `Hl7ItemRecordSchema`        | Ordered mapping rules for one version         |
+| `audit_events`     | `AuditEventRecordSchema`     | Safe audit metadata stored as JSON            |
+
+These contracts are intentionally strict. Extra fields are rejected so raw HL7
+or extracted patient data cannot sneak into persistence records by accident.
+
 ### `clients`
 
 Stores non-PHI client records.
@@ -356,6 +371,11 @@ Notes:
 
 Code-level guardrails:
 
+- `ClientRecordSchema`, `MappingProfileRecordSchema`, and
+  `MappingVersionRecordSchema` validate safe profile storage rows.
+- `Hl7ItemRecordSchema` validates mapping-rule rows and rejects unsafe default
+  values.
+- `AuditEventRecordSchema` validates database-shaped audit rows.
 - `MappingRunMetadataSchema` rejects extra fields such as `rawMessage`.
 - `AuditEventSchema` validates audit-event shape.
 - `SafeAuditMetadataSchema` rejects unsafe metadata keys such as `rawMessage`,

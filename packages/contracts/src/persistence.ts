@@ -1,5 +1,8 @@
 import { z } from "zod"
 
+import { Hl7ItemActionSchema, Hl7ItemValueTypeSchema } from "./hl7-item.js"
+import { NormalizedOutputSectionSchema } from "./normalized-output.js"
+
 const SHA_256_HEX_PATTERN = /^[a-f0-9]{64}$/i
 
 const UNSAFE_METADATA_KEY_PARTS = [
@@ -24,7 +27,149 @@ const UNSAFE_METADATA_KEY_PARTS = [
 
 const HL7_SEGMENT_LINE_PATTERN = /(?:^|\n|\r)[A-Z0-9]{3}\|/
 
+const JsonStringSchema = z.string().superRefine((value, context) => {
+  try {
+    JSON.parse(value)
+  } catch {
+    context.addIssue({
+      code: "custom",
+      message: "Expected a valid JSON string.",
+    })
+  }
+})
+
+const SafeJsonStringSchema = z.string().superRefine((value, context) => {
+  try {
+    const parsedValue = JSON.parse(value) as unknown
+
+    for (const issue of findUnsafeMetadataIssues(parsedValue, "json")) {
+      context.addIssue({
+        code: "custom",
+        message: issue,
+      })
+    }
+  } catch {
+    context.addIssue({
+      code: "custom",
+      message: "Expected a valid JSON string.",
+    })
+  }
+})
+
 export const MessageHashSchema = z.string().regex(SHA_256_HEX_PATTERN)
+
+export const ClientRecordStatusSchema = z.enum([
+  "active",
+  "inactive",
+  "archived",
+])
+
+export const ClientRecordSchema = z
+  .object({
+    clientId: z.string().min(1),
+    displayName: z.string().min(1),
+    status: ClientRecordStatusSchema,
+    createdAt: z.string().min(1),
+    updatedAt: z.string().min(1),
+  })
+  .strict()
+
+export const MappingProfileRecordSchema = z
+  .object({
+    profileId: z.string().min(1),
+    clientId: z.string().min(1),
+    displayName: z.string().min(1),
+    description: z.string().nullable().optional(),
+    hl7Version: z.literal("2.5.1"),
+    messageType: z.literal("OML^O21"),
+    messageStructure: z.literal("OML_O21"),
+    currentPublishedVersion: z.number().int().positive().nullable().optional(),
+    createdAt: z.string().min(1),
+    updatedAt: z.string().min(1),
+  })
+  .strict()
+
+export const MappingVersionRecordSchema = z
+  .object({
+    profileId: z.string().min(1),
+    profileVersion: z.number().int().positive(),
+    status: z.enum(["draft", "published", "archived"]),
+    basedOnProfileVersion: z.number().int().positive().nullable().optional(),
+    createdAt: z.string().min(1),
+    updatedAt: z.string().min(1),
+    publishedAt: z.string().nullable().optional(),
+    archivedAt: z.string().nullable().optional(),
+  })
+  .strict()
+  .superRefine((version, context) => {
+    if (version.status === "draft") {
+      if (version.publishedAt) {
+        context.addIssue({
+          code: "custom",
+          message: "Draft mapping versions must not have publishedAt set.",
+          path: ["publishedAt"],
+        })
+      }
+
+      if (version.archivedAt) {
+        context.addIssue({
+          code: "custom",
+          message: "Draft mapping versions must not have archivedAt set.",
+          path: ["archivedAt"],
+        })
+      }
+    }
+
+    if (version.status === "published" && !version.publishedAt) {
+      context.addIssue({
+        code: "custom",
+        message: "Published mapping versions must have publishedAt set.",
+        path: ["publishedAt"],
+      })
+    }
+
+    if (version.status === "archived") {
+      if (!version.publishedAt) {
+        context.addIssue({
+          code: "custom",
+          message: "Archived mapping versions must have publishedAt set.",
+          path: ["publishedAt"],
+        })
+      }
+
+      if (!version.archivedAt) {
+        context.addIssue({
+          code: "custom",
+          message: "Archived mapping versions must have archivedAt set.",
+          path: ["archivedAt"],
+        })
+      }
+    }
+  })
+
+export const Hl7ItemRecordSchema = z
+  .object({
+    profileId: z.string().min(1),
+    profileVersion: z.number().int().positive(),
+    itemId: z.string().min(1),
+    clientId: z.string().min(1),
+    sequence: z.number().int().positive(),
+    section: NormalizedOutputSectionSchema,
+    targetPath: z.string().min(1),
+    label: z.string().min(1),
+    action: Hl7ItemActionSchema,
+    valueType: Hl7ItemValueTypeSchema,
+    sourcesJson: JsonStringSchema.default("[]"),
+    dependsOnJson: JsonStringSchema.default("[]"),
+    transformJson: JsonStringSchema.nullable().optional(),
+    required: z.boolean().default(true),
+    reviewRequired: z.boolean().default(true),
+    defaultValueJson: SafeJsonStringSchema.nullable().optional(),
+    notes: z.string().nullable().optional(),
+    createdAt: z.string().min(1),
+    updatedAt: z.string().min(1),
+  })
+  .strict()
 
 export const MappingRunStatusSchema = z.enum([
   "completed",
@@ -94,6 +239,21 @@ export const AuditEventSchema = z
   })
   .strict()
 
+export const AuditEventRecordSchema = z
+  .object({
+    eventId: z.string().min(1),
+    eventType: AuditEventTypeSchema,
+    actorType: AuditActorTypeSchema,
+    actorId: z.string().min(1).nullable().optional(),
+    clientId: z.string().min(1).nullable().optional(),
+    profileId: z.string().min(1).nullable().optional(),
+    profileVersion: z.number().int().positive().nullable().optional(),
+    messageHash: MessageHashSchema.nullable().optional(),
+    metadataJson: SafeJsonStringSchema.default("{}"),
+    createdAt: z.string().min(1),
+  })
+  .strict()
+
 export const DemoPersistencePolicySchema = z
   .object({
     mode: z.literal("public_demo"),
@@ -149,10 +309,16 @@ function findUnsafeMetadataIssues(value: unknown, path = "metadata"): string[] {
 }
 
 export type MessageHash = z.infer<typeof MessageHashSchema>
+export type ClientRecordStatus = z.infer<typeof ClientRecordStatusSchema>
+export type ClientRecord = z.infer<typeof ClientRecordSchema>
+export type MappingProfileRecord = z.infer<typeof MappingProfileRecordSchema>
+export type MappingVersionRecord = z.infer<typeof MappingVersionRecordSchema>
+export type Hl7ItemRecord = z.infer<typeof Hl7ItemRecordSchema>
 export type MappingRunStatus = z.infer<typeof MappingRunStatusSchema>
 export type MappingRunMetadata = z.infer<typeof MappingRunMetadataSchema>
 export type AuditEventType = z.infer<typeof AuditEventTypeSchema>
 export type AuditActorType = z.infer<typeof AuditActorTypeSchema>
 export type SafeAuditMetadata = z.infer<typeof SafeAuditMetadataSchema>
 export type AuditEvent = z.infer<typeof AuditEventSchema>
+export type AuditEventRecord = z.infer<typeof AuditEventRecordSchema>
 export type DemoPersistencePolicy = z.infer<typeof DemoPersistencePolicySchema>
