@@ -28,7 +28,11 @@ import {
   MappingProfileRecordSchema,
   MappingRunMetadataSchema,
   MappingVersionRecordSchema,
+  MAPPING_SUMMARY_CSV_COLUMNS,
   AuditEventRecordSchema,
+  REQUIRED_REPORT_FILE_NAMES,
+  ReportManifestSchema,
+  ReportPackagePlanSchema,
   ReviewableFieldSchema,
   resetDemoBrowserStorageSnapshot,
   sortHl7ItemsForExecution,
@@ -906,6 +910,108 @@ describe("persistence contracts", () => {
     })
     expect(resetSnapshot.updatedAt).toBe("2026-07-08T23:59:00-07:00")
     expect(resetSnapshot.draftProfiles).toEqual([])
+  })
+})
+
+describe("report contracts", () => {
+  const fileHash =
+    "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789"
+  const messageHash =
+    "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+
+  const manifestInput = {
+    schemaVersion: "1.0.0",
+    appName: "HL7 Data Mapper",
+    generatedAt: "2026-07-09T00:10:00-07:00",
+    clientId: "northstar-lab",
+    profileId: "northstar-oml-o21",
+    profileVersion: 3,
+    hl7Version: "2.5.1",
+    messageType: "OML^O21",
+    messageStructure: "OML_O21",
+    messageControlId: "MSG-001",
+    messageHash,
+    sourcePolicy: "raw_source_excluded",
+    generatedBy: "browser",
+    includedFiles: REQUIRED_REPORT_FILE_NAMES.map((fileName) => ({
+      fileName,
+      mediaType: fileName.endsWith(".json") ? "application/json" : "text/plain",
+      byteLength: 128,
+      sha256: fileHash,
+    })),
+  } as const
+
+  it("validates a complete report manifest with every required file", () => {
+    const manifest = ReportManifestSchema.parse(manifestInput)
+
+    expect(manifest.includedFiles.map((file) => file.fileName)).toEqual([
+      "REPORT.md",
+      "manifest.json",
+      "normalized-data.json",
+      "hl7-items.json",
+      "review-decisions.json",
+      "validation-results.json",
+      "mapping-summary.csv",
+    ])
+    expect(manifest.sourcePolicy).toBe("raw_source_excluded")
+  })
+
+  it("rejects report manifests that are missing a required file", () => {
+    expect(() =>
+      ReportManifestSchema.parse({
+        ...manifestInput,
+        includedFiles: manifestInput.includedFiles.filter(
+          (file) => file.fileName !== "mapping-summary.csv",
+        ),
+      }),
+    ).toThrow()
+  })
+
+  it("validates the report package plan shape", () => {
+    const reportPlan = ReportPackagePlanSchema.parse({
+      manifest: manifestInput,
+      hl7Items: [
+        {
+          id: "patient-name",
+          clientId: "northstar-lab",
+          sequence: 1,
+          section: "patient",
+          targetPath: "patient.name",
+          label: "Patient name",
+          action: "extract",
+          valueType: "person_name",
+          sources: [
+            createSourceReference({
+              segment: "PID",
+              field: 5,
+              component: 1,
+            }),
+          ],
+        },
+      ],
+      reviewDecisions: [
+        {
+          fieldId: "patient-name",
+          normalizedPath: "patient.name",
+          hl7ItemId: "patient-name",
+          reviewStatus: "confirmed",
+          sourcePath: "PID-5.1",
+          correctionApplied: false,
+          updatedAt: "2026-07-09T00:11:00-07:00",
+        },
+      ],
+      validationResults: {
+        errors: [],
+        warnings: [],
+        info: [],
+      },
+      status: "generated",
+    })
+
+    expect(reportPlan.mappingSummaryColumns).toEqual(
+      MAPPING_SUMMARY_CSV_COLUMNS,
+    )
+    expect(reportPlan.reviewDecisions[0]?.sourcePath).toBe("PID-5.1")
   })
 })
 

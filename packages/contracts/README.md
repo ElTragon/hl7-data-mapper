@@ -12,6 +12,7 @@ This package owns the validated shapes that the rest of the app agrees on:
 - versioned client profile metadata
 - review statuses
 - validation summaries
+- report package metadata
 
 It should stay free of UI, file-upload, and parser implementation details. That keeps the normalized data model stable even as the React app, parser, and mapping engine evolve independently.
 
@@ -38,6 +39,10 @@ It should stay free of UI, file-upload, and parser implementation details. That 
 - D1 record schemas: `ClientRecordSchema`, `MappingProfileRecordSchema`,
   `MappingVersionRecordSchema`, `Hl7ItemRecordSchema`, and
   `AuditEventRecordSchema`.
+- `ReportManifestSchema`: report table of contents with profile version,
+  message hash, source policy, and per-file hashes.
+- `ReportPackagePlanSchema`: report-generation handoff shape for manifest,
+  `hl7Item`s, review decisions, validation results, and mapping summary columns.
 - `ValidationIssueSchema`: structured errors, warnings, and info messages.
 
 More detail: [../../docs/normalized-data-model.md](../../docs/normalized-data-model.md)
@@ -45,3 +50,5 @@ More detail: [../../docs/normalized-data-model.md](../../docs/normalized-data-mo
 Client profile rules: [../../docs/client-profiles.md](../../docs/client-profiles.md)
 
 Guided review workflow: [../../docs/guided-review.md](../../docs/guided-review.md)
+
+Report generation: [../../docs/report-generation.md](../../docs/report-generation.md)

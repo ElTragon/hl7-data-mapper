@@ -42,6 +42,8 @@ In plain English:
 - `contracts` defines the browser demo snapshot shape so temporary profile
   edits, review decisions, and correction intents stay separated from raw HL7
   and patient data.
+- `contracts` defines report package contracts so the manifest, file list,
+  review decisions, and mapping summary stay predictable.
 - `web` is the user interface that guides upload, edit, review, and report export.
 
 Data-model details: [normalized-data-model.md](normalized-data-model.md)
@@ -52,6 +54,8 @@ Client profile persistence requirements:
 Client profile rules: [client-profiles.md](client-profiles.md)
 
 Mapping execution rules: [mapping-execution.md](mapping-execution.md)
+
+Report generation rules: [report-generation.md](report-generation.md)
 
 ## Package rules
 
@@ -66,6 +70,7 @@ Allowed:
 - review-status schemas
 - shared TypeScript types
 - validation helpers
+- report package schemas
 
 Avoid:
 
