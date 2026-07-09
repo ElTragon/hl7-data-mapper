@@ -26,7 +26,8 @@ displayed value.
 - TanStack Router and TanStack Query
 - Vitest and React Testing Library
 - pnpm workspaces
-- Cloudflare Pages, Workers, and D1 for hosted features
+- Cloudflare Pages and Workers for hosted features
+- D1-compatible contracts for future profile metadata persistence
 
 ## Local development
 
@@ -85,6 +86,10 @@ Mapping execution: [docs/mapping-execution.md](docs/mapping-execution.md)
 Guided review workflow: [docs/guided-review.md](docs/guided-review.md)
 
 Client profile persistence: [docs/client-profile-persistence.md](docs/client-profile-persistence.md)
+
+Persistence note: D1 is planned for profile metadata, mapping versions,
+`hl7Item` rules, and safe audit events. The public demo must not write raw HL7
+messages, extracted patient data, or real PHI to D1.
 
 ## Security position
 

@@ -202,6 +202,7 @@ output, or extracted patient data.
 The planned D1 schema includes `clients`, `mapping_profiles`,
 `mapping_versions`, `hl7_items`, and `audit_events`, with indexes for client
 lookup, profile-version lookup, deterministic `hl7Item` ordering, and audit
-history.
+history. This schema is not a completed runtime persistence layer yet; current
+code defines the contracts and safety boundary first.
 
 Persistence requirements: [client-profile-persistence.md](client-profile-persistence.md)
