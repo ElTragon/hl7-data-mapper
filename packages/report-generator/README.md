@@ -24,6 +24,10 @@ Outputs:
 - `validation-results.json`
 - `mapping-summary.csv`
 
+The JSON outputs are validated against the shared contracts before they are
+serialized. The CSV output uses the shared mapping-summary column order and
+escapes spreadsheet-sensitive values.
+
 `REPORT.md` is the human-readable cover sheet. It summarizes the client/profile
 version, app version, extraction counts, review counts, validation results, and
 privacy note.

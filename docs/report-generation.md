@@ -74,12 +74,18 @@ The normalized extraction output.
 This is the business-friendly JSON object produced by the mapping workflow. For
 the public demo, it must be synthetic only.
 
+Before writing this file, the report generator validates the payload with
+`NormalizedOutputSchema`.
+
 ### `hl7-items.json`
 
 The ordered mapping instructions used for the run.
 
 This file shows how fields were collected. It stores mapping rules, such as
 `PID-5.1`, not raw HL7 message text.
+
+Before writing this file, the report generator validates each item with
+`Hl7ItemSchema`.
 
 ### `review-decisions.json`
 
@@ -96,12 +102,18 @@ Each decision can include:
 
 The report-friendly decision shape is `ReportReviewDecisionSchema`.
 
+Before writing this file, the report generator validates each decision with
+`ReportReviewDecisionSchema`.
+
 ### `validation-results.json`
 
 Structured validation results.
 
 This includes errors, warnings, and info messages from the parsing, mapping, and
 review workflow.
+
+Before writing this file, the report generator validates the payload with
+`ValidationSummarySchema`.
 
 ### `mapping-summary.csv`
 
@@ -114,6 +126,9 @@ section,targetPath,valueStatus,sourcePath,hl7ItemId,reviewStatus,transformApplie
 ```
 
 The columns are represented by `MAPPING_SUMMARY_CSV_COLUMNS`.
+
+CSV values are escaped when needed, so commas, quotes, and new lines do not break
+spreadsheet imports.
 
 ## Raw source policy
 

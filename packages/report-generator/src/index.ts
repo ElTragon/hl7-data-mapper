@@ -1,7 +1,11 @@
 import {
   HASHED_REPORT_FILE_NAMES,
+  Hl7ItemSchema,
   MAPPING_SUMMARY_CSV_COLUMNS,
+  NormalizedOutputSchema,
   ReportManifestSchema,
+  ReportReviewDecisionSchema,
+  ValidationSummarySchema,
   type Hl7Item,
   type MessageHash,
   type NormalizedOutput,
@@ -84,22 +88,23 @@ export async function buildReportPackage(
   input: BuildReportPackageInput,
   hashContent: ReportContentHasher,
 ): Promise<ReportPackage> {
-  const payloadFiles = buildPayloadFiles(input)
+  const reportInput = validateReportInput(input)
+  const payloadFiles = buildPayloadFiles(reportInput)
   const includedFiles = await buildManifestEntries(payloadFiles, hashContent)
   const manifest = ReportManifestSchema.parse({
     schemaVersion: "1.0.0",
     appName: "HL7 Data Mapper",
-    appVersion: input.appVersion,
-    generatedAt: input.generatedAt,
-    clientId: input.clientId,
-    profileId: input.profileId,
-    profileVersion: input.profileVersion,
+    appVersion: reportInput.appVersion,
+    generatedAt: reportInput.generatedAt,
+    clientId: reportInput.clientId,
+    profileId: reportInput.profileId,
+    profileVersion: reportInput.profileVersion,
     hl7Version: "2.5.1",
     messageType: "OML^O21",
     messageStructure: "OML_O21",
-    messageControlId: input.messageControlId,
-    messageHash: input.messageHash,
-    sourcePolicy: input.sourcePolicy ?? "raw_source_excluded",
+    messageControlId: reportInput.messageControlId,
+    messageHash: reportInput.messageHash,
+    sourcePolicy: reportInput.sourcePolicy ?? "raw_source_excluded",
     generatedBy: "browser",
     includedFiles,
   })
@@ -112,6 +117,20 @@ export async function buildReportPackage(
   return {
     manifest,
     files: orderReportFiles([...payloadFiles, manifestFile]),
+  }
+}
+
+function validateReportInput(
+  input: BuildReportPackageInput,
+): BuildReportPackageInput {
+  return {
+    ...input,
+    normalizedData: NormalizedOutputSchema.parse(input.normalizedData),
+    hl7Items: input.hl7Items.map((item) => Hl7ItemSchema.parse(item)),
+    reviewDecisions: input.reviewDecisions.map((decision) =>
+      ReportReviewDecisionSchema.parse(decision),
+    ),
+    validationResults: ValidationSummarySchema.parse(input.validationResults),
   }
 }
 
