@@ -216,6 +216,10 @@ IDs and must form an acyclic graph. Item execution must be deterministic.
 - Built-in sample profiles are read-only.
 - A mapping run records the profile version and SHA-256 source-message hash,
   but not the source message or extracted PHI.
+- Mapping run metadata may include validation counts, result status, message
+  type, HL7 version, and message structure.
+- Audit events may include safe configuration metadata but must reject raw HL7
+  text and patient-like payload keys.
 - D1 may store clients, mapping profiles, mapping versions, `hl7Item`s, and
   audit events.
 - D1 must not store raw messages, extracted patient data, normalized patient

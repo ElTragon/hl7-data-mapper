@@ -82,6 +82,26 @@ export {
 export type { NormalizedField, TransformStep } from "./normalized-field.js"
 
 export {
+  AuditActorTypeSchema,
+  AuditEventSchema,
+  AuditEventTypeSchema,
+  isSafeAuditMetadata,
+  MappingRunMetadataSchema,
+  MappingRunStatusSchema,
+  MessageHashSchema,
+  SafeAuditMetadataSchema,
+} from "./persistence.js"
+export type {
+  AuditActorType,
+  AuditEvent,
+  AuditEventType,
+  MappingRunMetadata,
+  MappingRunStatus,
+  MessageHash,
+  SafeAuditMetadata,
+} from "./persistence.js"
+
+export {
   CoverageSchema,
   GuarantorSchema,
   LabOrderSchema,

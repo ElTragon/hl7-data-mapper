@@ -27,6 +27,9 @@ It should stay free of UI, file-upload, and parser implementation details. That 
 - `ClientProfileSchema`: versioned client profile metadata and `hl7Item` set.
 - Client profile lifecycle helpers: publish drafts, create new draft versions,
   archive published versions, and check edit/execution permissions.
+- `MappingRunMetadataSchema`: safe mapping-run receipt with profile version and
+  message hash but no message payload.
+- `AuditEventSchema`: safe audit event metadata for profile and mapping events.
 - `ValidationIssueSchema`: structured errors, warnings, and info messages.
 
 More detail: [../../docs/normalized-data-model.md](../../docs/normalized-data-model.md)

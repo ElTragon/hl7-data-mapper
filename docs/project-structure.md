@@ -35,6 +35,8 @@ In plain English:
   `hl7Item` rules to produce normalized output.
 - `mapping-engine` also creates guided-review fields, progress summaries, and
   rule-driven correction updates for draft client profiles.
+- `contracts` defines safe persistence records for mapping-run metadata and
+  audit events so storage code does not accept raw HL7 or patient payloads.
 - `web` is the user interface that guides upload, edit, review, and report export.
 
 Data-model details: [normalized-data-model.md](normalized-data-model.md)

@@ -122,6 +122,13 @@ Audit events may include safe metadata, such as profile version, event type,
 message hash, validation counts, and timestamps. They must not include raw
 message text or extracted patient data.
 
+The shared contract is `AuditEventSchema` in
+`packages/contracts/src/persistence.ts`.
+
+Safe audit metadata may include counts, statuses, IDs, timestamps, and field
+names. It must not include raw HL7, normalized patient data, or extracted
+message values.
+
 ## Mapping run metadata
 
 Each mapping run should record enough safe metadata to prove which rules ran:
@@ -142,6 +149,12 @@ Each mapping run should record enough safe metadata to prove which rules ran:
 
 The message hash should be calculated from the source message, but the source
 message itself must not be stored.
+
+The shared contract is `MappingRunMetadataSchema` in
+`packages/contracts/src/persistence.ts`.
+
+Think of this like a library checkout receipt: it says which rulebook was used
+and when, but it does not copy the whole book into the receipt.
 
 ## D1 schema design
 
@@ -340,6 +353,14 @@ Notes:
 - `metadata_json` may contain safe counts, statuses, and field names.
 - `metadata_json` must not contain raw HL7, normalized patient data, or
   extracted message values.
+
+Code-level guardrails:
+
+- `MappingRunMetadataSchema` rejects extra fields such as `rawMessage`.
+- `AuditEventSchema` validates audit-event shape.
+- `SafeAuditMetadataSchema` rejects unsafe metadata keys such as `rawMessage`,
+  `patientName`, `mrn`, and `dateOfBirth`.
+- `SafeAuditMetadataSchema` rejects raw HL7 segment text such as `MSH|...`.
 
 ## Relationship overview
 

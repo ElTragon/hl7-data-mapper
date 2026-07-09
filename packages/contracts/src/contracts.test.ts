@@ -17,7 +17,10 @@ import {
   Hl7ItemSetSchema,
   NormalizedFieldSchema,
   NormalizedOutputSchema,
+  AuditEventSchema,
   publishDraftClientProfile,
+  isSafeAuditMetadata,
+  MappingRunMetadataSchema,
   ReviewableFieldSchema,
   sortHl7ItemsForExecution,
   SourceReferenceSchema,
@@ -482,6 +485,99 @@ describe("validation contracts", () => {
     expect(summary.errors).toHaveLength(1)
     expect(summary.warnings).toHaveLength(1)
     expect(hasBlockingValidationErrors(summary)).toBe(true)
+  })
+})
+
+describe("persistence contracts", () => {
+  const messageHash =
+    "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+
+  it("validates safe mapping run metadata without storing message content", () => {
+    const metadata = MappingRunMetadataSchema.parse({
+      runId: "run-001",
+      clientId: "northstar-lab",
+      profileId: "northstar-oml-o21",
+      profileVersion: 3,
+      messageHash,
+      messageType: "OML^O21",
+      hl7Version: "2.5.1",
+      messageStructure: "OML_O21",
+      ranAt: "2026-07-08T23:30:00-07:00",
+      resultStatus: "completed_with_warnings",
+      validationErrorCount: 0,
+      validationWarningCount: 2,
+      validationInfoCount: 1,
+    })
+
+    expect(metadata.profileVersion).toBe(3)
+    expect(metadata.messageHash).toBe(messageHash)
+  })
+
+  it("rejects mapping run metadata with raw message fields", () => {
+    expect(() =>
+      MappingRunMetadataSchema.parse({
+        runId: "run-001",
+        clientId: "northstar-lab",
+        profileId: "northstar-oml-o21",
+        profileVersion: 3,
+        messageHash,
+        messageType: "OML^O21",
+        hl7Version: "2.5.1",
+        messageStructure: "OML_O21",
+        ranAt: "2026-07-08T23:30:00-07:00",
+        resultStatus: "completed",
+        validationErrorCount: 0,
+        validationWarningCount: 0,
+        validationInfoCount: 0,
+        rawMessage: "MSH|^~\\&|...",
+      }),
+    ).toThrow()
+  })
+
+  it("validates safe audit events for mapping runs", () => {
+    const event = AuditEventSchema.parse({
+      eventId: "audit-001",
+      eventType: "mapping_run_completed",
+      actorType: "system",
+      clientId: "northstar-lab",
+      profileId: "northstar-oml-o21",
+      profileVersion: 3,
+      messageHash,
+      metadata: {
+        resultStatus: "completed_with_warnings",
+        validationErrorCount: 0,
+        validationWarningCount: 2,
+        reviewedSectionCount: 5,
+      },
+      createdAt: "2026-07-08T23:31:00-07:00",
+    })
+
+    expect(event.metadata).toMatchObject({
+      validationWarningCount: 2,
+    })
+  })
+
+  it("rejects audit metadata that stores raw HL7", () => {
+    expect(() =>
+      AuditEventSchema.parse({
+        eventId: "audit-002",
+        eventType: "mapping_run_failed",
+        actorType: "system",
+        clientId: "northstar-lab",
+        profileId: "northstar-oml-o21",
+        profileVersion: 3,
+        messageHash,
+        metadata: {
+          rawMessage: "MSH|^~\\&|NORTHSTAR_LIS|NORTHSTAR_LAB",
+        },
+        createdAt: "2026-07-08T23:31:00-07:00",
+      }),
+    ).toThrow()
+  })
+
+  it("rejects audit metadata that stores patient-like payload keys", () => {
+    expect(isSafeAuditMetadata({ patientName: "Elena Lopez" })).toBe(false)
+    expect(isSafeAuditMetadata({ validationWarningCount: 2 })).toBe(true)
   })
 })
 
