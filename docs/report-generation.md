@@ -34,9 +34,10 @@ It should explain:
 
 - client and profile used;
 - profile version;
+- app version;
 - HL7 version and message type;
-- extraction status;
-- guided-review status;
+- extraction summary counts;
+- guided-review status counts;
 - warnings and missing fields; and
 - where to find the machine-readable files.
 
@@ -48,6 +49,7 @@ It includes:
 
 - contract schema version;
 - app name;
+- app version;
 - generation timestamp;
 - client ID;
 - profile ID;

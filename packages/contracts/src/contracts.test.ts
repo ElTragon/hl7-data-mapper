@@ -923,6 +923,7 @@ describe("report contracts", () => {
   const manifestInput = {
     schemaVersion: "1.0.0",
     appName: "HL7 Data Mapper",
+    appVersion: "0.1.0",
     generatedAt: "2026-07-09T00:10:00-07:00",
     clientId: "northstar-lab",
     profileId: "northstar-oml-o21",

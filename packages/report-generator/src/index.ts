@@ -43,7 +43,25 @@ export type MappingSummaryRow = {
   readonly transformApplied: string
 }
 
+export type ReportExtractionSummary = {
+  readonly patientIdentifierCount: number
+  readonly coverageCount: number
+  readonly hasGuarantor: boolean
+  readonly labOrderCount: number
+  readonly specimenCount: number
+}
+
+export type ReportReviewSummary = {
+  readonly total: number
+  readonly unreviewed: number
+  readonly confirmed: number
+  readonly incorrect: number
+  readonly mappingChanged: number
+  readonly unavailable: number
+}
+
 export type BuildReportPackageInput = {
+  readonly appVersion: string
   readonly generatedAt: string
   readonly clientId: string
   readonly profileId: string
@@ -71,6 +89,7 @@ export async function buildReportPackage(
   const manifest = ReportManifestSchema.parse({
     schemaVersion: "1.0.0",
     appName: "HL7 Data Mapper",
+    appVersion: input.appVersion,
     generatedAt: input.generatedAt,
     clientId: input.clientId,
     profileId: input.profileId,
@@ -166,14 +185,16 @@ function buildMarkdownReport(
   input: BuildReportPackageInput,
   mappingSummaryRows: readonly MappingSummaryRow[],
 ): string {
+  const extractionSummary = buildExtractionSummary(input.normalizedData)
+  const reviewSummary = buildReviewSummary(input.reviewDecisions)
   const validationCounts = {
     errors: input.validationResults.errors.length,
     warnings: input.validationResults.warnings.length,
     info: input.validationResults.info.length,
   }
-  const reviewedCount = input.reviewDecisions.filter(
-    (decision) => decision.reviewStatus !== "unreviewed",
-  ).length
+  const validationDetailLines = buildValidationDetailLines(
+    input.validationResults,
+  )
 
   return [
     "# HL7 Data Mapper Report",
@@ -183,6 +204,7 @@ function buildMarkdownReport(
     `- Client ID: ${input.clientId}`,
     `- Profile ID: ${input.profileId}`,
     `- Profile version: ${input.profileVersion}`,
+    `- App version: ${input.appVersion}`,
     "- HL7 version: 2.5.1",
     "- Message type: OML^O21",
     `- Message control ID: ${input.messageControlId ?? "Unavailable"}`,
@@ -190,10 +212,22 @@ function buildMarkdownReport(
     `- Source policy: ${input.sourcePolicy ?? "raw_source_excluded"}`,
     `- Generated at: ${input.generatedAt}`,
     "",
+    "## Extraction summary",
+    "",
+    `- Patient identifiers found: ${extractionSummary.patientIdentifierCount}`,
+    `- Coverage records found: ${extractionSummary.coverageCount}`,
+    `- Guarantor present: ${formatYesNo(extractionSummary.hasGuarantor)}`,
+    `- Lab orders found: ${extractionSummary.labOrderCount}`,
+    `- Specimens found: ${extractionSummary.specimenCount}`,
+    "",
     "## Review summary",
     "",
-    `- Reviewed fields: ${reviewedCount}`,
-    `- Total review decisions: ${input.reviewDecisions.length}`,
+    `- Total review decisions: ${reviewSummary.total}`,
+    `- Confirmed: ${reviewSummary.confirmed}`,
+    `- Mapping changed: ${reviewSummary.mappingChanged}`,
+    `- Incorrect: ${reviewSummary.incorrect}`,
+    `- Unavailable: ${reviewSummary.unavailable}`,
+    `- Still unreviewed: ${reviewSummary.unreviewed}`,
     `- Mapping summary rows: ${mappingSummaryRows.length}`,
     "",
     "## Validation summary",
@@ -202,6 +236,7 @@ function buildMarkdownReport(
     `- Warnings: ${validationCounts.warnings}`,
     `- Info: ${validationCounts.info}`,
     "",
+    ...validationDetailLines,
     "## Included files",
     "",
     "- `manifest.json`: report table of contents",
@@ -211,9 +246,75 @@ function buildMarkdownReport(
     "- `validation-results.json`: structured validation results",
     "- `mapping-summary.csv`: spreadsheet-friendly mapping summary",
     "",
+    "## Privacy note",
+    "",
     "Raw HL7 source text is excluded from the required public-demo report.",
+    "The public demo is designed for synthetic data only.",
     "",
   ].join("\n")
+}
+
+function buildExtractionSummary(
+  normalizedData: NormalizedOutput,
+): ReportExtractionSummary {
+  return {
+    patientIdentifierCount: normalizedData.patient.identifiers.length,
+    coverageCount: normalizedData.coverages.length,
+    hasGuarantor: normalizedData.guarantor !== null,
+    labOrderCount: normalizedData.labOrders.length,
+    specimenCount: normalizedData.labOrders.reduce(
+      (count, order) => count + order.specimens.length,
+      0,
+    ),
+  }
+}
+
+function buildReviewSummary(
+  decisions: readonly ReportReviewDecision[],
+): ReportReviewSummary {
+  return {
+    total: decisions.length,
+    unreviewed: decisions.filter(
+      (decision) => decision.reviewStatus === "unreviewed",
+    ).length,
+    confirmed: decisions.filter(
+      (decision) => decision.reviewStatus === "confirmed",
+    ).length,
+    incorrect: decisions.filter(
+      (decision) => decision.reviewStatus === "incorrect",
+    ).length,
+    mappingChanged: decisions.filter(
+      (decision) => decision.reviewStatus === "mapping_changed",
+    ).length,
+    unavailable: decisions.filter(
+      (decision) => decision.reviewStatus === "unavailable",
+    ).length,
+  }
+}
+
+function buildValidationDetailLines(
+  validationResults: ValidationSummary,
+): readonly string[] {
+  const issues = [
+    ...validationResults.errors,
+    ...validationResults.warnings,
+    ...validationResults.info,
+  ]
+
+  if (issues.length === 0) {
+    return ["No validation issues were reported.", ""]
+  }
+
+  return [
+    "### Validation details",
+    "",
+    ...issues.map((issue) => {
+      const location = issue.section ?? issue.segment ?? issue.path
+
+      return `- ${issue.severity.toUpperCase()} ${issue.code}: ${issue.message}${location ? ` (${location})` : ""}`
+    }),
+    "",
+  ]
 }
 
 function buildMappingSummaryRows(
@@ -291,6 +392,10 @@ function getUtf8ByteLength(value: string): number {
 
 function getSectionFromNormalizedPath(path: string): string {
   return path.split(".")[0] ?? path
+}
+
+function formatYesNo(value: boolean): string {
+  return value ? "Yes" : "No"
 }
 
 function escapeCsvCell(value: string): string {

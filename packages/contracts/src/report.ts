@@ -73,6 +73,7 @@ export const ReportManifestSchema = z
   .object({
     schemaVersion: z.literal(REPORT_CONTRACT_SCHEMA_VERSION),
     appName: z.literal("HL7 Data Mapper"),
+    appVersion: z.string().min(1),
     generatedAt: z.string().min(1),
     clientId: z.string().min(1),
     profileId: z.string().min(1),

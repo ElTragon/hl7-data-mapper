@@ -24,4 +24,12 @@ Outputs:
 - `validation-results.json`
 - `mapping-summary.csv`
 
+`REPORT.md` is the human-readable cover sheet. It summarizes the client/profile
+version, app version, extraction counts, review counts, validation results, and
+privacy note.
+
+`manifest.json` is the machine-readable table of contents. It records the app
+version, profile version, message hash, source policy, and SHA-256 hashes for
+each payload file.
+
 The ZIP step happens later in the web app.

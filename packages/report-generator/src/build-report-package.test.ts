@@ -19,6 +19,7 @@ describe("buildReportPackage", () => {
   it("builds all required report files in memory", async () => {
     const reportPackage = await buildReportPackage(
       {
+        appVersion: "0.1.0",
         generatedAt: "2026-07-09T00:30:00-07:00",
         clientId: "northstar-lab",
         profileId: "northstar-oml-o21",
@@ -73,6 +74,7 @@ describe("buildReportPackage", () => {
       REQUIRED_REPORT_FILE_NAMES,
     )
     expect(reportPackage.manifest).toMatchObject({
+      appVersion: "0.1.0",
       clientId: "northstar-lab",
       profileId: "northstar-oml-o21",
       profileVersion: 3,
@@ -85,6 +87,7 @@ describe("buildReportPackage", () => {
   it("creates human-readable markdown and spreadsheet-friendly CSV", async () => {
     const reportPackage = await buildReportPackage(
       {
+        appVersion: "0.1.0",
         generatedAt: "2026-07-09T00:40:00-07:00",
         clientId: "northstar-lab",
         profileId: "northstar-oml-o21",
@@ -127,7 +130,14 @@ describe("buildReportPackage", () => {
     )?.content
 
     expect(markdown).toContain("# HL7 Data Mapper Report")
+    expect(markdown).toContain("App version: 0.1.0")
+    expect(markdown).toContain("Lab orders found: 2")
+    expect(markdown).toContain("Confirmed: 0")
+    expect(markdown).toContain("Mapping changed: 1")
     expect(markdown).toContain("Warnings: 1")
+    expect(markdown).toContain(
+      "WARNING missing-specimen: Specimen is recommended.",
+    )
     expect(csv).toContain(
       "section,targetPath,valueStatus,sourcePath,hl7ItemId,reviewStatus,transformApplied",
     )

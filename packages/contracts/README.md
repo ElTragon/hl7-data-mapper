@@ -39,8 +39,8 @@ It should stay free of UI, file-upload, and parser implementation details. That 
 - D1 record schemas: `ClientRecordSchema`, `MappingProfileRecordSchema`,
   `MappingVersionRecordSchema`, `Hl7ItemRecordSchema`, and
   `AuditEventRecordSchema`.
-- `ReportManifestSchema`: report table of contents with profile version,
-  message hash, source policy, and per-payload-file hashes.
+- `ReportManifestSchema`: report table of contents with app version, profile
+  version, message hash, source policy, and per-payload-file hashes.
 - `ReportPackagePlanSchema`: report-generation handoff shape for manifest,
   `hl7Item`s, review decisions, validation results, and mapping summary columns.
 - `ValidationIssueSchema`: structured errors, warnings, and info messages.
