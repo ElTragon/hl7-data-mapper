@@ -27,12 +27,19 @@ export type {
 } from "./common.js"
 
 export {
+  archivePublishedClientProfile,
   canEditClientProfile,
   canExecuteClientProfile,
   ClientProfileSchema,
   ClientProfileStatusSchema,
+  createDraftClientProfileVersion,
+  publishDraftClientProfile,
 } from "./client-profile.js"
-export type { ClientProfile, ClientProfileStatus } from "./client-profile.js"
+export type {
+  ClientProfile,
+  ClientProfileStatus,
+  CreateDraftProfileVersionInput,
+} from "./client-profile.js"
 
 export {
   GUIDED_REVIEW_STEPS,
@@ -73,6 +80,48 @@ export {
   TransformStepSchema,
 } from "./normalized-field.js"
 export type { NormalizedField, TransformStep } from "./normalized-field.js"
+
+export {
+  AuditActorTypeSchema,
+  AuditEventRecordSchema,
+  AuditEventSchema,
+  AuditEventTypeSchema,
+  ClientRecordSchema,
+  ClientRecordStatusSchema,
+  createEmptyDemoBrowserStorageSnapshot,
+  DemoBrowserStorageSnapshotSchema,
+  DemoPersistencePolicySchema,
+  DemoStorageCorrectionIntentSchema,
+  DemoStorageReviewDecisionSchema,
+  Hl7ItemRecordSchema,
+  isSafeAuditMetadata,
+  MappingProfileRecordSchema,
+  MappingRunMetadataSchema,
+  MappingRunStatusSchema,
+  MappingVersionRecordSchema,
+  MessageHashSchema,
+  resetDemoBrowserStorageSnapshot,
+  SafeAuditMetadataSchema,
+} from "./persistence.js"
+export type {
+  AuditActorType,
+  AuditEvent,
+  AuditEventRecord,
+  AuditEventType,
+  ClientRecord,
+  ClientRecordStatus,
+  DemoBrowserStorageSnapshot,
+  DemoPersistencePolicy,
+  DemoStorageCorrectionIntent,
+  DemoStorageReviewDecision,
+  Hl7ItemRecord,
+  MappingProfileRecord,
+  MappingRunMetadata,
+  MappingRunStatus,
+  MappingVersionRecord,
+  MessageHash,
+  SafeAuditMetadata,
+} from "./persistence.js"
 
 export {
   CoverageSchema,

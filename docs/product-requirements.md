@@ -209,10 +209,34 @@ IDs and must form an acyclic graph. Item execution must be deterministic.
 - Draft versions may change.
 - Published versions are immutable.
 - Creating a change from a published version creates a new draft.
+- New draft versions must record which published version they were based on.
+- Version numbers must only move forward.
+- Archived versions can be read for history but cannot run new mappings.
 - The public demo stores user-created drafts in browser storage only.
 - Built-in sample profiles are read-only.
+- Public demo reset clears browser-stored drafts, review decisions, selected
+  alternate sources, correction intents, and temporary demo events.
 - A mapping run records the profile version and SHA-256 source-message hash,
   but not the source message or extracted PHI.
+- Mapping run metadata may include validation counts, result status, message
+  type, HL7 version, and message structure.
+- Audit events may include safe configuration metadata but must reject raw HL7
+  text and patient-like payload keys.
+- D1 may store clients, mapping profiles, mapping versions, `hl7Item`s, and
+  audit events.
+- D1 must not store raw messages, extracted patient data, normalized patient
+  payloads, or real PHI.
+- D1 tables must support immutable published profile versions, ordered
+  `hl7Item` lookup, and safe audit-event search by client, profile version, and
+  message hash.
+- D1 row contracts must reject extra fields and unsafe JSON metadata.
+- Public demo changes remain in browser storage and must not perform publicly
+  accessible database writes.
+- Public demo policy must reject raw-message persistence, extracted-patient-data
+  persistence, and public database writes.
+- Public demo browser storage may keep draft profile copies, review decisions,
+  correction intents, and safe temporary demo events only.
+- Public demo reset must replace browser storage with an empty safe snapshot.
 
 ### FR-7: Report export
 

@@ -25,6 +25,19 @@ It should stay free of UI, file-upload, and parser implementation details. That 
 - `Hl7ItemSchema`: one atomic client-specific mapping instruction.
 - `Hl7ItemSetSchema`: ordered mapping rules for one client and profile.
 - `ClientProfileSchema`: versioned client profile metadata and `hl7Item` set.
+- Client profile lifecycle helpers: publish drafts, create new draft versions,
+  archive published versions, and check edit/execution permissions.
+- `MappingRunMetadataSchema`: safe mapping-run receipt with profile version and
+  message hash but no message payload.
+- `AuditEventSchema`: safe audit event metadata for profile and mapping events.
+- `DemoPersistencePolicySchema`: public-demo storage policy that keeps built-in
+  profiles read-only and recruiter changes in browser storage.
+- `DemoBrowserStorageSnapshotSchema`: browser-only demo scratchpad for draft
+  profile copies, review decisions, correction intents, and safe demo events.
+- Demo browser storage helpers: create or reset an empty safe browser snapshot.
+- D1 record schemas: `ClientRecordSchema`, `MappingProfileRecordSchema`,
+  `MappingVersionRecordSchema`, `Hl7ItemRecordSchema`, and
+  `AuditEventRecordSchema`.
 - `ValidationIssueSchema`: structured errors, warnings, and info messages.
 
 More detail: [../../docs/normalized-data-model.md](../../docs/normalized-data-model.md)
