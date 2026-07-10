@@ -26,8 +26,20 @@ export const HASHED_REPORT_FILE_NAMES = [
   "mapping-summary.csv",
 ] as const
 
-export const ReportFileNameSchema = z.enum(REQUIRED_REPORT_FILE_NAMES)
-export const ReportPayloadFileNameSchema = z.enum(HASHED_REPORT_FILE_NAMES)
+export const OPTIONAL_REPORT_FILE_NAMES = ["source.hl7"] as const
+
+export const REPORT_FILE_NAMES = [
+  ...REQUIRED_REPORT_FILE_NAMES,
+  ...OPTIONAL_REPORT_FILE_NAMES,
+] as const
+
+export const REPORT_PAYLOAD_FILE_NAMES = [
+  ...HASHED_REPORT_FILE_NAMES,
+  ...OPTIONAL_REPORT_FILE_NAMES,
+] as const
+
+export const ReportFileNameSchema = z.enum(REPORT_FILE_NAMES)
+export const ReportPayloadFileNameSchema = z.enum(REPORT_PAYLOAD_FILE_NAMES)
 
 export const ReportSourcePolicySchema = z.enum([
   "raw_source_excluded",

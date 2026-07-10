@@ -86,6 +86,63 @@ describe("buildReportPackage", () => {
       sourcePolicy: "raw_source_excluded",
     })
     expect(reportPackage.manifest.includedFiles).toHaveLength(6)
+    expect(reportPackage.files.map((file) => file.fileName)).not.toContain(
+      "source.hl7",
+    )
+  })
+
+  it("reproduces report package files for identical inputs", async () => {
+    const input = {
+      appVersion: "0.1.0",
+      generatedAt: "2026-07-09T00:32:00-07:00",
+      clientId: "northstar-lab",
+      profileId: "northstar-oml-o21",
+      profileVersion: 3,
+      messageHash,
+      normalizedData: NormalizedOutputSchema.parse(normalizedOutputFixture),
+      hl7Items: [
+        Hl7ItemSchema.parse({
+          id: "patient-name",
+          clientId: "northstar-lab",
+          sequence: 1,
+          section: "patient",
+          targetPath: "patient.name",
+          label: "Patient name",
+          action: "extract",
+          valueType: "person_name",
+          sources: [
+            {
+              path: "PID-5.1",
+              segment: "PID",
+              field: 5,
+              component: 1,
+            },
+          ],
+        }),
+      ],
+      reviewDecisions: [
+        ReportReviewDecisionSchema.parse({
+          fieldId: "patient-name",
+          normalizedPath: "patient.name",
+          hl7ItemId: "patient-name",
+          reviewStatus: "confirmed",
+          sourcePath: "PID-5.1",
+          correctionApplied: false,
+          updatedAt: "2026-07-09T00:33:00-07:00",
+        }),
+      ],
+      validationResults: ValidationSummarySchema.parse({
+        errors: [],
+        warnings: [],
+        info: [],
+      }),
+    }
+
+    const firstPackage = await buildReportPackage(input, () => fakeHash)
+    const secondPackage = await buildReportPackage(input, () => fakeHash)
+
+    expect(firstPackage.manifest).toEqual(secondPackage.manifest)
+    expect(firstPackage.files).toEqual(secondPackage.files)
   })
 
   it("emits valid machine-readable JSON payloads", async () => {
@@ -234,6 +291,142 @@ describe("buildReportPackage", () => {
     )
     expect(csv).toContain(
       'labOrders,labOrders.0.service.display,confirmed,"OBR-4.2,""alternate""",lab-service-display,confirmed,',
+    )
+  })
+
+  it("neutralizes spreadsheet formulas in mapping summary CSV cells", async () => {
+    const reportPackage = await buildReportPackage(
+      {
+        appVersion: "0.1.0",
+        generatedAt: "2026-07-09T00:45:00-07:00",
+        clientId: "northstar-lab",
+        profileId: "northstar-oml-o21",
+        profileVersion: 3,
+        messageHash,
+        normalizedData: NormalizedOutputSchema.parse(normalizedOutputFixture),
+        hl7Items: [],
+        reviewDecisions: [
+          {
+            fieldId: "patient-name",
+            normalizedPath: "patient.name",
+            hl7ItemId: "patient-name",
+            reviewStatus: "confirmed",
+            sourcePath: '=HYPERLINK("https://example.invalid")',
+            correctionApplied: false,
+            updatedAt: "2026-07-09T00:46:00-07:00",
+          },
+        ],
+        validationResults: {
+          errors: [],
+          warnings: [],
+          info: [],
+        },
+      },
+      () => fakeHash,
+    )
+    const csv = reportPackage.files.find(
+      (file) => file.fileName === "mapping-summary.csv",
+    )?.content
+
+    expect(csv).toContain('"\'=HYPERLINK(""https://example.invalid"")"')
+  })
+
+  it("includes source.hl7 only for explicitly synthetic source reports", async () => {
+    const reportPackage = await buildReportPackage(
+      {
+        appVersion: "0.1.0",
+        generatedAt: "2026-07-09T00:47:00-07:00",
+        clientId: "northstar-lab",
+        profileId: "northstar-oml-o21",
+        profileVersion: 3,
+        messageHash,
+        sourcePolicy: "synthetic_source_included",
+        syntheticSourceText:
+          "MSH|^~\\&|SYNTHETIC|LAB|HL7_MAPPER|DEMO|202607090047||OML^O21^OML_O21|MSG1|P|2.5.1\r",
+        normalizedData: NormalizedOutputSchema.parse(normalizedOutputFixture),
+        hl7Items: [],
+        reviewDecisions: [],
+        validationResults: {
+          errors: [],
+          warnings: [],
+          info: [],
+        },
+      },
+      () => fakeHash,
+    )
+    const zipPackage = buildReportZip(reportPackage, {
+      rootFolderName: "northstar-lab",
+    })
+
+    expect(reportPackage.files.map((file) => file.fileName)).toContain(
+      "source.hl7",
+    )
+    expect(reportPackage.manifest).toMatchObject({
+      sourcePolicy: "synthetic_source_included",
+    })
+    expect(reportPackage.manifest.includedFiles).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          fileName: "source.hl7",
+          mediaType: "text/plain",
+        }),
+      ]),
+    )
+    expect(zipPackage.entries.map((entry) => entry.path)).toContain(
+      "northstar-lab/source.hl7",
+    )
+  })
+
+  it("rejects source text unless the report policy marks it synthetic", async () => {
+    await expect(() =>
+      buildReportPackage(
+        {
+          appVersion: "0.1.0",
+          generatedAt: "2026-07-09T00:48:00-07:00",
+          clientId: "northstar-lab",
+          profileId: "northstar-oml-o21",
+          profileVersion: 3,
+          messageHash,
+          syntheticSourceText:
+            "MSH|^~\\&|SYNTHETIC|LAB|HL7_MAPPER|DEMO|202607090048||OML^O21^OML_O21|MSG1|P|2.5.1\r",
+          normalizedData: NormalizedOutputSchema.parse(normalizedOutputFixture),
+          hl7Items: [],
+          reviewDecisions: [],
+          validationResults: {
+            errors: [],
+            warnings: [],
+            info: [],
+          },
+        },
+        () => fakeHash,
+      ),
+    ).rejects.toThrow(
+      "syntheticSourceText can only be included with the synthetic_source_included policy.",
+    )
+
+    await expect(() =>
+      buildReportPackage(
+        {
+          appVersion: "0.1.0",
+          generatedAt: "2026-07-09T00:49:00-07:00",
+          clientId: "northstar-lab",
+          profileId: "northstar-oml-o21",
+          profileVersion: 3,
+          messageHash,
+          sourcePolicy: "synthetic_source_included",
+          normalizedData: NormalizedOutputSchema.parse(normalizedOutputFixture),
+          hl7Items: [],
+          reviewDecisions: [],
+          validationResults: {
+            errors: [],
+            warnings: [],
+            info: [],
+          },
+        },
+        () => fakeHash,
+      ),
+    ).rejects.toThrow(
+      "syntheticSourceText is required when sourcePolicy is synthetic_source_included.",
     )
   })
 
