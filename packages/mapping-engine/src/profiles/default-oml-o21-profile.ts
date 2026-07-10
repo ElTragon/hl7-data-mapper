@@ -219,6 +219,15 @@ export const defaultOmlO21Items = [
     ],
     required: true,
     transformName: "mapXpnName",
+    transformParams: {
+      sourceRoles: [
+        { path: "PID-5.1", segmentIndex: null, role: "family" },
+        { path: "PID-5.2", segmentIndex: null, role: "given" },
+        { path: "PID-5.3", segmentIndex: null, role: "middle" },
+        { path: "PID-5.4", segmentIndex: null, role: "suffix" },
+        { path: "PID-5.5", segmentIndex: null, role: "prefix" },
+      ],
+    },
   }),
   item({
     id: "patient-date-of-birth",

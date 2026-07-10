@@ -93,6 +93,89 @@ describe("executeMapping", () => {
     expect(messageTypeField?.sources[0]?.path).toBe("MSH-9.1")
   })
 
+  it("maps person-name parts from configured sources across PID fields", () => {
+    const parsedMessage = parseHl7Message(
+      sampleMessage.replace(
+        /^PID.*$/m,
+        "PID|1|Maria|MRN-104892^^^NORTHSTAR_LAB^MR||Lopez^Elena||19870514|F",
+      ),
+    )
+    const patientNameItem = defaultOmlO21ClientProfile.itemSet.items.find(
+      (item) => item.id === "patient-name",
+    )
+
+    if (!patientNameItem) {
+      throw new Error("Expected patient-name item.")
+    }
+
+    const profile = ClientProfileSchema.parse({
+      ...defaultOmlO21ClientProfile,
+      itemSet: {
+        ...defaultOmlO21ClientProfile.itemSet,
+        items: defaultOmlO21ClientProfile.itemSet.items.map((item) =>
+          item.id === "patient-name"
+            ? {
+                ...patientNameItem,
+                sources: [
+                  createSourceReference({
+                    segment: "PID",
+                    field: 5,
+                    component: 1,
+                  }),
+                  createSourceReference({
+                    segment: "PID",
+                    field: 5,
+                    component: 2,
+                  }),
+                  createSourceReference({
+                    segment: "PID",
+                    field: 2,
+                    component: 1,
+                  }),
+                ],
+                transform: {
+                  name: "mapXpnName",
+                  params: {
+                    sourceRoles: [
+                      {
+                        path: "PID-5.1",
+                        segmentIndex: null,
+                        role: "family",
+                      },
+                      {
+                        path: "PID-5.2",
+                        segmentIndex: null,
+                        role: "given",
+                      },
+                      {
+                        path: "PID-2.1",
+                        segmentIndex: null,
+                        role: "middle",
+                      },
+                    ],
+                  },
+                },
+              }
+            : item,
+        ),
+      },
+    })
+    const result = executeMapping({
+      parsedMessage,
+      profile,
+    })
+
+    expect(result.normalizedDraft).toMatchObject({
+      patient: {
+        name: {
+          family: "Lopez",
+          given: "Elena",
+          middle: "Maria",
+        },
+      },
+    })
+  })
+
   it("includes source-read evidence in the execution trace", () => {
     const result = executeMapping({
       parsedMessage: parseHl7Message(sampleMessage),

@@ -6,6 +6,7 @@ import {
   type ClientProfile,
   type Hl7Item,
   type NormalizedField,
+  type PersonName,
   type SourceReference,
   type ValidationIssue,
   type ValidationSummary,
@@ -210,6 +211,10 @@ function readItemInput(
 function applySupportedAction(item: Hl7Item, inputValues: readonly unknown[]) {
   const firstValue = inputValues[0]
 
+  if (item.transform?.name === "mapXpnName") {
+    return mapPersonNameFromSourceValues(item, inputValues)
+  }
+
   if (item.action === "default_value") {
     return item.defaultValue ?? null
   }
@@ -238,7 +243,108 @@ function isPendingTransform(item: Hl7Item): boolean {
     return false
   }
 
-  return !["mustEqual"].includes(item.transform.name)
+  return !["mustEqual", "mapXpnName"].includes(item.transform.name)
+}
+
+function mapPersonNameFromSourceValues(
+  item: Hl7Item,
+  inputValues: readonly unknown[],
+): PersonName {
+  const nameParts: PersonName = {
+    family: null,
+    given: null,
+    middle: null,
+    suffix: null,
+    prefix: null,
+  }
+
+  item.sources.forEach((source, index) => {
+    const role = getPersonNameSourceRole(item, source, index)
+    const value = stringOrNull(inputValues[index])
+
+    if (role && value !== null) {
+      nameParts[role] = value
+    }
+  })
+
+  return nameParts
+}
+
+type PersonNameSourceRole = keyof PersonName
+
+const DEFAULT_PERSON_NAME_SOURCE_ROLES: readonly PersonNameSourceRole[] = [
+  "family",
+  "given",
+  "middle",
+  "suffix",
+  "prefix",
+]
+
+function getPersonNameSourceRole(
+  item: Hl7Item,
+  source: SourceReference,
+  sourceIndex: number,
+): PersonNameSourceRole | null {
+  const configuredRoles = item.transform?.params["sourceRoles"]
+
+  if (Array.isArray(configuredRoles)) {
+    const configuredRole = configuredRoles.find(
+      (entry) =>
+        isSourceRoleEntry(entry) &&
+        entry.path === source.path &&
+        (entry.segmentIndex ?? null) === (source.segmentIndex ?? null),
+    )
+
+    if (configuredRole) {
+      return configuredRole.role
+    }
+  }
+
+  return DEFAULT_PERSON_NAME_SOURCE_ROLES[sourceIndex] ?? null
+}
+
+function isSourceRoleEntry(value: unknown): value is {
+  readonly path: string
+  readonly segmentIndex?: number | null
+  readonly role: PersonNameSourceRole
+} {
+  if (!value || typeof value !== "object") {
+    return false
+  }
+
+  const candidate = value as {
+    readonly path?: unknown
+    readonly segmentIndex?: unknown
+    readonly role?: unknown
+  }
+
+  return (
+    typeof candidate.path === "string" &&
+    (candidate.segmentIndex === undefined ||
+      candidate.segmentIndex === null ||
+      typeof candidate.segmentIndex === "number") &&
+    isPersonNameSourceRole(candidate.role)
+  )
+}
+
+function isPersonNameSourceRole(role: unknown): role is PersonNameSourceRole {
+  return (
+    role === "family" ||
+    role === "given" ||
+    role === "middle" ||
+    role === "suffix" ||
+    role === "prefix"
+  )
+}
+
+function stringOrNull(value: unknown): string | null {
+  if (typeof value !== "string") {
+    return null
+  }
+
+  const trimmedValue = value.trim()
+
+  return trimmedValue.length > 0 ? trimmedValue : null
 }
 
 function normalizeDate(value: unknown): string | null {

@@ -2,14 +2,28 @@ import { useMemo, useState, type ChangeEvent } from "react"
 import { AlertCircle, CheckCircle2, Download, FileText } from "lucide-react"
 
 import {
+  type ClientProfile,
+  type GuidedReviewStepId,
+  type ReviewableField,
+  type SourceReference,
+} from "@hl7-data-mapper/contracts"
+import {
   parseHl7Message,
   type ParsedHl7Message,
 } from "@hl7-data-mapper/hl7-parser"
 import {
+  applyReviewCorrectionAndRerunMapping,
   buildReviewableFields,
   composeDefaultNormalizedOutput,
   defaultOmlO21ClientProfile,
   executeMapping,
+  confirmReviewableField,
+  markReviewableFieldIncorrect,
+  markReviewableFieldUnavailable,
+  selectCompositeSourceForReviewableField,
+  selectAlternateSourceForReviewableField,
+  type MappingExecutionResult,
+  type PersonNameSourceRole,
 } from "@hl7-data-mapper/mapping-engine"
 import {
   buildReportPackage,
@@ -17,6 +31,14 @@ import {
 } from "@hl7-data-mapper/report-generator"
 
 import sampleHl7Message from "../../../../../fixtures/valid/oml-o21-basic.hl7?raw"
+import {
+  createDemoDraftProfile,
+  getStoredDraftProfile,
+  loadDemoSnapshot,
+  resetStoredDemoSnapshot,
+  saveReviewWorkspaceSnapshot,
+} from "./demo-storage"
+import { GuidedReviewWorkspace } from "./guided-review-workspace"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -41,6 +63,7 @@ import { Textarea } from "@/components/ui/textarea"
 
 const MAX_FILE_SIZE_BYTES = 1024 * 1024
 const REPORT_APP_VERSION = "0.1.0"
+const DEFAULT_REVIEW_STEP: GuidedReviewStepId = "patient"
 
 function getSegmentCount(parsed: ParsedHl7Message, segmentName: string) {
   return parsed.segments.filter((segment) => segment.name === segmentName)
@@ -57,6 +80,16 @@ export function Hl7IngestionPanel() {
     "idle" | "generating" | "downloaded"
   >("idle")
   const [reportError, setReportError] = useState<string | null>(null)
+  const [workflowState, setWorkflowState] = useState<
+    "input" | "parsed" | "review"
+  >("input")
+  const [activeProfile, setActiveProfile] = useState<ClientProfile | null>(null)
+  const [mappingResult, setMappingResult] =
+    useState<MappingExecutionResult | null>(null)
+  const [reviewFields, setReviewFields] = useState<ReviewableField[]>([])
+  const [activeStepId, setActiveStepId] =
+    useState<GuidedReviewStepId>(DEFAULT_REVIEW_STEP)
+  const [selectedFieldId, setSelectedFieldId] = useState<string | null>(null)
 
   const summary = useMemo(() => {
     if (!parsedMessage) {
@@ -89,6 +122,7 @@ export function Hl7IngestionPanel() {
     setInputError(null)
     setReportStatus("idle")
     setReportError(null)
+    clearReviewState()
   }
 
   function handleLoadSample() {
@@ -97,17 +131,36 @@ export function Hl7IngestionPanel() {
     setInputError(null)
     setReportStatus("idle")
     setReportError(null)
+    clearReviewState()
   }
 
   function handleParse() {
-    setParsedMessage(parseHl7Message(rawMessage))
+    const parsed = parseHl7Message(rawMessage)
+
+    setParsedMessage(parsed)
     setInputError(null)
     setReportStatus("idle")
     setReportError(null)
+    setWorkflowState("parsed")
+
+    if (parsed.errors.length > 0) {
+      setActiveProfile(null)
+      setMappingResult(null)
+      setReviewFields([])
+      setSelectedFieldId(null)
+      return
+    }
+
+    startReview(parsed)
   }
 
   async function handleDownloadReport() {
-    if (!parsedMessage || parsedMessage.errors.length > 0) {
+    if (
+      !parsedMessage ||
+      parsedMessage.errors.length > 0 ||
+      !activeProfile ||
+      !mappingResult
+    ) {
       setReportError("Parse a valid synthetic OML/O21 message first.")
       return
     }
@@ -134,14 +187,14 @@ export function Hl7IngestionPanel() {
             ?.fields.find((field) => field.index === 10)?.raw,
           sourcePolicy: "raw_source_excluded",
           normalizedData,
-          hl7Items: defaultOmlO21ClientProfile.itemSet.items,
-          reviewDecisions: buildReportReviewDecisions(mappingResult),
+          hl7Items: activeProfile.itemSet.items,
+          reviewDecisions: buildReportReviewDecisions(reviewFields),
           validationResults: mappingResult.validation,
         },
         async ({ content }) => sha256Hex(content),
       )
       const zipPackage = buildReportZip(reportPackage, {
-        rootFolderName: defaultOmlO21ClientProfile.clientId,
+        rootFolderName: activeProfile.clientId,
       })
 
       downloadBytes({
@@ -156,6 +209,166 @@ export function Hl7IngestionPanel() {
         error instanceof Error
           ? error.message
           : "Could not generate the report ZIP.",
+      )
+    }
+  }
+
+  function clearReviewState() {
+    setWorkflowState("input")
+    setActiveProfile(null)
+    setMappingResult(null)
+    setReviewFields([])
+    setActiveStepId(DEFAULT_REVIEW_STEP)
+    setSelectedFieldId(null)
+  }
+
+  function startReview(parsed: ParsedHl7Message) {
+    const now = new Date().toISOString()
+    const draftProfile =
+      getStoredDraftProfile(defaultOmlO21ClientProfile) ??
+      createDemoDraftProfile({
+        sourceProfile: defaultOmlO21ClientProfile,
+        createdAt: now,
+      })
+    const nextMappingResult = executeMapping({
+      parsedMessage: parsed,
+      profile: draftProfile,
+    })
+    const storedFields = buildReviewableFields({
+      mappingResult: nextMappingResult,
+      profile: draftProfile,
+    })
+    const nextFields = applyStoredReviewStatuses(storedFields)
+
+    setActiveProfile(draftProfile)
+    setMappingResult(nextMappingResult)
+    setReviewFields(nextFields)
+    setWorkflowState("review")
+    setActiveStepId(DEFAULT_REVIEW_STEP)
+    setSelectedFieldId(
+      nextFields.find((field) => field.stepId === DEFAULT_REVIEW_STEP)?.id ??
+        nextFields[0]?.id ??
+        null,
+    )
+    saveReviewWorkspaceSnapshot({
+      profile: draftProfile,
+      reviewFields: nextFields,
+      updatedAt: now,
+    })
+  }
+
+  function persistReviewState({
+    profile = activeProfile,
+    fields,
+  }: {
+    readonly profile?: ClientProfile | null
+    readonly fields: readonly ReviewableField[]
+  }) {
+    if (!profile) {
+      return
+    }
+
+    saveReviewWorkspaceSnapshot({
+      profile,
+      reviewFields: fields,
+      updatedAt: new Date().toISOString(),
+    })
+  }
+
+  function updateReviewField(updatedField: ReviewableField) {
+    const nextFields = reviewFields.map((field) =>
+      field.id === updatedField.id ? updatedField : field,
+    )
+
+    setReviewFields(nextFields)
+    setSelectedFieldId(updatedField.id)
+    persistReviewState({ fields: nextFields })
+  }
+
+  function handleActiveStepChange(stepId: GuidedReviewStepId) {
+    setActiveStepId(stepId)
+    setSelectedFieldId(
+      reviewFields.find((field) => field.stepId === stepId)?.id ?? null,
+    )
+  }
+
+  function handleApplySource(
+    field: ReviewableField,
+    source: SourceReference,
+    sourceRole?: PersonNameSourceRole,
+  ) {
+    if (!parsedMessage || !activeProfile) {
+      return
+    }
+
+    const replacementSource = {
+      ...source,
+      raw: undefined,
+    }
+    const correctedField = sourceRole
+      ? selectCompositeSourceForReviewableField({
+          profile: activeProfile,
+          field,
+          replacementSource,
+          sourceRole,
+          rawSegment: source.raw,
+          notes: `Use ${replacementSource.path} as ${sourceRole} for ${field.normalizedPath}.`,
+        })
+      : selectAlternateSourceForReviewableField({
+          field,
+          replacementSource,
+          rawSegment: source.raw,
+          notes: `Use ${replacementSource.path} for ${field.normalizedPath}.`,
+        })
+    const result = applyReviewCorrectionAndRerunMapping({
+      parsedMessage,
+      profile: activeProfile,
+      field: correctedField,
+      updatedAt: new Date().toISOString(),
+    })
+    const nextFields = mergeReviewFields({
+      previousFields: reviewFields,
+      nextFields: result.reviewFields,
+      overrideFieldId: field.id,
+      overrideStatus: "mapping_changed",
+      correctionIntent: correctedField.correctionIntent ?? null,
+    })
+
+    setActiveProfile(result.profile)
+    setMappingResult(result.mappingResult)
+    setReviewFields(nextFields)
+    setSelectedFieldId(field.id)
+    persistReviewState({
+      profile: result.profile,
+      fields: nextFields,
+    })
+  }
+
+  function handleResetDemo() {
+    resetStoredDemoSnapshot(new Date().toISOString())
+
+    if (parsedMessage && parsedMessage.errors.length === 0) {
+      const draftProfile = createDemoDraftProfile({
+        sourceProfile: defaultOmlO21ClientProfile,
+        createdAt: new Date().toISOString(),
+      })
+      const nextMappingResult = executeMapping({
+        parsedMessage,
+        profile: draftProfile,
+      })
+      const nextFields = buildReviewableFields({
+        mappingResult: nextMappingResult,
+        profile: draftProfile,
+      })
+
+      setActiveProfile(draftProfile)
+      setMappingResult(nextMappingResult)
+      setReviewFields(nextFields)
+      setActiveStepId(DEFAULT_REVIEW_STEP)
+      setSelectedFieldId(
+        nextFields.find((field) => field.stepId === DEFAULT_REVIEW_STEP)?.id ??
+          nextFields[0]?.id ??
+          null,
       )
     }
   }
@@ -333,6 +546,17 @@ export function Hl7IngestionPanel() {
                   </CardContent>
                 </Card>
 
+                {workflowState === "parsed" &&
+                parsedMessage.errors.length === 0 ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => setWorkflowState("review")}
+                  >
+                    Open guided review
+                  </Button>
+                ) : null}
+
                 {reportError ? (
                   <Alert variant="destructive">
                     <AlertCircle />
@@ -379,18 +603,42 @@ export function Hl7IngestionPanel() {
           </CardContent>
         </Card>
       </div>
+
+      {parsedMessage &&
+      activeProfile &&
+      mappingResult &&
+      workflowState === "review" ? (
+        <div className="mx-auto mt-8 max-w-7xl px-5 lg:px-8">
+          <GuidedReviewWorkspace
+            parsedMessage={parsedMessage}
+            profile={activeProfile}
+            mappingResult={mappingResult}
+            reviewFields={reviewFields}
+            activeStepId={activeStepId}
+            selectedFieldId={selectedFieldId}
+            reportStatus={reportStatus}
+            onActiveStepChange={handleActiveStepChange}
+            onSelectedFieldChange={setSelectedFieldId}
+            onConfirmField={(field) =>
+              updateReviewField(confirmReviewableField(field))
+            }
+            onMarkIncorrect={(field) =>
+              updateReviewField(markReviewableFieldIncorrect(field))
+            }
+            onMarkUnavailable={(field) =>
+              updateReviewField(markReviewableFieldUnavailable(field))
+            }
+            onApplySource={handleApplySource}
+            onDownloadReport={() => void handleDownloadReport()}
+            onResetDemo={handleResetDemo}
+          />
+        </div>
+      ) : null}
     </section>
   )
 }
 
-function buildReportReviewDecisions(
-  mappingResult: ReturnType<typeof executeMapping>,
-) {
-  const reviewFields = buildReviewableFields({
-    mappingResult,
-    profile: defaultOmlO21ClientProfile,
-  })
-
+function buildReportReviewDecisions(reviewFields: readonly ReviewableField[]) {
   return reviewFields.map((field) => ({
     fieldId: field.id,
     normalizedPath: field.normalizedPath,
@@ -400,6 +648,71 @@ function buildReportReviewDecisions(
     correctionApplied: field.reviewStatus === "mapping_changed",
     updatedAt: new Date().toISOString(),
   }))
+}
+
+function applyStoredReviewStatuses(fields: ReviewableField[]) {
+  const snapshot = loadDemoSnapshot()
+
+  if (!snapshot) {
+    return fields
+  }
+
+  const decisionByFieldId = new Map(
+    snapshot.reviewDecisions.map((decision) => [decision.fieldId, decision]),
+  )
+
+  return fields.map((field) => {
+    const decision = decisionByFieldId.get(field.id)
+
+    if (!decision) {
+      return field
+    }
+
+    return {
+      ...field,
+      reviewStatus: decision.reviewStatus,
+    }
+  })
+}
+
+function mergeReviewFields({
+  previousFields,
+  nextFields,
+  overrideFieldId,
+  overrideStatus,
+  correctionIntent,
+}: {
+  readonly previousFields: readonly ReviewableField[]
+  readonly nextFields: readonly ReviewableField[]
+  readonly overrideFieldId: string
+  readonly overrideStatus: ReviewableField["reviewStatus"]
+  readonly correctionIntent: ReviewableField["correctionIntent"] | null
+}) {
+  const previousFieldById = new Map(
+    previousFields.map((field) => [field.id, field]),
+  )
+
+  return nextFields.map((field) => {
+    if (field.id === overrideFieldId) {
+      return {
+        ...field,
+        reviewStatus: overrideStatus,
+        correctionIntent,
+      }
+    }
+
+    const previousField = previousFieldById.get(field.id)
+
+    if (!previousField || previousField.reviewStatus === "unreviewed") {
+      return field
+    }
+
+    return {
+      ...field,
+      reviewStatus: previousField.reviewStatus,
+      correctionIntent: previousField.correctionIntent,
+    }
+  })
 }
 
 async function sha256Hex(value: string) {

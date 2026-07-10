@@ -34,6 +34,14 @@ export type SelectAlternateSourceInput = {
   readonly notes?: string
 }
 
+export type PersonNameSourceRole =
+  "family" | "given" | "middle" | "suffix" | "prefix"
+
+export type SelectCompositeFieldSourceInput = SelectAlternateSourceInput & {
+  readonly profile: ClientProfile
+  readonly sourceRole: PersonNameSourceRole
+}
+
 export type ApplyReviewCorrectionInput = {
   readonly profile: ClientProfile
   readonly field: ReviewableField
@@ -198,6 +206,85 @@ export function selectAlternateSourceForReviewableField({
   }
 }
 
+export function selectCompositeSourceForReviewableField({
+  profile,
+  field,
+  replacementSource,
+  sourceRole,
+  rawSegment,
+  previewValue,
+  reason,
+  notes,
+}: SelectCompositeFieldSourceInput): ReviewableField {
+  if (!field.hl7ItemId) {
+    throw new Error(
+      `Cannot select a composite source for "${field.label}" because it is not linked to an hl7Item.`,
+    )
+  }
+
+  const parsedProfile = ClientProfileSchema.parse(profile)
+  const targetItem = parsedProfile.itemSet.items.find(
+    (item) => item.id === field.hl7ItemId,
+  )
+
+  if (!targetItem) {
+    throw new Error(
+      `Could not find hl7Item "${field.hl7ItemId}" in profile "${parsedProfile.profileId}".`,
+    )
+  }
+
+  if (targetItem.transform?.name !== "mapXpnName") {
+    return selectAlternateSourceForReviewableField({
+      field,
+      replacementSource,
+      rawSegment,
+      previewValue,
+      reason,
+      notes,
+    })
+  }
+
+  const parsedSource = SourceReferenceSchema.parse(replacementSource)
+  const replacementHl7Item = replacePersonNameRoleSource({
+    item: targetItem,
+    source: parsedSource,
+    sourceRole,
+    notes,
+  })
+  const candidateAlreadyExists = field.sourceCandidates.some(
+    (candidate) =>
+      candidate.source.path === parsedSource.path &&
+      (candidate.source.segmentIndex ?? null) ===
+        (parsedSource.segmentIndex ?? null),
+  )
+
+  return {
+    ...field,
+    reviewStatus: "incorrect",
+    sourceCandidates: candidateAlreadyExists
+      ? field.sourceCandidates
+      : [
+          ...field.sourceCandidates,
+          {
+            source: parsedSource,
+            rawSegment: rawSegment ?? parsedSource.raw ?? null,
+            previewValue: previewValue ?? null,
+            reason:
+              reason ??
+              `User-selected ${sourceRole} source for composite person name.`,
+          },
+        ],
+    correctionIntent: {
+      targetHl7ItemId: field.hl7ItemId,
+      replacementSource: parsedSource,
+      replacementHl7Item,
+      notes:
+        notes ??
+        `Use ${parsedSource.path} as ${sourceRole} for ${field.normalizedPath}.`,
+    },
+  }
+}
+
 export function applyReviewFieldCorrectionToProfile({
   profile,
   field,
@@ -214,6 +301,7 @@ export function applyReviewFieldCorrectionToProfile({
   const targetHl7ItemId =
     field.correctionIntent?.targetHl7ItemId ?? field.hl7ItemId
   const replacementSource = field.correctionIntent?.replacementSource
+  const replacementHl7Item = field.correctionIntent?.replacementHl7Item
 
   if (!targetHl7ItemId) {
     throw new Error(
@@ -221,7 +309,7 @@ export function applyReviewFieldCorrectionToProfile({
     )
   }
 
-  if (!replacementSource) {
+  if (!replacementSource && !replacementHl7Item) {
     throw new Error(
       `Cannot apply a source correction for "${field.label}" because no replacement source was selected.`,
     )
@@ -234,6 +322,21 @@ export function applyReviewFieldCorrectionToProfile({
     }
 
     didUpdateItem = true
+
+    if (replacementHl7Item) {
+      return {
+        ...replacementHl7Item,
+        notes: appendNote(
+          replacementHl7Item.notes,
+          field.correctionIntent?.notes ??
+            `Updated composite source from guided review for ${field.normalizedPath}.`,
+        ),
+      }
+    }
+
+    if (!replacementSource) {
+      return item
+    }
 
     return {
       ...item,
@@ -260,6 +363,136 @@ export function applyReviewFieldCorrectionToProfile({
       items: updatedItems,
     },
   })
+}
+
+const PERSON_NAME_SOURCE_ROLES: readonly PersonNameSourceRole[] = [
+  "family",
+  "given",
+  "middle",
+  "suffix",
+  "prefix",
+]
+
+function replacePersonNameRoleSource({
+  item,
+  source,
+  sourceRole,
+  notes,
+}: {
+  readonly item: Hl7Item
+  readonly source: SourceReference
+  readonly sourceRole: PersonNameSourceRole
+  readonly notes?: string
+}): Hl7Item {
+  const sourceRoles = buildPersonNameSourceRoles(item)
+  const retainedSources = item.sources.filter((existingSource, index) => {
+    const existingRole = sourceRoles.get(sourceKey(existingSource))
+
+    return (
+      existingRole !== sourceRole &&
+      PERSON_NAME_SOURCE_ROLES[index] !== sourceRole
+    )
+  })
+  const nextSources = [...retainedSources, source]
+  const nextSourceRoles = [
+    ...retainedSources.map((existingSource, index) => ({
+      path: existingSource.path,
+      segmentIndex: existingSource.segmentIndex ?? null,
+      role:
+        sourceRoles.get(sourceKey(existingSource)) ??
+        PERSON_NAME_SOURCE_ROLES[index] ??
+        "family",
+    })),
+    {
+      path: source.path,
+      segmentIndex: source.segmentIndex ?? null,
+      role: sourceRole,
+    },
+  ]
+
+  return {
+    ...item,
+    sources: nextSources,
+    transform: {
+      name: "mapXpnName",
+      description: item.transform?.description,
+      params: {
+        ...(item.transform?.params ?? {}),
+        sourceRoles: nextSourceRoles,
+      },
+    },
+    notes: appendNote(
+      item.notes,
+      notes ?? `Use ${source.path} as ${sourceRole} for ${item.targetPath}.`,
+    ),
+  }
+}
+
+function buildPersonNameSourceRoles(
+  item: Hl7Item,
+): ReadonlyMap<string, PersonNameSourceRole> {
+  const configuredRoles = item.transform?.params["sourceRoles"]
+  const roleBySourceKey = new Map<string, PersonNameSourceRole>()
+
+  if (Array.isArray(configuredRoles)) {
+    configuredRoles.forEach((entry) => {
+      if (isSourceRoleEntry(entry)) {
+        roleBySourceKey.set(
+          sourceKey({
+            path: entry.path,
+            segmentIndex: entry.segmentIndex,
+          }),
+          entry.role,
+        )
+      }
+    })
+  }
+
+  item.sources.forEach((source, index) => {
+    if (!roleBySourceKey.has(sourceKey(source))) {
+      const role = PERSON_NAME_SOURCE_ROLES[index]
+
+      if (role) {
+        roleBySourceKey.set(sourceKey(source), role)
+      }
+    }
+  })
+
+  return roleBySourceKey
+}
+
+function isSourceRoleEntry(value: unknown): value is {
+  readonly path: string
+  readonly segmentIndex?: number | null
+  readonly role: PersonNameSourceRole
+} {
+  if (!value || typeof value !== "object") {
+    return false
+  }
+
+  const candidate = value as {
+    readonly path?: unknown
+    readonly segmentIndex?: unknown
+    readonly role?: unknown
+  }
+
+  return (
+    typeof candidate.path === "string" &&
+    (candidate.segmentIndex === undefined ||
+      candidate.segmentIndex === null ||
+      typeof candidate.segmentIndex === "number") &&
+    PERSON_NAME_SOURCE_ROLES.includes(candidate.role as PersonNameSourceRole)
+  )
+}
+
+function sourceKey({
+  path,
+  segmentIndex,
+}: {
+  readonly path: string
+  readonly segmentIndex?: number | null
+}): string {
+  return `${segmentIndex ?? "first"}:${path}`
 }
 
 export function applyReviewCorrectionAndRerunMapping({
