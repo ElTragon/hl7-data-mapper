@@ -10,10 +10,10 @@ excluded from the required report files by default.
 
 ## Required ZIP contents
 
-The required report folder is:
+The default report folder is named from the client ID, such as:
 
 ```text
-hl7-data-mapper-report/
+northstar-lab/
   REPORT.md
   manifest.json
   normalized-data.json
@@ -25,6 +25,9 @@ hl7-data-mapper-report/
 
 These files are represented by `REQUIRED_REPORT_FILE_NAMES` in
 `packages/contracts/src/report.ts`.
+
+`source.hl7` is optional. It is excluded by default and may only be generated
+when the report uses the `synthetic_source_included` policy.
 
 The report generator creates the ZIP archive in memory with
 `buildReportZip(reportPackage)`. It uses `fflate`, a small browser-friendly ZIP
@@ -39,7 +42,7 @@ successfully parsed.
 For the public demo, the button:
 
 - runs the default OML/O21 client profile locally;
-- uses the canonical synthetic normalized output fixture;
+- composes normalized output from the current parsed message;
 - converts reviewable fields into report review decisions;
 - hashes the source message and generated report files in the browser;
 - creates the ZIP with `buildReportZip`; and
@@ -159,6 +162,10 @@ The required report does not include `source.hl7` by default.
 If a later demo flow includes a source file, it must use the
 `synthetic_source_included` policy and clearly mark the source as synthetic.
 Real PHI must never be included in the public report package.
+
+The report generator enforces this boundary: `syntheticSourceText` is rejected
+unless the policy is `synthetic_source_included`, and that policy requires a
+non-empty synthetic source message.
 
 ## Shared contracts
 

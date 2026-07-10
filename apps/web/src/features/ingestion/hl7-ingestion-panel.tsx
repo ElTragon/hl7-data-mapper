@@ -1,13 +1,13 @@
 import { useMemo, useState, type ChangeEvent } from "react"
 import { AlertCircle, CheckCircle2, Download, FileText } from "lucide-react"
 
-import { NormalizedOutputSchema } from "@hl7-data-mapper/contracts"
 import {
   parseHl7Message,
   type ParsedHl7Message,
 } from "@hl7-data-mapper/hl7-parser"
 import {
   buildReviewableFields,
+  composeDefaultNormalizedOutput,
   defaultOmlO21ClientProfile,
   executeMapping,
 } from "@hl7-data-mapper/mapping-engine"
@@ -16,7 +16,6 @@ import {
   buildReportZip,
 } from "@hl7-data-mapper/report-generator"
 
-import normalizedOutputFixture from "../../../../../fixtures/expected/oml-o21-basic.normalized.json"
 import sampleHl7Message from "../../../../../fixtures/valid/oml-o21-basic.hl7?raw"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
@@ -121,6 +120,7 @@ export function Hl7IngestionPanel() {
         parsedMessage,
         profile: defaultOmlO21ClientProfile,
       })
+      const normalizedData = composeDefaultNormalizedOutput(parsedMessage)
       const reportPackage = await buildReportPackage(
         {
           appVersion: REPORT_APP_VERSION,
@@ -132,14 +132,17 @@ export function Hl7IngestionPanel() {
           messageControlId: parsedMessage.segments
             .find((segment) => segment.name === "MSH")
             ?.fields.find((field) => field.index === 10)?.raw,
-          normalizedData: NormalizedOutputSchema.parse(normalizedOutputFixture),
+          sourcePolicy: "raw_source_excluded",
+          normalizedData,
           hl7Items: defaultOmlO21ClientProfile.itemSet.items,
           reviewDecisions: buildReportReviewDecisions(mappingResult),
           validationResults: mappingResult.validation,
         },
         async ({ content }) => sha256Hex(content),
       )
-      const zipPackage = buildReportZip(reportPackage)
+      const zipPackage = buildReportZip(reportPackage, {
+        rootFolderName: defaultOmlO21ClientProfile.clientId,
+      })
 
       downloadBytes({
         bytes: zipPackage.content,
@@ -312,7 +315,7 @@ export function Hl7IngestionPanel() {
                     <div className="text-sm text-muted-foreground">
                       {reportStatus === "downloaded"
                         ? "Report ZIP generated successfully."
-                        : "Raw HL7 source text is excluded from the report."}
+                        : "Raw HL7 source text is excluded from the default report."}
                     </div>
                     <Button
                       type="button"

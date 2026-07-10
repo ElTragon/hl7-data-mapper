@@ -50,6 +50,8 @@ export type {
   SelectAlternateSourceInput,
 } from "./review-fields.js"
 
+export { composeDefaultNormalizedOutput } from "./default-composers.js"
+
 export {
   defaultOmlO21ClientProfile,
   defaultOmlO21Items,

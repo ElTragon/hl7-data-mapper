@@ -255,7 +255,7 @@ IDs and must form an acyclic graph. Item execution must be deterministic.
 The browser generates a ZIP containing:
 
 ```text
-hl7-data-mapper-report/
+northstar-lab/
   REPORT.md
   manifest.json
   normalized-data.json
@@ -267,7 +267,8 @@ hl7-data-mapper-report/
 
 The required public-demo report excludes raw HL7 source text by default. If a
 later demo flow includes a source file, it must be synthetic-only and clearly
-marked in the manifest source policy.
+marked in the manifest source policy. The report generator must reject
+`source.hl7` unless the source policy is `synthetic_source_included`.
 
 The manifest includes:
 

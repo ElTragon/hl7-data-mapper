@@ -1,7 +1,7 @@
 import {
-  HASHED_REPORT_FILE_NAMES,
   Hl7ItemSchema,
   MAPPING_SUMMARY_CSV_COLUMNS,
+  REQUIRED_REPORT_FILE_NAMES,
   NormalizedOutputSchema,
   ReportManifestSchema,
   ReportReviewDecisionSchema,
@@ -78,6 +78,7 @@ export type BuildReportPackageInput = {
   readonly hl7Items: readonly Hl7Item[]
   readonly reviewDecisions: readonly ReportReviewDecision[]
   readonly validationResults: ValidationSummary
+  readonly syntheticSourceText?: string | null
 }
 
 export type ReportPackage = {
@@ -171,6 +172,23 @@ export function buildReportZip(
 function validateReportInput(
   input: BuildReportPackageInput,
 ): BuildReportPackageInput {
+  if (input.sourcePolicy === "synthetic_source_included") {
+    if (!input.syntheticSourceText?.trim()) {
+      throw new Error(
+        "syntheticSourceText is required when sourcePolicy is synthetic_source_included.",
+      )
+    }
+  }
+
+  if (
+    input.sourcePolicy !== "synthetic_source_included" &&
+    input.syntheticSourceText
+  ) {
+    throw new Error(
+      "syntheticSourceText can only be included with the synthetic_source_included policy.",
+    )
+  }
+
   return {
     ...input,
     normalizedData: NormalizedOutputSchema.parse(input.normalizedData),
@@ -186,8 +204,7 @@ function buildPayloadFiles(
   input: BuildReportPackageInput,
 ): readonly ReportPayloadFile[] {
   const mappingSummaryRows = buildMappingSummaryRows(input.reviewDecisions)
-
-  return [
+  const requiredFiles: ReportPayloadFile[] = [
     {
       fileName: "REPORT.md",
       mediaType: "text/markdown",
@@ -219,6 +236,19 @@ function buildPayloadFiles(
       content: buildMappingSummaryCsv(mappingSummaryRows),
     },
   ]
+
+  if (input.sourcePolicy !== "synthetic_source_included") {
+    return requiredFiles
+  }
+
+  return [
+    ...requiredFiles,
+    {
+      fileName: "source.hl7",
+      mediaType: "text/plain",
+      content: input.syntheticSourceText ?? "",
+    },
+  ]
 }
 
 async function buildManifestEntries(
@@ -237,15 +267,17 @@ async function buildManifestEntries(
     })),
   )
 
-  return HASHED_REPORT_FILE_NAMES.map((fileName) => {
-    const entry = entries.find((candidate) => candidate.fileName === fileName)
+  return files
+    .map((file) => file.fileName)
+    .map((fileName) => {
+      const entry = entries.find((candidate) => candidate.fileName === fileName)
 
-    if (!entry) {
-      throw new Error(`Missing report payload file: ${fileName}`)
-    }
+      if (!entry) {
+        throw new Error(`Missing report payload file: ${fileName}`)
+      }
 
-    return entry
-  })
+      return entry
+    })
 }
 
 function buildMarkdownReport(
@@ -312,10 +344,15 @@ function buildMarkdownReport(
     "- `review-decisions.json`: guided-review decisions",
     "- `validation-results.json`: structured validation results",
     "- `mapping-summary.csv`: spreadsheet-friendly mapping summary",
+    ...(input.sourcePolicy === "synthetic_source_included"
+      ? ["- `source.hl7`: explicitly synthetic source message"]
+      : []),
     "",
     "## Privacy note",
     "",
-    "Raw HL7 source text is excluded from the required public-demo report.",
+    input.sourcePolicy === "synthetic_source_included"
+      ? "The included source message is marked synthetic by policy."
+      : "Raw HL7 source text is excluded from the required public-demo report.",
     "The public demo is designed for synthetic data only.",
     "",
   ].join("\n")
@@ -412,25 +449,25 @@ function buildMappingSummaryCsv(rows: readonly MappingSummaryRow[]): string {
 }
 
 function orderReportFiles(files: readonly ReportFile[]): readonly ReportFile[] {
-  const order: readonly ReportFileName[] = [
-    "REPORT.md",
-    "manifest.json",
-    "normalized-data.json",
-    "hl7-items.json",
-    "review-decisions.json",
-    "validation-results.json",
-    "mapping-summary.csv",
+  const optionalFiles = files.filter(
+    (file) =>
+      !REQUIRED_REPORT_FILE_NAMES.some(
+        (fileName) => fileName === file.fileName,
+      ),
+  )
+
+  return [
+    ...REQUIRED_REPORT_FILE_NAMES.map((fileName) => {
+      const file = files.find((candidate) => candidate.fileName === fileName)
+
+      if (!file) {
+        throw new Error(`Missing report file: ${fileName}`)
+      }
+
+      return file
+    }),
+    ...optionalFiles,
   ]
-
-  return order.map((fileName) => {
-    const file = files.find((candidate) => candidate.fileName === fileName)
-
-    if (!file) {
-      throw new Error(`Missing report file: ${fileName}`)
-    }
-
-    return file
-  })
 }
 
 function toPrettyJson(value: unknown): string {
@@ -466,11 +503,13 @@ function formatYesNo(value: boolean): string {
 }
 
 function escapeCsvCell(value: string): string {
-  if (!/[",\n\r]/.test(value)) {
-    return value
+  const safeValue = /^[=+\-@\t\r]/.test(value) ? `'${value}` : value
+
+  if (!/[",\n\r]/.test(safeValue)) {
+    return safeValue
   }
 
-  return `"${value.replaceAll('"', '""')}"`
+  return `"${safeValue.replaceAll('"', '""')}"`
 }
 
 function normalizeZipFolderName(folderName: string): string {
