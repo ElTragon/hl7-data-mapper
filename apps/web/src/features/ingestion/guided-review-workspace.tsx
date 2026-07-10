@@ -16,7 +16,9 @@ import {
   type ClientProfile,
   type GuidedReviewStepId,
   type ReviewableField,
+  type SourceExpectation,
   type SourceReference,
+  type ValidationSeverity,
 } from "@hl7-data-mapper/contracts"
 import type {
   Hl7Component,
@@ -283,88 +285,125 @@ function ReviewFieldList({
         ) : null}
 
         {fields.map((field) => (
-          <div
+          <ReviewFieldCard
             key={field.id}
-            role="button"
-            tabIndex={0}
-            aria-label={`Select ${field.label}`}
-            className={[
-              "w-full rounded-lg border p-3 text-left transition hover:border-teal-300",
-              field.id === selectedFieldId
-                ? "border-teal-500 bg-teal-50/70"
-                : "bg-background",
-            ].join(" ")}
-            onClick={() => onSelectedFieldChange(field.id)}
-            onKeyDown={(event) => {
-              if (event.key === "Enter" || event.key === " ") {
-                event.preventDefault()
-                onSelectedFieldChange(field.id)
-              }
-            }}
-          >
-            <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
-              <div className="min-w-0">
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="font-medium">{field.label}</span>
-                  <ReviewStatusBadge field={field} />
-                </div>
-                <p className="mt-1 break-words font-mono text-sm">
-                  {formatValue(field.value)}
-                </p>
-                <div className="mt-2 flex flex-wrap gap-2 text-xs text-muted-foreground">
-                  <span>{field.normalizedPath}</span>
-                  <span>{field.primarySource?.path ?? "No source"}</span>
-                  <span>{field.hl7ItemId ?? "No hl7Item"}</span>
-                </div>
-                {field.warnings.length > 0 ? (
-                  <p className="mt-2 text-xs text-amber-700">
-                    {field.warnings.join(" ")}
-                  </p>
-                ) : null}
-              </div>
-              <div className="flex flex-wrap gap-2 xl:justify-end">
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  onClick={(event) => {
-                    event.stopPropagation()
-                    onConfirmField(field)
-                  }}
-                >
-                  <CheckCircle2 data-icon="inline-start" />
-                  Confirm
-                </Button>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  onClick={(event) => {
-                    event.stopPropagation()
-                    onMarkIncorrect(field)
-                  }}
-                >
-                  <AlertCircle data-icon="inline-start" />
-                  Incorrect
-                </Button>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  onClick={(event) => {
-                    event.stopPropagation()
-                    onMarkUnavailable(field)
-                  }}
-                >
-                  <XCircle data-icon="inline-start" />
-                  Unavailable
-                </Button>
-              </div>
-            </div>
-          </div>
+            field={field}
+            selectedFieldId={selectedFieldId}
+            onSelectedFieldChange={onSelectedFieldChange}
+            onConfirmField={onConfirmField}
+            onMarkIncorrect={onMarkIncorrect}
+            onMarkUnavailable={onMarkUnavailable}
+          />
         ))}
       </CardContent>
     </Card>
+  )
+}
+
+function ReviewFieldCard({
+  field,
+  selectedFieldId,
+  onSelectedFieldChange,
+  onConfirmField,
+  onMarkIncorrect,
+  onMarkUnavailable,
+}: {
+  readonly field: ReviewableField
+  readonly selectedFieldId: string | null
+  readonly onSelectedFieldChange: (fieldId: string) => void
+  readonly onConfirmField: (field: ReviewableField) => void
+  readonly onMarkIncorrect: (field: ReviewableField) => void
+  readonly onMarkUnavailable: (field: ReviewableField) => void
+}) {
+  const unavailableDisabled = hasCollectedValue(field)
+
+  return (
+    <div
+      role="button"
+      tabIndex={0}
+      aria-label={`Select ${field.label}`}
+      className={[
+        "w-full rounded-lg border p-3 text-left transition hover:border-teal-300",
+        field.id === selectedFieldId
+          ? "border-teal-500 bg-teal-50/70"
+          : "bg-background",
+      ].join(" ")}
+      onClick={() => onSelectedFieldChange(field.id)}
+      onKeyDown={(event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault()
+          onSelectedFieldChange(field.id)
+        }
+      }}
+    >
+      <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="font-medium">{field.label}</span>
+            <ReviewStatusBadge field={field} />
+            <SeverityBadge field={field} />
+          </div>
+          <SeverityHelp field={field} />
+          <div className="mt-2">
+            <CollectedValue value={field.value} density="compact" />
+          </div>
+          <div className="mt-2 flex flex-wrap gap-2 text-xs text-muted-foreground">
+            <span>{field.normalizedPath}</span>
+            <span>{field.primarySource?.path ?? "No source"}</span>
+            <span>{field.hl7ItemId ?? "No hl7Item"}</span>
+          </div>
+          {field.warnings.length > 0 ? (
+            <p className="mt-2 text-xs text-amber-700">
+              {field.warnings.join(" ")}
+            </p>
+          ) : null}
+        </div>
+        <div className="flex flex-wrap gap-2 xl:justify-end">
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            onClick={(event) => {
+              event.stopPropagation()
+              onConfirmField(field)
+            }}
+          >
+            <CheckCircle2 data-icon="inline-start" />
+            Confirm
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            onClick={(event) => {
+              event.stopPropagation()
+              onMarkIncorrect(field)
+            }}
+          >
+            <AlertCircle data-icon="inline-start" />
+            Incorrect
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            disabled={unavailableDisabled}
+            title={
+              unavailableDisabled
+                ? "Use Incorrect when a value was extracted but should be changed."
+                : undefined
+            }
+            onClick={(event) => {
+              event.stopPropagation()
+              onMarkUnavailable(field)
+            }}
+          >
+            <XCircle data-icon="inline-start" />
+            Unavailable
+          </Button>
+        </div>
+      </div>
+    </div>
   )
 }
 
@@ -406,17 +445,22 @@ function ReviewFieldInspector({
             <CardTitle className="text-base">Source inspector</CardTitle>
             <CardDescription>{field.label}</CardDescription>
           </div>
-          <ReviewStatusBadge field={field} />
+          <div className="flex flex-wrap justify-end gap-2">
+            <SeverityBadge field={field} />
+            <ReviewStatusBadge field={field} />
+          </div>
         </div>
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
+        <SeverityHelp field={field} />
+
         <div>
           <p className="text-xs font-medium text-muted-foreground">
             Extracted value
           </p>
-          <p className="mt-1 break-words font-mono text-sm">
-            {formatValue(field.value)}
-          </p>
+          <div className="mt-2">
+            <CollectedValue value={field.value} density="comfortable" />
+          </div>
         </div>
 
         <div className="grid gap-2 text-sm">
@@ -452,18 +496,16 @@ function ReviewFieldInspector({
             </p>
             <div className="flex flex-col gap-2">
               {trace.sourceReads.map((sourceRead) => (
-                <div
+                <SourceReadEvidence
                   key={`${sourceRead.source.path}-${sourceRead.status}`}
-                  className="rounded-md border p-2 text-xs"
-                >
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="font-mono">{sourceRead.source.path}</span>
-                    <Badge variant="outline">{sourceRead.status}</Badge>
-                  </div>
-                  <p className="mt-1 break-words text-muted-foreground">
-                    {formatValue(sourceRead.value)}
-                  </p>
-                </div>
+                  expectation={findSourceExpectation(
+                    trace.sourceExpectations,
+                    sourceRead.source.path,
+                  )}
+                  sourcePath={sourceRead.source.path}
+                  status={sourceRead.status}
+                  value={sourceRead.value}
+                />
               ))}
             </div>
           </div>
@@ -566,6 +608,72 @@ function Hl7SourceBrowser({
         </div>
       ))}
     </div>
+  )
+}
+
+function SourceReadEvidence({
+  expectation,
+  sourcePath,
+  status,
+  value,
+}: {
+  readonly expectation: SourceExpectation | null
+  readonly sourcePath: string
+  readonly status: string
+  readonly value: string | null
+}) {
+  return (
+    <div className="rounded-md border p-2 text-xs">
+      <div className="flex items-center justify-between gap-2">
+        <span className="font-mono">{sourcePath}</span>
+        <div className="flex flex-wrap justify-end gap-1">
+          {expectation ? (
+            <Badge variant="outline">
+              {EXPECTATION_REQUIREDNESS_LABELS[expectation.requiredness]}
+            </Badge>
+          ) : null}
+          <Badge variant="outline">{status}</Badge>
+        </div>
+      </div>
+      {expectation ? (
+        <div className="mt-2 space-y-1">
+          <p className="font-medium">{expectation.expectedLabel}</p>
+          {expectation.examples.length > 0 ? (
+            <p className="break-words text-muted-foreground">
+              Example: {expectation.examples.join(", ")}
+            </p>
+          ) : null}
+        </div>
+      ) : null}
+      <p className="mt-2 break-words text-muted-foreground">
+        Value: {formatValue(value)}
+      </p>
+      {expectation && (value === null || value === "") ? (
+        <p className="mt-2 break-words text-muted-foreground">
+          {expectation.emptyMeaning}
+          {expectation.guidance ? ` ${expectation.guidance}` : ""}
+        </p>
+      ) : null}
+    </div>
+  )
+}
+
+const EXPECTATION_REQUIREDNESS_LABELS: Record<
+  SourceExpectation["requiredness"],
+  string
+> = {
+  required: "Required",
+  recommended: "Recommended",
+  optional: "Optional",
+  conditional: "Conditional",
+}
+
+function findSourceExpectation(
+  expectations: readonly SourceExpectation[],
+  sourcePath: string,
+): SourceExpectation | null {
+  return (
+    expectations.find((expectation) => expectation.path === sourcePath) ?? null
   )
 }
 
@@ -699,17 +807,87 @@ function createSourceOption(
 }
 
 function ReviewStatusBadge({ field }: { readonly field: ReviewableField }) {
+  const reviewStatus =
+    field.reviewStatus === "unavailable" && hasCollectedValue(field)
+      ? "unreviewed"
+      : field.reviewStatus
   const variant =
-    field.reviewStatus === "confirmed" ||
-    field.reviewStatus === "mapping_changed"
+    reviewStatus === "confirmed" || reviewStatus === "mapping_changed"
       ? "secondary"
-      : field.reviewStatus === "incorrect"
+      : reviewStatus === "incorrect"
         ? "destructive"
         : "outline"
 
+  return <Badge variant={variant}>{REVIEW_STATUS_LABELS[reviewStatus]}</Badge>
+}
+
+function SeverityBadge({ field }: { readonly field: ReviewableField }) {
+  const severity = getHighestSeverity(field)
+
+  if (!severity) {
+    return null
+  }
+
+  const variant = severity === "error" ? "destructive" : "outline"
+
+  return <Badge variant={variant}>{SEVERITY_LABELS[severity]}</Badge>
+}
+
+function SeverityHelp({ field }: { readonly field: ReviewableField }) {
+  const severity = getHighestSeverity(field)
+
+  if (!severity) {
+    return null
+  }
+
   return (
-    <Badge variant={variant}>{REVIEW_STATUS_LABELS[field.reviewStatus]}</Badge>
+    <p
+      className={[
+        "mt-2 text-xs leading-5",
+        severity === "error"
+          ? "text-destructive"
+          : severity === "warning"
+            ? "text-amber-700"
+            : "text-muted-foreground",
+      ].join(" ")}
+    >
+      {SEVERITY_HELP_TEXT[severity]}
+    </p>
   )
+}
+
+const SEVERITY_LABELS: Record<ValidationSeverity, string> = {
+  error: "Critical",
+  warning: "Review",
+  info: "Safe to ignore",
+}
+
+const SEVERITY_HELP_TEXT: Record<ValidationSeverity, string> = {
+  error:
+    "Critical: this blocks a trustworthy mapping result until it is fixed or marked unavailable.",
+  warning:
+    "Review: this may be a client-specific mapping issue and should be checked before handoff.",
+  info: "Safe to ignore: this source slot is blank or absent in the sample, but the collected value can still be valid.",
+}
+
+function getHighestSeverity(field: ReviewableField): ValidationSeverity | null {
+  if (field.validation.some((issue) => issue.severity === "error")) {
+    return "error"
+  }
+
+  if (field.validation.some((issue) => issue.severity === "warning")) {
+    return "warning"
+  }
+
+  if (field.validation.some((issue) => issue.severity === "info")) {
+    return "info"
+  }
+
+  return null
+}
+
+function hasCollectedValue(field: ReviewableField): boolean {
+  return field.section !== "exceptions" && hasMeaningfulValue(field.value)
 }
 
 function EvidenceRow({
@@ -757,6 +935,199 @@ function getStepPercent(progress: {
       progress.total) *
       100,
   )
+}
+
+function CollectedValue({
+  value,
+  density,
+}: {
+  readonly value: unknown
+  readonly density: "compact" | "comfortable"
+}) {
+  const groups = buildValueGroups(value)
+
+  if (groups.length === 0) {
+    return (
+      <p className="break-words font-mono text-sm text-muted-foreground">
+        Unavailable
+      </p>
+    )
+  }
+
+  if (groups.length === 1 && groups[0]?.rows.length === 1) {
+    return (
+      <p className="break-words text-sm leading-6 text-foreground">
+        {groups[0].rows[0]?.value}
+      </p>
+    )
+  }
+
+  return (
+    <div
+      className={[
+        "grid min-w-0 gap-2",
+        density === "compact" ? "text-sm" : "text-sm",
+      ].join(" ")}
+    >
+      {groups.map((group) => (
+        <div key={group.title ?? "value"} className="min-w-0">
+          {group.title ? (
+            <p className="mb-1 text-xs font-medium text-muted-foreground">
+              {group.title}
+            </p>
+          ) : null}
+          <dl
+            className={[
+              "grid min-w-0 gap-x-3 gap-y-1",
+              density === "compact"
+                ? "grid-cols-[92px_minmax(0,1fr)]"
+                : "grid-cols-[120px_minmax(0,1fr)]",
+            ].join(" ")}
+          >
+            {group.rows.map((row) => (
+              <div
+                key={`${group.title ?? "value"}-${row.label}`}
+                className="contents"
+              >
+                <dt className="text-xs text-muted-foreground">{row.label}</dt>
+                <dd className="min-w-0 [overflow-wrap:anywhere] text-sm leading-5 text-foreground">
+                  {row.value}
+                </dd>
+              </div>
+            ))}
+          </dl>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+type ValueGroup = {
+  readonly title?: string
+  readonly rows: readonly ValueRow[]
+}
+
+type ValueRow = {
+  readonly label: string
+  readonly value: string
+}
+
+function buildValueGroups(value: unknown): ValueGroup[] {
+  if (isEmptyValue(value)) {
+    return []
+  }
+
+  if (typeof value !== "object") {
+    return [
+      {
+        rows: [{ label: "Value", value: String(value) }],
+      },
+    ]
+  }
+
+  if (Array.isArray(value)) {
+    return value.flatMap((entry, index) => {
+      if (isEmptyValue(entry)) {
+        return []
+      }
+
+      const rows = valueToRows(entry)
+
+      if (rows.length === 0) {
+        return []
+      }
+
+      return [
+        {
+          title: value.length > 1 ? `Record ${index + 1}` : undefined,
+          rows,
+        },
+      ]
+    })
+  }
+
+  const rows = valueToRows(value)
+
+  return rows.length > 0 ? [{ rows }] : []
+}
+
+function valueToRows(value: unknown): ValueRow[] {
+  if (isEmptyValue(value)) {
+    return []
+  }
+
+  if (typeof value !== "object") {
+    return [{ label: "Value", value: String(value) }]
+  }
+
+  if (Array.isArray(value)) {
+    return value.flatMap((entry, index) =>
+      valueToRows(entry).map((row) => ({
+        label: `${index + 1} ${row.label}`,
+        value: row.value,
+      })),
+    )
+  }
+
+  return Object.entries(value as Record<string, unknown>).flatMap(
+    ([key, entry]) => {
+      if (isEmptyValue(entry)) {
+        return []
+      }
+
+      if (typeof entry === "object" && !Array.isArray(entry)) {
+        return valueToRows(entry).map((row) => ({
+          label: `${humanizeKey(key)} ${row.label}`,
+          value: row.value,
+        }))
+      }
+
+      if (Array.isArray(entry)) {
+        return entry.flatMap((arrayEntry, index) =>
+          valueToRows(arrayEntry).map((row) => ({
+            label: `${humanizeKey(key)} ${index + 1} ${row.label}`,
+            value: row.value,
+          })),
+        )
+      }
+
+      return [{ label: humanizeKey(key), value: String(entry) }]
+    },
+  )
+}
+
+function humanizeKey(key: string): string {
+  return key
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .replace(/[_-]+/g, " ")
+    .replace(/\b\w/g, (letter) => letter.toUpperCase())
+}
+
+function isEmptyValue(value: unknown): boolean {
+  return (
+    value === null ||
+    value === undefined ||
+    value === "" ||
+    (Array.isArray(value) && value.length === 0)
+  )
+}
+
+function hasMeaningfulValue(value: unknown): boolean {
+  if (isEmptyValue(value)) {
+    return false
+  }
+
+  if (Array.isArray(value)) {
+    return value.some((entry) => hasMeaningfulValue(entry))
+  }
+
+  if (typeof value === "object") {
+    return Object.values(value as Record<string, unknown>).some((entry) =>
+      hasMeaningfulValue(entry),
+    )
+  }
+
+  return true
 }
 
 function formatValue(value: unknown): string {

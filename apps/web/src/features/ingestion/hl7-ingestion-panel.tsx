@@ -668,6 +668,13 @@ function applyStoredReviewStatuses(fields: ReviewableField[]) {
       return field
     }
 
+    if (
+      decision.reviewStatus === "unavailable" &&
+      hasCollectedFieldValue(field)
+    ) {
+      return field
+    }
+
     return {
       ...field,
       reviewStatus: decision.reviewStatus,
@@ -694,6 +701,10 @@ function mergeReviewFields({
 
   return nextFields.map((field) => {
     if (field.id === overrideFieldId) {
+      if (overrideStatus === "unavailable" && hasCollectedFieldValue(field)) {
+        return field
+      }
+
       return {
         ...field,
         reviewStatus: overrideStatus,
@@ -707,12 +718,46 @@ function mergeReviewFields({
       return field
     }
 
+    if (
+      previousField.reviewStatus === "unavailable" &&
+      hasCollectedFieldValue(field)
+    ) {
+      return field
+    }
+
     return {
       ...field,
       reviewStatus: previousField.reviewStatus,
       correctionIntent: previousField.correctionIntent,
     }
   })
+}
+
+function hasCollectedFieldValue(field: ReviewableField): boolean {
+  return field.section !== "exceptions" && hasMeaningfulValue(field.value)
+}
+
+function hasMeaningfulValue(value: unknown): boolean {
+  if (
+    value === null ||
+    value === undefined ||
+    value === "" ||
+    (Array.isArray(value) && value.length === 0)
+  ) {
+    return false
+  }
+
+  if (Array.isArray(value)) {
+    return value.some((entry) => hasMeaningfulValue(entry))
+  }
+
+  if (typeof value === "object") {
+    return Object.values(value as Record<string, unknown>).some((entry) =>
+      hasMeaningfulValue(entry),
+    )
+  }
+
+  return true
 }
 
 async function sha256Hex(value: string) {

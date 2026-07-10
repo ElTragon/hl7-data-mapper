@@ -9,6 +9,7 @@ import {
   type Hl7Item,
   type NormalizedOutputSection,
   type ReviewableField,
+  type SourceExpectation,
   type SourceReference,
   type ValidationIssue,
 } from "@hl7-data-mapper/contracts"
@@ -341,6 +342,10 @@ export function applyReviewFieldCorrectionToProfile({
     return {
       ...item,
       sources: [replacementSource],
+      sourceExpectations: buildUpdatedSourceExpectations({
+        item,
+        nextSources: [replacementSource],
+      }),
       notes: appendNote(
         item.notes,
         field.correctionIntent?.notes ??
@@ -394,6 +399,15 @@ function replacePersonNameRoleSource({
     )
   })
   const nextSources = [...retainedSources, source]
+  const sourceRoleByPath = new Map<string, PersonNameSourceRole>(
+    retainedSources.map((existingSource, index) => [
+      existingSource.path,
+      sourceRoles.get(sourceKey(existingSource)) ??
+        PERSON_NAME_SOURCE_ROLES[index] ??
+        "family",
+    ]),
+  )
+  sourceRoleByPath.set(source.path, sourceRole)
   const nextSourceRoles = [
     ...retainedSources.map((existingSource, index) => ({
       path: existingSource.path,
@@ -413,6 +427,15 @@ function replacePersonNameRoleSource({
   return {
     ...item,
     sources: nextSources,
+    sourceExpectations: buildUpdatedSourceExpectations({
+      item,
+      nextSources,
+      createFallbackExpectation: (nextSource) =>
+        createPersonNameSourceExpectation(
+          nextSource,
+          sourceRoleByPath.get(nextSource.path) ?? "family",
+        ),
+    }),
     transform: {
       name: "mapXpnName",
       description: item.transform?.description,
@@ -426,6 +449,80 @@ function replacePersonNameRoleSource({
       notes ?? `Use ${source.path} as ${sourceRole} for ${item.targetPath}.`,
     ),
   }
+}
+
+function buildUpdatedSourceExpectations({
+  item,
+  nextSources,
+  createFallbackExpectation = (source) =>
+    createFallbackSourceExpectation(item, source),
+}: {
+  readonly item: Hl7Item
+  readonly nextSources: readonly SourceReference[]
+  readonly createFallbackExpectation?: (
+    source: SourceReference,
+  ) => SourceExpectation
+}): SourceExpectation[] {
+  return nextSources.map((source) => {
+    const existingExpectation = item.sourceExpectations.find(
+      (expectation) => expectation.path === source.path,
+    )
+
+    return existingExpectation ?? createFallbackExpectation(source)
+  })
+}
+
+function createFallbackSourceExpectation(
+  item: Hl7Item,
+  source: SourceReference,
+): SourceExpectation {
+  return {
+    path: source.path,
+    expectedLabel: item.label,
+    requiredness: item.required ? "required" : "recommended",
+    examples: [],
+    emptyMeaning: `No value was present at ${source.path}.`,
+    guidance: `Review this client-selected source for ${item.targetPath}.`,
+  }
+}
+
+function createPersonNameSourceExpectation(
+  source: SourceReference,
+  sourceRole: PersonNameSourceRole,
+): SourceExpectation {
+  return {
+    path: source.path,
+    expectedLabel: PERSON_NAME_ROLE_EXPECTATION_LABELS[sourceRole],
+    requiredness:
+      sourceRole === "family" || sourceRole === "given"
+        ? "required"
+        : "optional",
+    examples: PERSON_NAME_ROLE_EXAMPLES[sourceRole],
+    emptyMeaning: `No ${PERSON_NAME_ROLE_EXPECTATION_LABELS[sourceRole].toLowerCase()} was present at ${source.path}.`,
+    guidance:
+      sourceRole === "family" || sourceRole === "given"
+        ? "Review with the client if this is blank; this is usually needed to identify the patient."
+        : `Usually safe to ignore unless this client relies on ${PERSON_NAME_ROLE_EXPECTATION_LABELS[sourceRole].toLowerCase()} values.`,
+  }
+}
+
+const PERSON_NAME_ROLE_EXPECTATION_LABELS: Record<
+  PersonNameSourceRole,
+  string
+> = {
+  family: "Patient family name",
+  given: "Patient given name",
+  middle: "Patient middle name or initial",
+  suffix: "Patient name suffix",
+  prefix: "Patient name prefix",
+}
+
+const PERSON_NAME_ROLE_EXAMPLES: Record<PersonNameSourceRole, string[]> = {
+  family: ["Lopez"],
+  given: ["Elena"],
+  middle: ["M"],
+  suffix: ["Jr", "Sr", "III"],
+  prefix: ["Dr", "Mr", "Ms"],
 }
 
 function buildPersonNameSourceRoles(
@@ -756,15 +853,76 @@ function sourceReadIssue(
   trace: MappingExecutionTraceEntry,
   sourceRead: MappingExecutionTraceEntry["sourceReads"][number],
 ): ValidationIssue {
-  const severity = sourceRead.status === "empty" ? "info" : "warning"
+  const expectation = findSourceExpectation(trace, sourceRead.source.path)
 
   return {
     code: `source-read-${sourceRead.status}`,
-    severity,
-    message: `Source ${sourceRead.source.path} for ${trace.targetPath} returned ${sourceRead.status}.`,
+    severity: sourceReadSeverity(trace, sourceRead, expectation),
+    message: sourceReadMessage(trace, sourceRead, expectation),
     fieldKey: trace.targetPath,
     section: "exceptions",
     segment: sourceRead.source.segment,
     source: sourceRead.source,
   }
+}
+
+function sourceReadSeverity(
+  trace: MappingExecutionTraceEntry,
+  sourceRead: MappingExecutionTraceEntry["sourceReads"][number],
+  expectation = findSourceExpectation(trace, sourceRead.source.path),
+): ValidationIssue["severity"] {
+  if (isSafeToIgnoreSource(sourceRead, expectation)) {
+    return "info"
+  }
+
+  return "warning"
+}
+
+function isSafeToIgnoreSource(
+  sourceRead: MappingExecutionTraceEntry["sourceReads"][number],
+  expectation: SourceExpectation | null,
+): boolean {
+  if (
+    sourceRead.status !== "empty" &&
+    sourceRead.status !== "missing_component" &&
+    sourceRead.status !== "missing_subcomponent"
+  ) {
+    return false
+  }
+
+  return expectation?.requiredness === "optional"
+}
+
+function sourceReadMessage(
+  trace: MappingExecutionTraceEntry,
+  sourceRead: MappingExecutionTraceEntry["sourceReads"][number],
+  expectation: SourceExpectation | null,
+): string {
+  if (!expectation) {
+    return `Source ${sourceRead.source.path} for ${trace.targetPath} returned ${sourceRead.status}.`
+  }
+
+  return [
+    `Expected ${sentenceCaseLabel(expectation.expectedLabel)} at ${sourceRead.source.path}.`,
+    expectation.emptyMeaning ??
+      `The source returned ${sourceRead.status.replaceAll("_", " ")}.`,
+    expectation.guidance,
+  ]
+    .filter((part): part is string => Boolean(part))
+    .join(" ")
+}
+
+function sentenceCaseLabel(label: string): string {
+  return `${label.slice(0, 1).toLowerCase()}${label.slice(1)}`
+}
+
+function findSourceExpectation(
+  trace: MappingExecutionTraceEntry,
+  sourcePath: string,
+): SourceExpectation | null {
+  return (
+    trace.sourceExpectations?.find(
+      (expectation) => expectation.path === sourcePath,
+    ) ?? null
+  )
 }

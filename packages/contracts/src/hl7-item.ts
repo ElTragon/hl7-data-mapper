@@ -38,23 +38,54 @@ export const Hl7ItemTransformSchema = z.object({
   params: z.record(z.string(), z.unknown()).default({}),
 })
 
-export const Hl7ItemSchema = z.object({
-  id: z.string().min(1),
-  clientId: z.string().min(1),
-  sequence: z.number().int().positive(),
-  section: NormalizedOutputSectionSchema,
-  targetPath: z.string().min(1),
-  label: z.string().min(1),
-  action: Hl7ItemActionSchema,
-  valueType: Hl7ItemValueTypeSchema.default("string"),
-  sources: z.array(SourceReferenceSchema).default([]),
-  dependsOn: z.array(z.string().min(1)).default([]),
-  transform: Hl7ItemTransformSchema.nullable().optional(),
-  required: z.boolean().default(true),
-  reviewRequired: z.boolean().default(true),
-  defaultValue: z.unknown().optional(),
-  notes: z.string().nullable().optional(),
+export const SourceExpectationRequirednessSchema = z.enum([
+  "required",
+  "recommended",
+  "optional",
+  "conditional",
+])
+
+export const SourceExpectationSchema = z.object({
+  path: SourceReferenceSchema.shape.path,
+  expectedLabel: z.string().min(1),
+  requiredness: SourceExpectationRequirednessSchema,
+  examples: z.array(z.string().min(1)).default([]),
+  emptyMeaning: z.string().min(1).nullable().optional(),
+  guidance: z.string().min(1).nullable().optional(),
 })
+
+export const Hl7ItemSchema = z
+  .object({
+    id: z.string().min(1),
+    clientId: z.string().min(1),
+    sequence: z.number().int().positive(),
+    section: NormalizedOutputSectionSchema,
+    targetPath: z.string().min(1),
+    label: z.string().min(1),
+    action: Hl7ItemActionSchema,
+    valueType: Hl7ItemValueTypeSchema.default("string"),
+    sources: z.array(SourceReferenceSchema).default([]),
+    sourceExpectations: z.array(SourceExpectationSchema).default([]),
+    dependsOn: z.array(z.string().min(1)).default([]),
+    transform: Hl7ItemTransformSchema.nullable().optional(),
+    required: z.boolean().default(true),
+    reviewRequired: z.boolean().default(true),
+    defaultValue: z.unknown().optional(),
+    notes: z.string().nullable().optional(),
+  })
+  .superRefine(({ sources, sourceExpectations }, context) => {
+    const sourcePaths = new Set(sources.map((source) => source.path))
+
+    sourceExpectations.forEach((expectation, index) => {
+      if (!sourcePaths.has(expectation.path)) {
+        context.addIssue({
+          code: "custom",
+          message: `Source expectation "${expectation.path}" does not match an hl7Item source.`,
+          path: ["sourceExpectations", index, "path"],
+        })
+      }
+    })
+  })
 
 export const Hl7ItemSetSchema = z
   .object({
@@ -130,5 +161,9 @@ export function sortHl7ItemsForExecution(items: readonly Hl7Item[]): Hl7Item[] {
 export type Hl7ItemAction = z.infer<typeof Hl7ItemActionSchema>
 export type Hl7ItemValueType = z.infer<typeof Hl7ItemValueTypeSchema>
 export type Hl7ItemTransform = z.infer<typeof Hl7ItemTransformSchema>
+export type SourceExpectation = z.infer<typeof SourceExpectationSchema>
+export type SourceExpectationRequiredness = z.infer<
+  typeof SourceExpectationRequirednessSchema
+>
 export type Hl7Item = z.infer<typeof Hl7ItemSchema>
 export type Hl7ItemSet = z.infer<typeof Hl7ItemSetSchema>
