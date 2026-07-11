@@ -4,6 +4,7 @@
     { "path": "./apps/web" },
     { "path": "./packages/contracts" },
     { "path": "./packages/hl7-parser" },
-    { "path": "./packages/mapping-engine" }
+    { "path": "./packages/mapping-engine" },
+    { "path": "./packages/report-generator" }
   ]
 }

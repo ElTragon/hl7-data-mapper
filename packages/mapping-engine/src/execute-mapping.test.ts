@@ -93,6 +93,213 @@ describe("executeMapping", () => {
     expect(messageTypeField?.sources[0]?.path).toBe("MSH-9.1")
   })
 
+  it("maps person-name parts from configured sources across PID fields", () => {
+    const parsedMessage = parseHl7Message(
+      sampleMessage.replace(
+        /^PID.*$/m,
+        "PID|1|Maria|MRN-104892^^^NORTHSTAR_LAB^MR||Lopez^Elena||19870514|F",
+      ),
+    )
+    const patientNameItem = defaultOmlO21ClientProfile.itemSet.items.find(
+      (item) => item.id === "patient-name",
+    )
+
+    if (!patientNameItem) {
+      throw new Error("Expected patient-name item.")
+    }
+
+    const profile = ClientProfileSchema.parse({
+      ...defaultOmlO21ClientProfile,
+      itemSet: {
+        ...defaultOmlO21ClientProfile.itemSet,
+        items: defaultOmlO21ClientProfile.itemSet.items.map((item) =>
+          item.id === "patient-name"
+            ? {
+                ...patientNameItem,
+                sources: [
+                  createSourceReference({
+                    segment: "PID",
+                    field: 5,
+                    component: 1,
+                  }),
+                  createSourceReference({
+                    segment: "PID",
+                    field: 5,
+                    component: 2,
+                  }),
+                  createSourceReference({
+                    segment: "PID",
+                    field: 2,
+                    component: 1,
+                  }),
+                ],
+                sourceExpectations: [
+                  ...patientNameItem.sourceExpectations.filter((expectation) =>
+                    ["PID-5.1", "PID-5.2"].includes(expectation.path),
+                  ),
+                  {
+                    path: "PID-2.1",
+                    expectedLabel: "Patient middle name or initial",
+                    requiredness: "optional",
+                    examples: ["Maria"],
+                    emptyMeaning:
+                      "No middle name or initial was present in PID-2.1.",
+                    guidance:
+                      "Usually safe to ignore unless this client relies on middle names for matching.",
+                  },
+                ],
+                transform: {
+                  name: "mapXpnName",
+                  params: {
+                    sourceRoles: [
+                      {
+                        path: "PID-5.1",
+                        segmentIndex: null,
+                        role: "family",
+                      },
+                      {
+                        path: "PID-5.2",
+                        segmentIndex: null,
+                        role: "given",
+                      },
+                      {
+                        path: "PID-2.1",
+                        segmentIndex: null,
+                        role: "middle",
+                      },
+                    ],
+                  },
+                },
+              }
+            : item,
+        ),
+      },
+    })
+    const result = executeMapping({
+      parsedMessage,
+      profile,
+    })
+
+    expect(result.normalizedDraft).toMatchObject({
+      patient: {
+        name: {
+          family: "Lopez",
+          given: "Elena",
+          middle: "Maria",
+        },
+      },
+    })
+  })
+
+  it("maps the patient MRN from the preferred PID-3 identifier type", () => {
+    const parsedMessage = parseHl7Message(
+      sampleMessage.replace(
+        /^PID.*$/m,
+        "PID|1|Maria|MRN-104892^^^NORTHSTAR_LAB^MR||Lopez^Elena||19870514|F",
+      ),
+    )
+    const result = executeMapping({
+      parsedMessage,
+      profile: defaultOmlO21ClientProfile,
+    })
+    const identifierField = result.normalizedFields.find(
+      (field) => field.key === "patient.identifiers[0]",
+    )
+    const identifierTrace = result.executionTrace.find(
+      (entry) => entry.itemId === "patient-identifier-mrn",
+    )
+
+    expect(result.normalizedDraft).toMatchObject({
+      patient: {
+        identifiers: [
+          {
+            value: "MRN-104892",
+            assigningAuthority: "NORTHSTAR_LAB",
+            type: "MR",
+          },
+        ],
+      },
+    })
+    expect(identifierField?.value).toEqual({
+      value: "MRN-104892",
+      assigningAuthority: "NORTHSTAR_LAB",
+      type: "MR",
+    })
+    expect(identifierTrace?.status).toBe("completed")
+  })
+
+  it("prefers the MR PID-3 repetition when another identifier appears first", () => {
+    const parsedMessage = parseHl7Message(
+      sampleMessage.replace(
+        /^PID.*$/m,
+        "PID|1||EPI-778899^^^METRO_HIE^PI~MRN-778899^^^RIVER_CLINIC^MR||Nguyen^Avery||19920309|O",
+      ),
+    )
+    const result = executeMapping({
+      parsedMessage,
+      profile: defaultOmlO21ClientProfile,
+    })
+
+    expect(result.normalizedDraft).toMatchObject({
+      patient: {
+        identifiers: [
+          {
+            value: "MRN-778899",
+            assigningAuthority: "RIVER_CLINIC",
+            type: "MR",
+          },
+        ],
+      },
+    })
+  })
+
+  it("assembles composite patient address values from source fields", () => {
+    const parsedMessage = parseHl7Message(
+      sampleMessage.replace(
+        /^PID.*$/m,
+        "PID|1|Maria|MRN-104892^^^NORTHSTAR_LAB^MR||Lopez^Elena||19870514|F|||742 Evergreen Ave^^Los Angeles^CA^90017^USA||^PRN^PH^^^213^5550142",
+      ),
+    )
+    const result = executeMapping({
+      parsedMessage,
+      profile: defaultOmlO21ClientProfile,
+    })
+    const addressField = result.normalizedFields.find(
+      (field) => field.key === "patient.addresses",
+    )
+    const addressTrace = result.executionTrace.find(
+      (entry) => entry.itemId === "patient-addresses",
+    )
+
+    expect(result.normalizedDraft).toMatchObject({
+      patient: {
+        addresses: [
+          {
+            street: "742 Evergreen Ave",
+            city: "Los Angeles",
+            state: "CA",
+            postalCode: "90017",
+            country: "USA",
+          },
+        ],
+      },
+    })
+    expect(addressField?.value).toMatchObject([
+      {
+        street: "742 Evergreen Ave",
+        city: "Los Angeles",
+      },
+    ])
+    expect(addressTrace?.status).toBe("completed")
+    expect(addressTrace?.sourceReads.map((read) => read.status)).toEqual([
+      "found",
+      "found",
+      "found",
+      "found",
+      "found",
+    ])
+  })
+
   it("includes source-read evidence in the execution trace", () => {
     const result = executeMapping({
       parsedMessage: parseHl7Message(sampleMessage),

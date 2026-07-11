@@ -9,7 +9,7 @@
     "dev": "pnpm --filter web dev",
     "dev:api": "pnpm --filter api dev",
     "build": "pnpm -r --if-present build",
-    "typecheck": "pnpm -r --if-present typecheck",
+    "typecheck": "pnpm --filter contracts build && pnpm --filter hl7-parser build && pnpm --filter mapping-engine build && pnpm --filter report-generator build && pnpm --filter api typecheck && pnpm --filter web typecheck",
     "lint": "pnpm -r --if-present lint",
     "test": "pnpm -r --if-present test",
     "deploy:api": "pnpm --filter api deploy",

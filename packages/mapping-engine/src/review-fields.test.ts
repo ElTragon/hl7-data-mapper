@@ -18,6 +18,7 @@ import {
   markReviewableFieldIncorrect,
   markReviewableFieldUnavailable,
   selectAlternateSourceForReviewableField,
+  selectCompositeSourceForReviewableField,
 } from "./review-fields.js"
 
 const sampleMessage = `MSH|^~\\&|NORTHSTAR_LIS|NORTHSTAR_LAB|HL7_MAPPER|DEMO_FACILITY|20260706101500-0700||OML^O21^OML_O21|MSG-20260706-0001|P|2.5.1|||AL|NE|USA|ASCII
@@ -50,7 +51,11 @@ describe("review fields", () => {
       stepId: "patient",
       section: "patient",
       label: "Patient name",
-      value: null,
+      value: {
+        family: "Lopez",
+        given: "Elena",
+        middle: "M",
+      },
       hl7ItemId: "patient-name",
       reviewStatus: "unreviewed",
     })
@@ -295,6 +300,77 @@ describe("review fields", () => {
     ).toBe("PID-5.2")
   })
 
+  it("applies a composite person-name source correction without dropping other name parts", () => {
+    const draftProfile = ClientProfileSchema.parse({
+      ...defaultOmlO21ClientProfile,
+      status: "draft",
+      publishedAt: undefined,
+    })
+    const parsedMessage = parseHl7Message(
+      sampleMessage.replace(
+        /^PID.*$/m,
+        "PID|1|Maria|MRN-104892^^^NORTHSTAR_LAB^MR||Lopez^Elena||19870514|F",
+      ),
+    )
+    const firstRun = executeMapping({
+      parsedMessage,
+      profile: draftProfile,
+    })
+    const field = buildReviewableFields({
+      mappingResult: firstRun,
+      profile: draftProfile,
+    }).find((candidate) => candidate.normalizedPath === "patient.name")
+
+    if (!field) {
+      throw new Error("Expected patient.name review field.")
+    }
+
+    const correctedField = selectCompositeSourceForReviewableField({
+      profile: draftProfile,
+      field,
+      replacementSource: createSourceReference({
+        segment: "PID",
+        field: 2,
+        component: 1,
+      }),
+      sourceRole: "middle",
+      notes: "Client sends middle name in PID-2.1.",
+    })
+    const result = applyReviewCorrectionAndRerunMapping({
+      parsedMessage,
+      profile: draftProfile,
+      field: correctedField,
+      updatedAt: "2026-07-07T17:15:00-07:00",
+    })
+    const updatedItem = result.profile.itemSet.items.find(
+      (item) => item.id === "patient-name",
+    )
+
+    expect(updatedItem?.sources.map((source) => source.path)).toEqual([
+      "PID-5.1",
+      "PID-5.2",
+      "PID-5.4",
+      "PID-5.5",
+      "PID-2.1",
+    ])
+    expect(updatedItem?.transform?.params).toMatchObject({
+      sourceRoles: expect.arrayContaining([
+        expect.objectContaining({ path: "PID-5.1", role: "family" }),
+        expect.objectContaining({ path: "PID-5.2", role: "given" }),
+        expect.objectContaining({ path: "PID-2.1", role: "middle" }),
+      ]),
+    })
+    expect(result.mappingResult.normalizedDraft).toMatchObject({
+      patient: {
+        name: {
+          family: "Lopez",
+          given: "Elena",
+          middle: "Maria",
+        },
+      },
+    })
+  })
+
   it("calculates progress and guided navigation by review section", () => {
     const mappingResult = executeMapping({
       parsedMessage: parseHl7Message(sampleMessage),
@@ -433,6 +509,51 @@ describe("review fields", () => {
     })
   })
 
+  it("creates informational review fields for blank optional components", () => {
+    const parsedMessage = parseHl7Message(
+      sampleMessage
+        .replace(
+          /^PID.*$/m,
+          "PID|1||MRN-104892^^^NORTHSTAR_LAB^MR||Lopez^Elena^M||19870514|F|||742 Evergreen Ave^^Los Angeles^CA^90017^USA||^PRN^PH^^^213^5550142",
+        )
+        .replace(/^TQ1.*$/m, "TQ1|1||||||20260706103000-0700||R^Routine"),
+    )
+    const mappingResult = executeMapping({
+      parsedMessage,
+      profile: defaultOmlO21ClientProfile,
+    })
+    const warningFields = buildWarningReviewFields(mappingResult)
+
+    expect(sourceSeverity(warningFields, "PID-5.4")).toBe("info")
+    expect(sourceSeverity(warningFields, "PID-5.5")).toBe("info")
+    expect(sourceSeverity(warningFields, "PID-13.5")).toBe("info")
+    expect(sourceSeverity(warningFields, "TQ1-8")).toBe("info")
+    expect(sourceValue(warningFields, "PID-5.4")).toContain(
+      "Expected patient name suffix at PID-5.4.",
+    )
+    expect(sourceValue(warningFields, "PID-5.4")).toContain(
+      "Usually safe to ignore unless this client sends suffixes.",
+    )
+  })
+
+  it("does not mark core patient-name components as safe to ignore", () => {
+    const parsedMessage = parseHl7Message(
+      sampleMessage.replace(
+        /^PID.*$/m,
+        "PID|1||MRN-104892^^^NORTHSTAR_LAB^MR||^Elena^M||19870514|F",
+      ),
+    )
+    const mappingResult = executeMapping({
+      parsedMessage,
+      profile: defaultOmlO21ClientProfile,
+    })
+    const warningFields = buildWarningReviewFields(mappingResult)
+
+    expect(sourceSeverity(warningFields, "PID-5.1")).toBe("warning")
+    expect(sourceSeverity(warningFields, "PID-5.4")).toBe("info")
+    expect(sourceSeverity(warningFields, "PID-5.5")).toBe("info")
+  })
+
   it("marks the warnings step as blocking when it contains validation errors", () => {
     const profile = ClientProfileSchema.parse({
       ...defaultOmlO21ClientProfile,
@@ -482,9 +603,33 @@ describe("review fields", () => {
   })
 
   it("rejects alternate-source selection for review fields without an hl7Item", () => {
+    const profile = ClientProfileSchema.parse({
+      ...defaultOmlO21ClientProfile,
+      itemSet: {
+        ...defaultOmlO21ClientProfile.itemSet,
+        items: [
+          {
+            id: "required-missing-field",
+            clientId: defaultOmlO21ClientProfile.clientId,
+            sequence: 1,
+            section: "patient",
+            targetPath: "patient.missing",
+            label: "Required missing field",
+            action: "extract",
+            sources: [
+              createSourceReference({
+                segment: "PID",
+                field: 99,
+              }),
+            ],
+            required: true,
+          },
+        ],
+      },
+    })
     const mappingResult = executeMapping({
       parsedMessage: parseHl7Message(sampleMessage),
-      profile: defaultOmlO21ClientProfile,
+      profile,
     })
     const warningField = buildWarningReviewFields(mappingResult).find(
       (field) => field.hl7ItemId === null,
@@ -538,3 +683,33 @@ describe("review fields", () => {
     ).toThrow("cannot be edited")
   })
 })
+
+function sourceSeverity(
+  fields: ReturnType<typeof buildWarningReviewFields>,
+  sourcePath: string,
+) {
+  const field = fields.find(
+    (candidate) => candidate.primarySource?.path === sourcePath,
+  )
+
+  if (!field) {
+    throw new Error(`Expected warning review field for ${sourcePath}.`)
+  }
+
+  return field.validation[0]?.severity
+}
+
+function sourceValue(
+  fields: ReturnType<typeof buildWarningReviewFields>,
+  sourcePath: string,
+) {
+  const field = fields.find(
+    (candidate) => candidate.primarySource?.path === sourcePath,
+  )
+
+  if (!field) {
+    throw new Error(`Expected warning review field for ${sourcePath}.`)
+  }
+
+  return String(field.value)
+}

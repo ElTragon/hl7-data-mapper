@@ -100,6 +100,16 @@ describe("hl7Item contracts", () => {
               segmentIndex: 1,
             }),
           ],
+          sourceExpectations: [
+            {
+              path: "PID-5",
+              expectedLabel: "Patient legal name",
+              requiredness: "required",
+              examples: ["Lopez^Elena^M"],
+              emptyMeaning: "No patient name was present in PID-5.",
+              guidance: "Confirm the client uses PID-5 for patient names.",
+            },
+          ],
         },
         {
           id: "patient-family-name",
@@ -121,6 +131,41 @@ describe("hl7Item contracts", () => {
     })
 
     expect(itemSet.items).toHaveLength(2)
+  })
+
+  it("rejects source expectations that do not match hl7Item sources", () => {
+    expect(() =>
+      Hl7ItemSetSchema.parse({
+        clientId: "northstar-lab",
+        messageType: "OML^O21",
+        hl7Version: "2.5.1",
+        items: [
+          {
+            id: "patient-name",
+            clientId: "northstar-lab",
+            sequence: 1,
+            section: "patient",
+            targetPath: "patient.name",
+            label: "Patient name",
+            action: "extract",
+            sources: [
+              createSourceReference({
+                segment: "PID",
+                field: 5,
+                component: 1,
+              }),
+            ],
+            sourceExpectations: [
+              {
+                path: "PID-7",
+                expectedLabel: "Patient date of birth",
+                requiredness: "required",
+              },
+            ],
+          },
+        ],
+      }),
+    ).toThrow(/does not match an hl7Item source/)
   })
 
   it("rejects duplicate hl7Item ids", () => {

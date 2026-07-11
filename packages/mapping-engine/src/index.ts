@@ -38,6 +38,7 @@ export {
   markReviewableFieldIncorrect,
   markReviewableFieldUnavailable,
   selectAlternateSourceForReviewableField,
+  selectCompositeSourceForReviewableField,
 } from "./review-fields.js"
 export type {
   ApplyReviewCorrectionAndRerunInput,
@@ -47,6 +48,8 @@ export type {
   BuildGuidedReviewNavigationInput,
   GuidedReviewNavigation,
   GuidedReviewStepSummary,
+  PersonNameSourceRole,
+  SelectCompositeFieldSourceInput,
   SelectAlternateSourceInput,
 } from "./review-fields.js"
 

@@ -65,6 +65,8 @@ export {
   Hl7ItemSetSchema,
   Hl7ItemTransformSchema,
   Hl7ItemValueTypeSchema,
+  SourceExpectationRequirednessSchema,
+  SourceExpectationSchema,
   sortHl7ItemsForExecution,
 } from "./hl7-item.js"
 export type {
@@ -73,6 +75,8 @@ export type {
   Hl7ItemSet,
   Hl7ItemTransform,
   Hl7ItemValueType,
+  SourceExpectation,
+  SourceExpectationRequiredness,
 } from "./hl7-item.js"
 
 export {
