@@ -42,6 +42,14 @@ pnpm install
 pnpm dev
 ```
 
+Run the React web app locally:
+
+```bash
+pnpm dev
+```
+
+Vite will print the local URL, usually `http://localhost:5173`.
+
 Run the Worker locally:
 
 ```bash
