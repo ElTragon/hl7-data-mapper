@@ -375,7 +375,7 @@ export function Hl7IngestionPanel() {
 
   return (
     <section id="ingestion" className="scroll-mt-8 border-b py-20">
-      <div className="mx-auto grid max-w-6xl gap-8 px-5 lg:grid-cols-[0.95fr_1.05fr] lg:px-8">
+      <div className="mx-auto grid max-w-6xl gap-8 px-5 lg:px-8 xl:grid-cols-[minmax(0,0.95fr)_minmax(26rem,1.05fr)]">
         <div className="flex flex-col gap-5">
           <div>
             <Badge variant="secondary">Message intake</Badge>
@@ -469,7 +469,7 @@ export function Hl7IngestionPanel() {
           <CardContent className="flex flex-col gap-6">
             {parsedMessage ? (
               <>
-                <div className="grid gap-3 sm:grid-cols-2">
+                <div className="grid grid-cols-[repeat(auto-fit,minmax(min(13rem,100%),1fr))] gap-3">
                   <SummaryItem label="Message type">
                     {parsedMessage.messageType.raw ?? "Unavailable"}
                   </SummaryItem>
@@ -524,14 +524,15 @@ export function Hl7IngestionPanel() {
                       decisions, and validation results.
                     </CardDescription>
                   </CardHeader>
-                  <CardContent className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                    <div className="text-sm text-muted-foreground">
+                  <CardContent className="flex flex-col items-start gap-4">
+                    <div className="max-w-prose text-sm text-muted-foreground">
                       {reportStatus === "downloaded"
                         ? "Report ZIP generated successfully."
                         : "Raw HL7 source text is excluded from the default report."}
                     </div>
                     <Button
                       type="button"
+                      className="w-full sm:w-auto"
                       onClick={() => void handleDownloadReport()}
                       disabled={
                         parsedMessage.errors.length > 0 ||
@@ -804,9 +805,11 @@ function SummaryItem({
   children: React.ReactNode
 }) {
   return (
-    <div className="rounded-lg border p-3">
+    <div className="min-w-0 rounded-lg border p-3">
       <p className="text-xs text-muted-foreground">{label}</p>
-      <p className="mt-1 font-medium">{children}</p>
+      <p className="mt-1 min-w-0 break-all font-medium leading-snug">
+        {children}
+      </p>
     </div>
   )
 }

@@ -130,7 +130,7 @@ export function GuidedReviewWorkspace({
         </div>
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-[240px_minmax(0,1fr)_360px]">
+      <div className="grid gap-4 xl:grid-cols-[240px_minmax(0,1fr)_360px]">
         <ReviewStepRail
           activeStepId={activeStepId}
           fields={reviewFields}
