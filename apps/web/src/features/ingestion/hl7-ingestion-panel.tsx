@@ -623,12 +623,20 @@ export function Hl7IngestionPanel() {
             onConfirmField={(field) =>
               updateReviewField(confirmReviewableField(field))
             }
-            onMarkIncorrect={(field) =>
-              updateReviewField(markReviewableFieldIncorrect(field))
-            }
-            onMarkUnavailable={(field) =>
-              updateReviewField(markReviewableFieldUnavailable(field))
-            }
+            onSaveReviewDecision={(field, status, details) => {
+              const updatedField =
+                status === "incorrect"
+                  ? markReviewableFieldIncorrect(field, details)
+                  : status === "unavailable"
+                    ? markReviewableFieldUnavailable(field, details)
+                    : {
+                        ...field,
+                        reasonCode: details.reasonCode,
+                        reviewNote: details.reviewNote,
+                      }
+
+              updateReviewField(updatedField)
+            }}
             onApplySource={handleApplySource}
             onDownloadReport={() => void handleDownloadReport()}
             onResetDemo={handleResetDemo}
@@ -647,6 +655,8 @@ function buildReportReviewDecisions(reviewFields: readonly ReviewableField[]) {
     reviewStatus: field.reviewStatus,
     sourcePath: field.primarySource?.path ?? null,
     correctionApplied: field.reviewStatus === "mapping_changed",
+    reasonCode: field.reasonCode ?? null,
+    reviewNote: field.reviewNote ?? null,
     updatedAt: new Date().toISOString(),
   }))
 }
@@ -679,6 +689,8 @@ function applyStoredReviewStatuses(fields: ReviewableField[]) {
     return {
       ...field,
       reviewStatus: decision.reviewStatus,
+      reasonCode: decision.reasonCode ?? null,
+      reviewNote: decision.reviewNote ?? null,
     }
   })
 }
@@ -710,6 +722,8 @@ function mergeReviewFields({
         ...field,
         reviewStatus: overrideStatus,
         correctionIntent,
+        reasonCode: previousFieldById.get(field.id)?.reasonCode ?? null,
+        reviewNote: previousFieldById.get(field.id)?.reviewNote ?? null,
       }
     }
 
@@ -730,6 +744,8 @@ function mergeReviewFields({
       ...field,
       reviewStatus: previousField.reviewStatus,
       correctionIntent: previousField.correctionIntent,
+      reasonCode: previousField.reasonCode ?? null,
+      reviewNote: previousField.reviewNote ?? null,
     }
   })
 }

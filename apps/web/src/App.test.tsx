@@ -75,7 +75,6 @@ describe("App", () => {
   })
 
   it("updates review status from the guided review controls", async () => {
-    const user = userEvent.setup()
     render(<App />)
 
     const customMessage = sampleHl7Message.replace(
@@ -85,21 +84,64 @@ describe("App", () => {
     const messageInput = screen.getByLabelText(/editable hl7 message/i)
 
     fireEvent.change(messageInput, { target: { value: customMessage } })
-    await user.click(screen.getByRole("button", { name: /parse message/i }))
-    await user.click(getActionButton("Confirm"))
+    fireEvent.click(screen.getByRole("button", { name: /parse message/i }))
+    fireEvent.click(getActionButton("Confirm"))
 
     await waitFor(() => {
       expect(screen.getAllByText("Confirmed").length).toBeGreaterThan(0)
     })
 
-    await user.click(getActionButton("Unavailable"))
+    fireEvent.click(getActionButton("Unavailable"))
+    fireEvent.click(screen.getByRole("button", { name: /save decision/i }))
 
     await waitFor(() => {
       expect(
         screen.getAllByText("Unavailable in source").length,
       ).toBeGreaterThan(0)
     })
-  })
+  }, 15_000)
+
+  it("records an explanation for an unavailable field", async () => {
+    render(<App />)
+    const customMessage = sampleHl7Message.replace(
+      /^PID.*$/m,
+      "PID|1||||Lopez^Elena^M||19870514|F",
+    )
+
+    fireEvent.change(screen.getByLabelText(/editable hl7 message/i), {
+      target: { value: customMessage },
+    })
+    fireEvent.click(screen.getByRole("button", { name: /parse message/i }))
+    fireEvent.click(getActionButton("Unavailable"))
+
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument()
+    expect(
+      screen.getByRole("form", { name: /review decision/i }),
+    ).toBeInTheDocument()
+
+    fireEvent.change(screen.getByLabelText(/review note/i), {
+      target: {
+        value: "Northstar does not send an MRN in this sample feed.",
+      },
+    })
+    fireEvent.click(screen.getByRole("button", { name: /save decision/i }))
+
+    expect(
+      screen.getAllByText("Northstar does not send an MRN in this sample feed.")
+        .length,
+    ).toBeGreaterThan(0)
+
+    const storedSnapshot = window.localStorage.getItem(
+      "hl7-data-mapper:demo-storage:v1",
+    )
+
+    expect(storedSnapshot).toContain(
+      '"reviewNote":"Northstar does not send an MRN in this sample feed."',
+    )
+    expect(storedSnapshot).toContain('"eventType":"review_decision_changed"')
+    expect(storedSnapshot).not.toContain("MSH|")
+    expect(storedSnapshot).not.toContain("PID|")
+  }, 20_000)
 
   it("does not restore unavailable status onto a field with an extracted value", async () => {
     const user = userEvent.setup()

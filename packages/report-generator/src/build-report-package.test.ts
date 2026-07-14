@@ -239,6 +239,8 @@ describe("buildReportPackage", () => {
             reviewStatus: "mapping_changed",
             sourcePath: "PID-5.1",
             correctionApplied: true,
+            reasonCode: "wrong_source_mapping",
+            reviewNote: "Client sends the middle name in a separate PID field.",
             updatedAt: "2026-07-09T00:41:00-07:00",
           },
           {
@@ -279,18 +281,23 @@ describe("buildReportPackage", () => {
     expect(markdown).toContain("Lab orders found: 2")
     expect(markdown).toContain("Confirmed: 1")
     expect(markdown).toContain("Mapping changed: 1")
+    expect(markdown).toContain("## Review explanations")
+    expect(markdown).toContain("Wrong source mapping")
+    expect(markdown).toContain(
+      "Client sends the middle name in a separate PID field.",
+    )
     expect(markdown).toContain("Warnings: 1")
     expect(markdown).toContain(
       "WARNING missing-specimen: Specimen is recommended.",
     )
     expect(csv).toContain(
-      "section,targetPath,valueStatus,sourcePath,hl7ItemId,reviewStatus,transformApplied",
+      "section,targetPath,valueStatus,sourcePath,hl7ItemId,reviewStatus,transformApplied,reviewReason,reviewNote",
     )
     expect(csv).toContain(
-      "patient,patient.name,mapping_changed,PID-5.1,patient-name,mapping_changed,source_replaced",
+      "patient,patient.name,mapping_changed,PID-5.1,patient-name,mapping_changed,source_replaced,Wrong source mapping,Client sends the middle name in a separate PID field.",
     )
     expect(csv).toContain(
-      'labOrders,labOrders.0.service.display,confirmed,"OBR-4.2,""alternate""",lab-service-display,confirmed,',
+      'labOrders,labOrders.0.service.display,confirmed,"OBR-4.2,""alternate""",lab-service-display,confirmed,,,',
     )
   })
 
@@ -313,6 +320,7 @@ describe("buildReportPackage", () => {
             reviewStatus: "confirmed",
             sourcePath: '=HYPERLINK("https://example.invalid")',
             correctionApplied: false,
+            reviewNote: "=1+1",
             updatedAt: "2026-07-09T00:46:00-07:00",
           },
         ],
@@ -329,6 +337,7 @@ describe("buildReportPackage", () => {
     )?.content
 
     expect(csv).toContain('"\'=HYPERLINK(""https://example.invalid"")"')
+    expect(csv).toContain("'=1+1")
   })
 
   it("includes source.hl7 only for explicitly synthetic source reports", async () => {

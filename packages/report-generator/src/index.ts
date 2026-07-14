@@ -1,6 +1,8 @@
 import {
   Hl7ItemSchema,
   MAPPING_SUMMARY_CSV_COLUMNS,
+  REVIEW_DECISION_REASON_LABELS,
+  REPORT_CONTRACT_SCHEMA_VERSION,
   REQUIRED_REPORT_FILE_NAMES,
   NormalizedOutputSchema,
   ReportManifestSchema,
@@ -46,6 +48,8 @@ export type MappingSummaryRow = {
   readonly hl7ItemId: string
   readonly reviewStatus: string
   readonly transformApplied: string
+  readonly reviewReason: string
+  readonly reviewNote: string
 }
 
 export type ReportExtractionSummary = {
@@ -110,7 +114,7 @@ export async function buildReportPackage(
   const payloadFiles = buildPayloadFiles(reportInput)
   const includedFiles = await buildManifestEntries(payloadFiles, hashContent)
   const manifest = ReportManifestSchema.parse({
-    schemaVersion: "1.0.0",
+    schemaVersion: REPORT_CONTRACT_SCHEMA_VERSION,
     appName: "HL7 Data Mapper",
     appVersion: reportInput.appVersion,
     generatedAt: reportInput.generatedAt,
@@ -329,6 +333,9 @@ function buildMarkdownReport(
     `- Still unreviewed: ${reviewSummary.unreviewed}`,
     `- Mapping summary rows: ${mappingSummaryRows.length}`,
     "",
+    "## Review explanations",
+    "",
+    ...buildReviewExplanationLines(input.reviewDecisions),
     "## Validation summary",
     "",
     `- Errors: ${validationCounts.errors}`,
@@ -421,6 +428,32 @@ function buildValidationDetailLines(
   ]
 }
 
+function buildReviewExplanationLines(
+  decisions: readonly ReportReviewDecision[],
+): readonly string[] {
+  const explainedDecisions = decisions.filter(
+    (decision) => decision.reasonCode || decision.reviewNote,
+  )
+
+  if (explainedDecisions.length === 0) {
+    return ["No review explanations were recorded.", ""]
+  }
+
+  return [
+    ...explainedDecisions.map((decision) => {
+      const reason = decision.reasonCode
+        ? REVIEW_DECISION_REASON_LABELS[decision.reasonCode]
+        : "No structured reason"
+      const note = decision.reviewNote
+        ? sanitizeMarkdownText(decision.reviewNote)
+        : "No note provided"
+
+      return `- **${sanitizeMarkdownText(decision.normalizedPath)}** (${decision.reviewStatus}; ${reason}): ${note}`
+    }),
+    "",
+  ]
+}
+
 function buildMappingSummaryRows(
   decisions: readonly ReportReviewDecision[],
 ): readonly MappingSummaryRow[] {
@@ -434,6 +467,10 @@ function buildMappingSummaryRows(
     hl7ItemId: decision.hl7ItemId ?? "",
     reviewStatus: decision.reviewStatus,
     transformApplied: decision.correctionApplied ? "source_replaced" : "",
+    reviewReason: decision.reasonCode
+      ? REVIEW_DECISION_REASON_LABELS[decision.reasonCode]
+      : "",
+    reviewNote: decision.reviewNote ?? "",
   }))
 }
 
@@ -510,6 +547,15 @@ function escapeCsvCell(value: string): string {
   }
 
   return `"${safeValue.replaceAll('"', '""')}"`
+}
+
+function sanitizeMarkdownText(value: string): string {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll("`", "\\`")
+    .replace(/[\r\n]+/g, " ")
 }
 
 function normalizeZipFolderName(folderName: string): string {

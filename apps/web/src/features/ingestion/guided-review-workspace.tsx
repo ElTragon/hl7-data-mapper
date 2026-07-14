@@ -1,9 +1,11 @@
+import { Fragment, useState } from "react"
 import {
   AlertCircle,
   CheckCircle2,
   CircleDot,
   Download,
   FileSearch,
+  MessageSquareText,
   RotateCcw,
   ShieldCheck,
   SlidersHorizontal,
@@ -12,9 +14,12 @@ import {
 
 import {
   createSourceReference,
+  REVIEW_DECISION_REASON_LABELS,
+  REVIEW_DECISION_REASONS,
   REVIEW_STATUS_LABELS,
   type ClientProfile,
   type GuidedReviewStepId,
+  type ReviewDecisionReason,
   type ReviewableField,
   type SourceExpectation,
   type SourceReference,
@@ -34,6 +39,7 @@ import {
   type PersonNameSourceRole,
 } from "@hl7-data-mapper/mapping-engine"
 
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
@@ -43,8 +49,30 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
+import {
+  Field,
+  FieldDescription,
+  FieldGroup,
+  FieldLabel,
+} from "@/components/ui/field"
 import { Progress } from "@/components/ui/progress"
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { Separator } from "@/components/ui/separator"
+import { Textarea } from "@/components/ui/textarea"
+
+type EditableReviewStatus = "incorrect" | "mapping_changed" | "unavailable"
+
+type ReviewDecisionDetails = {
+  readonly reasonCode: ReviewDecisionReason | null
+  readonly reviewNote: string | null
+}
 
 type GuidedReviewWorkspaceProps = {
   readonly parsedMessage: ParsedHl7Message
@@ -57,8 +85,11 @@ type GuidedReviewWorkspaceProps = {
   readonly onActiveStepChange: (stepId: GuidedReviewStepId) => void
   readonly onSelectedFieldChange: (fieldId: string) => void
   readonly onConfirmField: (field: ReviewableField) => void
-  readonly onMarkIncorrect: (field: ReviewableField) => void
-  readonly onMarkUnavailable: (field: ReviewableField) => void
+  readonly onSaveReviewDecision: (
+    field: ReviewableField,
+    status: EditableReviewStatus,
+    details: ReviewDecisionDetails,
+  ) => void
   readonly onApplySource: (
     field: ReviewableField,
     source: SourceReference,
@@ -79,12 +110,15 @@ export function GuidedReviewWorkspace({
   onActiveStepChange,
   onSelectedFieldChange,
   onConfirmField,
-  onMarkIncorrect,
-  onMarkUnavailable,
+  onSaveReviewDecision,
   onApplySource,
   onDownloadReport,
   onResetDemo,
 }: GuidedReviewWorkspaceProps) {
+  const [decisionEditor, setDecisionEditor] = useState<{
+    readonly field: ReviewableField
+    readonly status: EditableReviewStatus
+  } | null>(null)
   const activeFields = reviewFields.filter(
     (field) => field.stepId === activeStepId,
   )
@@ -96,6 +130,10 @@ export function GuidedReviewWorkspace({
   const reviewProgress = getReviewPercent(reviewFields)
   const mappingChangeCount = reviewFields.filter(
     (field) => field.reviewStatus === "mapping_changed",
+  ).length
+  const unresolvedCount = reviewFields.filter(
+    (field) =>
+      field.reviewStatus === "unreviewed" || field.reviewStatus === "incorrect",
   ).length
 
   return (
@@ -130,20 +168,53 @@ export function GuidedReviewWorkspace({
         </div>
       </div>
 
+      {unresolvedCount > 0 ? (
+        <Alert>
+          <AlertCircle />
+          <AlertTitle>
+            {unresolvedCount} unresolved review decision
+            {unresolvedCount === 1 ? "" : "s"}
+          </AlertTitle>
+          <AlertDescription>
+            You can still export the report. Open and incorrect fields will be
+            documented as outstanding onboarding work.
+          </AlertDescription>
+        </Alert>
+      ) : null}
+
       <div className="grid gap-4 xl:grid-cols-[240px_minmax(0,1fr)_360px]">
         <ReviewStepRail
           activeStepId={activeStepId}
           fields={reviewFields}
-          onActiveStepChange={onActiveStepChange}
+          onActiveStepChange={(stepId) => {
+            setDecisionEditor(null)
+            onActiveStepChange(stepId)
+          }}
         />
 
         <ReviewFieldList
           fields={activeFields}
+          decisionEditor={decisionEditor}
           selectedFieldId={selectedField?.id ?? null}
-          onSelectedFieldChange={onSelectedFieldChange}
-          onConfirmField={onConfirmField}
-          onMarkIncorrect={onMarkIncorrect}
-          onMarkUnavailable={onMarkUnavailable}
+          onSelectedFieldChange={(fieldId) => {
+            if (decisionEditor?.field.id !== fieldId) {
+              setDecisionEditor(null)
+            }
+            onSelectedFieldChange(fieldId)
+          }}
+          onConfirmField={(field) => {
+            setDecisionEditor(null)
+            onConfirmField(field)
+          }}
+          onEditDecision={(field, status) => {
+            onSelectedFieldChange(field.id)
+            setDecisionEditor({ field, status })
+          }}
+          onCloseDecisionEditor={() => setDecisionEditor(null)}
+          onSaveDecision={(field, status, details) => {
+            onSaveReviewDecision(field, status, details)
+            setDecisionEditor(null)
+          }}
         />
 
         <ReviewFieldInspector
@@ -151,6 +222,9 @@ export function GuidedReviewWorkspace({
           field={selectedField}
           mappingResult={mappingResult}
           onApplySource={onApplySource}
+          onEditDecision={(field, status) =>
+            setDecisionEditor({ field, status })
+          }
         />
       </div>
 
@@ -256,18 +330,32 @@ function ReviewStepRail({
 
 function ReviewFieldList({
   fields,
+  decisionEditor,
   selectedFieldId,
   onSelectedFieldChange,
   onConfirmField,
-  onMarkIncorrect,
-  onMarkUnavailable,
+  onEditDecision,
+  onCloseDecisionEditor,
+  onSaveDecision,
 }: {
   readonly fields: readonly ReviewableField[]
+  readonly decisionEditor: {
+    readonly field: ReviewableField
+    readonly status: EditableReviewStatus
+  } | null
   readonly selectedFieldId: string | null
   readonly onSelectedFieldChange: (fieldId: string) => void
   readonly onConfirmField: (field: ReviewableField) => void
-  readonly onMarkIncorrect: (field: ReviewableField) => void
-  readonly onMarkUnavailable: (field: ReviewableField) => void
+  readonly onEditDecision: (
+    field: ReviewableField,
+    status: EditableReviewStatus,
+  ) => void
+  readonly onCloseDecisionEditor: () => void
+  readonly onSaveDecision: (
+    field: ReviewableField,
+    status: EditableReviewStatus,
+    details: ReviewDecisionDetails,
+  ) => void
 }) {
   return (
     <Card className="min-w-0">
@@ -285,15 +373,26 @@ function ReviewFieldList({
         ) : null}
 
         {fields.map((field) => (
-          <ReviewFieldCard
-            key={field.id}
-            field={field}
-            selectedFieldId={selectedFieldId}
-            onSelectedFieldChange={onSelectedFieldChange}
-            onConfirmField={onConfirmField}
-            onMarkIncorrect={onMarkIncorrect}
-            onMarkUnavailable={onMarkUnavailable}
-          />
+          <Fragment key={field.id}>
+            <ReviewFieldCard
+              field={field}
+              selectedFieldId={selectedFieldId}
+              onSelectedFieldChange={onSelectedFieldChange}
+              onConfirmField={onConfirmField}
+              onEditDecision={onEditDecision}
+            />
+            {decisionEditor?.field.id === field.id ? (
+              <ReviewDecisionEditor
+                key={`${field.id}-${decisionEditor.status}`}
+                field={field}
+                status={decisionEditor.status}
+                onClose={onCloseDecisionEditor}
+                onSave={(details) =>
+                  onSaveDecision(field, decisionEditor.status, details)
+                }
+              />
+            ) : null}
+          </Fragment>
         ))}
       </CardContent>
     </Card>
@@ -305,17 +404,21 @@ function ReviewFieldCard({
   selectedFieldId,
   onSelectedFieldChange,
   onConfirmField,
-  onMarkIncorrect,
-  onMarkUnavailable,
+  onEditDecision,
 }: {
   readonly field: ReviewableField
   readonly selectedFieldId: string | null
   readonly onSelectedFieldChange: (fieldId: string) => void
   readonly onConfirmField: (field: ReviewableField) => void
-  readonly onMarkIncorrect: (field: ReviewableField) => void
-  readonly onMarkUnavailable: (field: ReviewableField) => void
+  readonly onEditDecision: (
+    field: ReviewableField,
+    status: EditableReviewStatus,
+  ) => void
 }) {
   const unavailableDisabled = hasCollectedValue(field)
+  const editableStatus = isEditableReviewStatus(field.reviewStatus)
+    ? field.reviewStatus
+    : null
 
   return (
     <div
@@ -357,6 +460,7 @@ function ReviewFieldCard({
               {field.warnings.join(" ")}
             </p>
           ) : null}
+          <ReviewExplanation field={field} />
         </div>
         <div className="flex flex-wrap gap-2 xl:justify-end">
           <Button
@@ -377,7 +481,7 @@ function ReviewFieldCard({
             variant="outline"
             onClick={(event) => {
               event.stopPropagation()
-              onMarkIncorrect(field)
+              onEditDecision(field, "incorrect")
             }}
           >
             <AlertCircle data-icon="inline-start" />
@@ -395,14 +499,158 @@ function ReviewFieldCard({
             }
             onClick={(event) => {
               event.stopPropagation()
-              onMarkUnavailable(field)
+              onEditDecision(field, "unavailable")
             }}
           >
             <XCircle data-icon="inline-start" />
             Unavailable
           </Button>
+          {hasReviewExplanation(field) && editableStatus ? (
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              onClick={(event) => {
+                event.stopPropagation()
+                onEditDecision(field, editableStatus)
+              }}
+            >
+              <MessageSquareText data-icon="inline-start" />
+              Edit note
+            </Button>
+          ) : null}
         </div>
       </div>
+    </div>
+  )
+}
+
+function ReviewDecisionEditor({
+  field,
+  status,
+  onClose,
+  onSave,
+}: {
+  readonly field: ReviewableField
+  readonly status: EditableReviewStatus
+  readonly onClose: () => void
+  readonly onSave: (details: ReviewDecisionDetails) => void
+}) {
+  const [reasonCode, setReasonCode] = useState<ReviewDecisionReason | "none">(
+    field.reasonCode ?? "none",
+  )
+  const [reviewNote, setReviewNote] = useState(field.reviewNote ?? "")
+  const actionLabel =
+    status === "mapping_changed" ? "Save explanation" : "Save decision"
+  const title =
+    status === "mapping_changed"
+      ? `Edit explanation for ${field.label}`
+      : `Mark ${field.label} ${REVIEW_STATUS_LABELS[status].toLowerCase()}`
+
+  return (
+    <form
+      className="flex flex-col gap-4 rounded-lg border bg-muted/30 p-4"
+      aria-label={`${title} review decision`}
+      onSubmit={(event) => {
+        event.preventDefault()
+        onSave({
+          reasonCode: reasonCode === "none" ? null : reasonCode,
+          reviewNote: reviewNote.trim() || null,
+        })
+      }}
+    >
+      <div className="flex flex-col gap-1">
+        <h4 className="font-medium">{title}</h4>
+        <p className="text-sm text-muted-foreground">
+          Record why this field needs attention so the decision remains
+          understandable during client onboarding and in the handoff report.
+        </p>
+      </div>
+
+      <FieldGroup>
+        <Field>
+          <FieldLabel htmlFor={`review-reason-${field.id}`}>Reason</FieldLabel>
+          <Select
+            value={reasonCode}
+            onValueChange={(value) =>
+              setReasonCode(value as ReviewDecisionReason | "none")
+            }
+          >
+            <SelectTrigger id={`review-reason-${field.id}`} className="w-full">
+              <SelectValue placeholder="Select a reason" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectGroup>
+                <SelectItem value="none">No structured reason</SelectItem>
+                {REVIEW_DECISION_REASONS.map((reason) => (
+                  <SelectItem key={reason} value={reason}>
+                    {REVIEW_DECISION_REASON_LABELS[reason]}
+                  </SelectItem>
+                ))}
+              </SelectGroup>
+            </SelectContent>
+          </Select>
+          <FieldDescription>
+            A consistent reason makes onboarding reports easier to scan.
+          </FieldDescription>
+        </Field>
+
+        <Field>
+          <FieldLabel htmlFor={`review-note-${field.id}`}>
+            Review note
+          </FieldLabel>
+          <Textarea
+            id={`review-note-${field.id}`}
+            value={reviewNote}
+            maxLength={1000}
+            rows={5}
+            placeholder="Example: This client does not send patient suffixes, so the field can remain blank."
+            onChange={(event) => setReviewNote(event.target.value)}
+          />
+          <FieldDescription>
+            Optional, {reviewNote.length}/1000 characters
+          </FieldDescription>
+        </Field>
+      </FieldGroup>
+
+      <Alert>
+        <ShieldCheck />
+        <AlertTitle>Keep the note operational</AlertTitle>
+        <AlertDescription>
+          Explain the client mapping or source-data issue. Do not enter patient
+          information. The hosted demo accepts synthetic data only.
+        </AlertDescription>
+      </Alert>
+
+      <div className="flex flex-wrap justify-end gap-2">
+        <Button type="button" variant="outline" onClick={onClose}>
+          Cancel
+        </Button>
+        <Button type="submit">{actionLabel}</Button>
+      </div>
+    </form>
+  )
+}
+
+function ReviewExplanation({ field }: { readonly field: ReviewableField }) {
+  if (!hasReviewExplanation(field)) {
+    return null
+  }
+
+  return (
+    <div className="mt-2 flex flex-col gap-1 text-xs">
+      {field.reasonCode ? (
+        <p>
+          <span className="font-medium">Reason:</span>{" "}
+          {REVIEW_DECISION_REASON_LABELS[field.reasonCode]}
+        </p>
+      ) : null}
+      {field.reviewNote ? (
+        <p className="break-words text-muted-foreground">
+          <span className="font-medium text-foreground">Note:</span>{" "}
+          {field.reviewNote}
+        </p>
+      ) : null}
     </div>
   )
 }
@@ -412,6 +660,7 @@ function ReviewFieldInspector({
   field,
   mappingResult,
   onApplySource,
+  onEditDecision,
 }: {
   readonly parsedMessage: ParsedHl7Message
   readonly field: ReviewableField | null
@@ -420,6 +669,10 @@ function ReviewFieldInspector({
     field: ReviewableField,
     source: SourceReference,
     sourceRole?: PersonNameSourceRole,
+  ) => void
+  readonly onEditDecision: (
+    field: ReviewableField,
+    status: EditableReviewStatus,
   ) => void
 }) {
   if (!field) {
@@ -436,6 +689,9 @@ function ReviewFieldInspector({
   const trace = mappingResult.executionTrace.find(
     (entry) => entry.itemId === field.hl7ItemId,
   )
+  const editableStatus = isEditableReviewStatus(field.reviewStatus)
+    ? field.reviewStatus
+    : null
 
   return (
     <Card className="h-fit min-w-0">
@@ -453,6 +709,26 @@ function ReviewFieldInspector({
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
         <SeverityHelp field={field} />
+
+        {hasReviewExplanation(field) ? (
+          <div className="flex flex-col gap-2 rounded-lg border p-3">
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-sm font-medium">Review explanation</p>
+              {editableStatus ? (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => onEditDecision(field, editableStatus)}
+                >
+                  <MessageSquareText data-icon="inline-start" />
+                  Edit
+                </Button>
+              ) : null}
+            </div>
+            <ReviewExplanation field={field} />
+          </div>
+        ) : null}
 
         <div>
           <p className="text-xs font-medium text-muted-foreground">
@@ -888,6 +1164,20 @@ function getHighestSeverity(field: ReviewableField): ValidationSeverity | null {
 
 function hasCollectedValue(field: ReviewableField): boolean {
   return field.section !== "exceptions" && hasMeaningfulValue(field.value)
+}
+
+function hasReviewExplanation(field: ReviewableField): boolean {
+  return Boolean(field.reasonCode || field.reviewNote)
+}
+
+function isEditableReviewStatus(
+  status: ReviewableField["reviewStatus"],
+): status is EditableReviewStatus {
+  return (
+    status === "incorrect" ||
+    status === "mapping_changed" ||
+    status === "unavailable"
+  )
 }
 
 function EvidenceRow({
