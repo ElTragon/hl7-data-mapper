@@ -35,6 +35,8 @@ It should stay free of UI, file-upload, and parser implementation details. That 
   profiles read-only and recruiter changes in browser storage.
 - `DemoBrowserStorageSnapshotSchema`: browser-only demo scratchpad for draft
   profile copies, review decisions, correction intents, and safe demo events.
+- `ReviewDecisionReasonSchema` and `ReviewNoteSchema`: consistent onboarding
+  reasons and bounded operational notes for review decisions.
 - Demo browser storage helpers: create or reset an empty safe browser snapshot.
 - D1 record schemas: `ClientRecordSchema`, `MappingProfileRecordSchema`,
   `MappingVersionRecordSchema`, `Hl7ItemRecordSchema`, and

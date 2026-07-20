@@ -3,6 +3,10 @@ import { z } from "zod"
 import { ClientProfileSchema } from "./client-profile.js"
 import { Hl7ItemActionSchema, Hl7ItemValueTypeSchema } from "./hl7-item.js"
 import { NormalizedOutputSectionSchema } from "./normalized-output.js"
+import {
+  ReviewDecisionReasonSchema,
+  ReviewNoteSchema,
+} from "./review-decision.js"
 import { ReviewStatusSchema } from "./review-status.js"
 
 const SHA_256_HEX_PATTERN = /^[a-f0-9]{64}$/i
@@ -206,6 +210,7 @@ export const AuditEventTypeSchema = z.enum([
   "profile_archived",
   "mapping_run_completed",
   "mapping_run_failed",
+  "review_decision_changed",
 ])
 
 export const AuditActorTypeSchema = z.enum([
@@ -261,6 +266,8 @@ export const DemoStorageReviewDecisionSchema = z
     fieldId: z.string().min(1),
     normalizedPath: z.string().min(1),
     reviewStatus: ReviewStatusSchema,
+    reasonCode: ReviewDecisionReasonSchema.nullable().optional(),
+    reviewNote: ReviewNoteSchema.nullable().optional(),
     updatedAt: z.string().min(1),
   })
   .strict()

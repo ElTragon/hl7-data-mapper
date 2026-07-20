@@ -3,6 +3,10 @@ import { z } from "zod"
 import { Hl7ItemSchema } from "./hl7-item.js"
 import { TransformStepSchema } from "./normalized-field.js"
 import { NormalizedOutputSectionSchema } from "./normalized-output.js"
+import {
+  ReviewDecisionReasonSchema,
+  ReviewNoteSchema,
+} from "./review-decision.js"
 import { ReviewStatusSchema } from "./review-status.js"
 import { SourceReferenceSchema } from "./source-reference.js"
 import { ValidationIssueSchema } from "./validation.js"
@@ -78,6 +82,8 @@ export const ReviewableFieldSchema = z.object({
   validation: z.array(ValidationIssueSchema).default([]),
   warnings: z.array(z.string()).default([]),
   reviewStatus: ReviewStatusSchema.default("unreviewed"),
+  reasonCode: ReviewDecisionReasonSchema.nullable().optional(),
+  reviewNote: ReviewNoteSchema.nullable().optional(),
   sourceCandidates: z.array(ReviewSourceCandidateSchema).default([]),
   correctionIntent: ReviewCorrectionIntentSchema.nullable().optional(),
 })

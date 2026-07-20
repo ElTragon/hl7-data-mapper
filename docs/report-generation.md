@@ -123,7 +123,13 @@ Each decision can include:
 - linked `hl7Item` ID;
 - review status;
 - source path; and
-- whether a correction was applied.
+- whether a correction was applied;
+- a structured review reason; and
+- an optional operational review note.
+
+Review notes explain client mapping or source-data decisions. They must not be
+used to store patient information. The public demo persists them only in the
+browser alongside the draft review state.
 
 The report-friendly decision shape is `ReportReviewDecisionSchema`.
 
@@ -147,7 +153,7 @@ A spreadsheet-friendly summary for business users.
 The required columns are:
 
 ```text
-section,targetPath,valueStatus,sourcePath,hl7ItemId,reviewStatus,transformApplied
+section,targetPath,valueStatus,sourcePath,hl7ItemId,reviewStatus,transformApplied,reviewReason,reviewNote
 ```
 
 The columns are represented by `MAPPING_SUMMARY_CSV_COLUMNS`.

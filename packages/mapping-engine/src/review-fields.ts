@@ -8,6 +8,7 @@ import {
   type GuidedReviewStepId,
   type Hl7Item,
   type NormalizedOutputSection,
+  type ReviewDecisionReason,
   type ReviewableField,
   type SourceExpectation,
   type SourceReference,
@@ -57,6 +58,11 @@ export type ApplyReviewCorrectionAndRerunResult = {
   readonly profile: ClientProfile
   readonly mappingResult: MappingExecutionResult
   readonly reviewFields: readonly ReviewableField[]
+}
+
+export type ReviewDecisionDetails = {
+  readonly reasonCode?: ReviewDecisionReason | null
+  readonly reviewNote?: string | null
 }
 
 export type GuidedReviewStepSummary = {
@@ -109,6 +115,8 @@ export function buildReviewableFields({
       validation: [...field.validation],
       warnings: [...field.warnings],
       reviewStatus: field.reviewStatus,
+      reasonCode: null,
+      reviewNote: null,
       sourceCandidates: trace
         ? trace.sourceReads.map((sourceRead) => ({
             source: sourceRead.source,
@@ -135,15 +143,16 @@ export function confirmReviewableField(
 
 export function markReviewableFieldIncorrect(
   field: ReviewableField,
-  notes?: string,
+  details: ReviewDecisionDetails = {},
 ): ReviewableField {
   return {
     ...field,
     reviewStatus: "incorrect",
+    reasonCode: details.reasonCode ?? null,
+    reviewNote: details.reviewNote?.trim() || null,
     correctionIntent: field.hl7ItemId
       ? {
           targetHl7ItemId: field.hl7ItemId,
-          notes: notes ?? null,
         }
       : null,
   }
@@ -151,16 +160,17 @@ export function markReviewableFieldIncorrect(
 
 export function markReviewableFieldUnavailable(
   field: ReviewableField,
-  notes?: string,
+  details: ReviewDecisionDetails = {},
 ): ReviewableField {
   return {
     ...field,
     reviewStatus: "unavailable",
+    reasonCode: details.reasonCode ?? null,
+    reviewNote: details.reviewNote?.trim() || null,
     correctionIntent: field.hl7ItemId
       ? {
           targetHl7ItemId: field.hl7ItemId,
           replacementSource: null,
-          notes: notes ?? null,
         }
       : null,
   }

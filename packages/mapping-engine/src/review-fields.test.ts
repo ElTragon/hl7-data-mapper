@@ -122,18 +122,26 @@ describe("review fields", () => {
       correctionIntent: null,
     })
 
-    expect(markReviewableFieldIncorrect(field, "Wrong source.")).toMatchObject({
+    expect(
+      markReviewableFieldIncorrect(field, {
+        reasonCode: "wrong_source_mapping",
+        reviewNote: "Wrong source.",
+      }),
+    ).toMatchObject({
       value: field.value,
       reviewStatus: "incorrect",
+      reasonCode: "wrong_source_mapping",
+      reviewNote: "Wrong source.",
       correctionIntent: {
         targetHl7ItemId: field.hl7ItemId,
-        notes: "Wrong source.",
       },
     })
 
     expect(markReviewableFieldUnavailable(field)).toMatchObject({
       value: field.value,
       reviewStatus: "unavailable",
+      reasonCode: null,
+      reviewNote: null,
       correctionIntent: {
         targetHl7ItemId: field.hl7ItemId,
         replacementSource: null,

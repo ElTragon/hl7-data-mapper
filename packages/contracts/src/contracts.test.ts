@@ -34,6 +34,8 @@ import {
   REQUIRED_REPORT_FILE_NAMES,
   ReportManifestSchema,
   ReportPackagePlanSchema,
+  ReviewDecisionReasonSchema,
+  ReviewNoteSchema,
   ReviewableFieldSchema,
   resetDemoBrowserStorageSnapshot,
   sortHl7ItemsForExecution,
@@ -74,6 +76,18 @@ describe("source references", () => {
         field: 5,
       }),
     ).toThrow()
+  })
+})
+
+describe("review decisions", () => {
+  it("validates structured reasons and bounded operational notes", () => {
+    expect(ReviewDecisionReasonSchema.parse("wrong_source_mapping")).toBe(
+      "wrong_source_mapping",
+    )
+    expect(ReviewNoteSchema.parse("  Client sends this in PID-2.1.  ")).toBe(
+      "Client sends this in PID-2.1.",
+    )
+    expect(() => ReviewNoteSchema.parse("x".repeat(1001))).toThrow()
   })
 })
 
@@ -859,6 +873,8 @@ describe("persistence contracts", () => {
           fieldId: "patient-name",
           normalizedPath: "patient.name",
           reviewStatus: "confirmed",
+          reasonCode: "wrong_source_mapping",
+          reviewNote: "Client sends the middle name in PID-2.1.",
           updatedAt: "2026-07-08T23:50:00-07:00",
         },
       ],
@@ -893,6 +909,7 @@ describe("persistence contracts", () => {
     expect(snapshot.mode).toBe("public_demo")
     expect(snapshot.draftProfiles).toHaveLength(1)
     expect(snapshot.reviewDecisions[0]?.reviewStatus).toBe("confirmed")
+    expect(snapshot.reviewDecisions[0]?.reasonCode).toBe("wrong_source_mapping")
   })
 
   it("rejects browser demo snapshots with published profile records", () => {
@@ -966,7 +983,7 @@ describe("report contracts", () => {
     "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
 
   const manifestInput = {
-    schemaVersion: "1.0.0",
+    schemaVersion: "1.1.0",
     appName: "HL7 Data Mapper",
     appVersion: "0.1.0",
     generatedAt: "2026-07-09T00:10:00-07:00",

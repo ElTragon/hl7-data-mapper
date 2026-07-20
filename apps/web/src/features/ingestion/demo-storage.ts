@@ -70,16 +70,21 @@ export function saveReviewWorkspaceSnapshot({
   readonly reviewFields: readonly ReviewableField[]
   readonly updatedAt: string
 }): void {
+  const previousSnapshot = loadDemoSnapshot()
+  const nextReviewDecisions = reviewFields.map((field) => ({
+    fieldId: field.id,
+    normalizedPath: field.normalizedPath,
+    reviewStatus: field.reviewStatus,
+    reasonCode: field.reasonCode ?? null,
+    reviewNote: field.reviewNote ?? null,
+    updatedAt,
+  }))
+
   saveDemoSnapshot({
     storageVersion: 1,
     mode: "public_demo",
     draftProfiles: [profile],
-    reviewDecisions: reviewFields.map((field) => ({
-      fieldId: field.id,
-      normalizedPath: field.normalizedPath,
-      reviewStatus: field.reviewStatus,
-      updatedAt,
-    })),
+    reviewDecisions: nextReviewDecisions,
     correctionIntents: reviewFields.flatMap((field) => {
       const intent = field.correctionIntent
 
@@ -97,8 +102,74 @@ export function saveReviewWorkspaceSnapshot({
         },
       ]
     }),
-    demoAuditEvents: [],
+    demoAuditEvents: [
+      ...(previousSnapshot?.demoAuditEvents ?? []),
+      ...buildReviewDecisionAuditEvents({
+        previousSnapshot,
+        reviewFields,
+        profile,
+        updatedAt,
+      }),
+    ],
     updatedAt,
+  })
+}
+
+function buildReviewDecisionAuditEvents({
+  previousSnapshot,
+  reviewFields,
+  profile,
+  updatedAt,
+}: {
+  readonly previousSnapshot: DemoBrowserStorageSnapshot | null
+  readonly reviewFields: readonly ReviewableField[]
+  readonly profile: ClientProfile
+  readonly updatedAt: string
+}) {
+  if (!previousSnapshot) {
+    return []
+  }
+
+  const previousByFieldId = new Map(
+    previousSnapshot.reviewDecisions.map((decision) => [
+      decision.fieldId,
+      decision,
+    ]),
+  )
+
+  return reviewFields.flatMap((field) => {
+    const previous = previousByFieldId.get(field.id)
+    const nextReasonCode = field.reasonCode ?? null
+    const nextReviewNote = field.reviewNote ?? null
+
+    if (
+      !previous ||
+      (previous.reviewStatus === field.reviewStatus &&
+        (previous.reasonCode ?? null) === nextReasonCode &&
+        (previous.reviewNote ?? null) === nextReviewNote)
+    ) {
+      return []
+    }
+
+    return [
+      {
+        eventId: `review-${updatedAt}-${field.id}`,
+        eventType: "review_decision_changed" as const,
+        actorType: "demo_user" as const,
+        clientId: profile.clientId,
+        profileId: profile.profileId,
+        profileVersion: profile.profileVersion,
+        metadata: {
+          fieldId: field.id,
+          normalizedPath: field.normalizedPath,
+          previousStatus: previous.reviewStatus,
+          nextStatus: field.reviewStatus,
+          reasonCode: nextReasonCode,
+          noteChanged: (previous.reviewNote ?? null) !== nextReviewNote,
+        },
+        createdAt: updatedAt,
+      },
+    ]
   })
 }
 

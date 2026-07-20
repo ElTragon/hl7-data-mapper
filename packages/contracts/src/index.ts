@@ -188,6 +188,14 @@ export type {
 } from "./report.js"
 
 export {
+  REVIEW_DECISION_REASON_LABELS,
+  REVIEW_DECISION_REASONS,
+  ReviewDecisionReasonSchema,
+  ReviewNoteSchema,
+} from "./review-decision.js"
+export type { ReviewDecisionReason } from "./review-decision.js"
+
+export {
   REVIEW_STATUSES,
   REVIEW_STATUS_LABELS,
   ReviewStatusSchema,
