@@ -1,4 +1,4 @@
-import { Fragment, useState } from "react"
+import { Fragment, useMemo, useState } from "react"
 import {
   AlertCircle,
   CheckCircle2,
@@ -7,6 +7,7 @@ import {
   FileSearch,
   MessageSquareText,
   RotateCcw,
+  Search,
   ShieldCheck,
   SlidersHorizontal,
   XCircle,
@@ -55,6 +56,7 @@ import {
   FieldGroup,
   FieldLabel,
 } from "@/components/ui/field"
+import { Input } from "@/components/ui/input"
 import { Progress } from "@/components/ui/progress"
 import {
   Select,
@@ -795,6 +797,7 @@ function ReviewFieldInspector({
             <p className="text-sm font-medium">Choose another HL7 source</p>
           </div>
           <Hl7SourceBrowser
+            key={field.id}
             parsedMessage={parsedMessage}
             field={field}
             onApplySource={onApplySource}
@@ -818,71 +821,155 @@ function Hl7SourceBrowser({
     sourceRole?: PersonNameSourceRole,
   ) => void
 }) {
-  const options = buildSourceOptions(parsedMessage)
   const isPersonNameField = isPersonNameReviewField(field)
+  const [query, setQuery] = useState(field.primarySource?.segment ?? "")
+  const [sourceRole, setSourceRole] = useState<PersonNameSourceRole>("family")
+  const [showEmpty, setShowEmpty] = useState(false)
+  const sourceOptions = useMemo(
+    () => buildSourceOptions(parsedMessage),
+    [parsedMessage],
+  )
+  const searchResult = searchSourceOptions(sourceOptions, query, showEmpty)
+  const groupedOptions = groupSourceOptions(searchResult.options)
 
   return (
-    <div className="max-h-[520px] overflow-auto rounded-lg border">
-      {options.map((option) => (
-        <div
-          key={`${option.segment.index}-${option.path}`}
-          data-source-option={option.path}
-          className="border-b p-3 last:border-b-0"
-        >
-          <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0">
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="font-mono text-sm">{option.path}</span>
+    <div className="overflow-hidden rounded-lg border bg-background">
+      <div className="space-y-3 border-b bg-muted/20 p-3">
+        {isPersonNameField ? (
+          <Field>
+            <FieldLabel>Map selected source to</FieldLabel>
+            <div
+              role="group"
+              aria-label="Map selected source to"
+              className="grid grid-cols-2 gap-1 sm:grid-cols-3"
+            >
+              {PERSON_NAME_SOURCE_ROLES.map((role) => (
+                <Button
+                  key={role}
+                  type="button"
+                  size="sm"
+                  variant={sourceRole === role ? "secondary" : "outline"}
+                  aria-pressed={sourceRole === role}
+                  onClick={() => setSourceRole(role)}
+                >
+                  {PERSON_NAME_SOURCE_LABELS[role]}
+                </Button>
+              ))}
+            </div>
+          </Field>
+        ) : null}
+
+        <Field>
+          <FieldLabel htmlFor={`source-search-${field.id}`}>
+            Find a source
+          </FieldLabel>
+          <div className="relative">
+            <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              id={`source-search-${field.id}`}
+              className="pl-9 font-mono"
+              value={query}
+              placeholder="PID-5.1, PID[2]-5.1, or Lopez"
+              autoComplete="off"
+              spellCheck={false}
+              onChange={(event) => setQuery(event.target.value)}
+            />
+          </div>
+          <FieldDescription>
+            Search by segment, exact HL7 path, segment occurrence, or value.
+          </FieldDescription>
+        </Field>
+
+        <label className="flex w-fit items-center gap-2 text-xs text-muted-foreground">
+          <input
+            type="checkbox"
+            checked={showEmpty}
+            onChange={(event) => setShowEmpty(event.target.checked)}
+          />
+          Show empty fields
+        </label>
+      </div>
+
+      <div className="flex items-center justify-between gap-3 border-b px-3 py-2 text-xs text-muted-foreground">
+        <span>
+          {searchResult.options.length} result
+          {searchResult.options.length === 1 ? "" : "s"}
+        </span>
+        <span>Exact paths appear first</span>
+      </div>
+
+      {searchResult.error ? (
+        <p className="border-b px-3 py-3 text-sm text-destructive">
+          {searchResult.error}
+        </p>
+      ) : null}
+
+      <div className="max-h-[420px] overflow-auto">
+        {groupedOptions.map((group) => (
+          <section key={getSegmentKey(group.segment)}>
+            <div className="sticky top-0 z-10 border-b bg-muted/95 px-3 py-2 backdrop-blur-sm">
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                <span className="text-sm font-medium">
+                  {group.segment.name} occurrence {group.occurrence}
+                </span>
                 <Badge variant="outline">
-                  {option.segment.name} #{option.segment.index + 1}
+                  Message row {group.segment.index + 1}
                 </Badge>
               </div>
-              <p className="mt-1 break-words text-xs text-muted-foreground">
-                {option.previewValue || "Empty value"}
+              <p className="mt-1 truncate font-mono text-[11px] text-muted-foreground">
+                {group.segment.raw}
               </p>
             </div>
-            {isPersonNameField ? (
-              <div className="grid grid-cols-2 gap-1 sm:grid-cols-3">
-                {PERSON_NAME_SOURCE_ROLES.map((sourceRole) => (
-                  <Button
-                    key={sourceRole}
-                    type="button"
-                    size="sm"
-                    variant={
-                      isCurrentSourceForRole(field, option.source)
-                        ? "secondary"
-                        : "outline"
-                    }
-                    disabled={!field.hl7ItemId}
-                    onClick={() =>
-                      onApplySource(field, option.source, sourceRole)
-                    }
-                  >
-                    {PERSON_NAME_SOURCE_LABELS[sourceRole]}
-                  </Button>
-                ))}
-              </div>
-            ) : (
-              <Button
-                type="button"
-                size="sm"
-                variant={
-                  field.primarySource?.path === option.path
-                    ? "secondary"
-                    : "outline"
-                }
-                disabled={!field.hl7ItemId}
-                onClick={() => onApplySource(field, option.source)}
+
+            {group.options.map((option) => (
+              <div
+                key={`${option.segment.index}-${option.path}`}
+                data-source-option={option.path}
+                className="flex items-center justify-between gap-3 border-b px-3 py-2.5"
               >
-                Use source
-              </Button>
-            )}
-          </div>
-          <p className="mt-2 truncate font-mono text-[11px] text-muted-foreground">
-            {option.segment.raw}
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="font-mono text-sm">{option.path}</span>
+                    <span className="text-xs text-muted-foreground">
+                      {getSourceLevelLabel(option.source)}
+                    </span>
+                  </div>
+                  <p className="mt-1 break-words text-sm">
+                    {option.previewValue || "Empty value"}
+                  </p>
+                </div>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={
+                    isCurrentSource(field, option.source)
+                      ? "secondary"
+                      : "outline"
+                  }
+                  disabled={!field.hl7ItemId || option.previewValue === ""}
+                  onClick={() =>
+                    onApplySource(
+                      field,
+                      option.source,
+                      isPersonNameField ? sourceRole : undefined,
+                    )
+                  }
+                >
+                  {isPersonNameField
+                    ? `Use as ${PERSON_NAME_SOURCE_LABELS[sourceRole]}`
+                    : "Use source"}
+                </Button>
+              </div>
+            ))}
+          </section>
+        ))}
+
+        {!searchResult.error && groupedOptions.length === 0 ? (
+          <p className="p-6 text-center text-sm text-muted-foreground">
+            No source fields match this search.
           </p>
-        </div>
-      ))}
+        ) : null}
+      </div>
     </div>
   )
 }
@@ -957,8 +1044,29 @@ type SourceOption = {
   readonly path: string
   readonly source: SourceReference
   readonly segment: Hl7Segment
+  readonly segmentOccurrence: number
   readonly previewValue: string
 }
+
+type SourceSearchResult = {
+  readonly options: readonly SourceOption[]
+  readonly error: string | null
+}
+
+type SourceOptionGroup = {
+  readonly segment: Hl7Segment
+  readonly occurrence: number
+  readonly options: readonly SourceOption[]
+}
+
+type ParsedSourceQuery = {
+  readonly segment: string
+  readonly occurrence: number | null
+  readonly sourcePath: string | null
+}
+
+const SOURCE_QUERY_PATTERN =
+  /^([A-Z0-9]{3})(?:\[(\d+)\])?(?:-(\d+)(?:\[(\d+)\])?(?:\.(\d+))?(?:\.(\d+))?)?$/
 
 const PERSON_NAME_SOURCE_ROLES: readonly PersonNameSourceRole[] = [
   "family",
@@ -985,7 +1093,7 @@ function isPersonNameReviewField(field: ReviewableField): boolean {
   )
 }
 
-function isCurrentSourceForRole(
+function isCurrentSource(
   field: ReviewableField,
   source: SourceReference,
 ): boolean {
@@ -997,31 +1105,50 @@ function isCurrentSourceForRole(
 }
 
 function buildSourceOptions(parsedMessage: ParsedHl7Message): SourceOption[] {
-  return parsedMessage.segments.flatMap((segment) =>
-    segment.fields.flatMap((field) =>
-      fieldToSourceOptions(parsedMessage, segment, field),
-    ),
-  )
+  const occurrenceCounts = new Map<string, number>()
+
+  return parsedMessage.segments.flatMap((segment) => {
+    const occurrence = (occurrenceCounts.get(segment.name) ?? 0) + 1
+    occurrenceCounts.set(segment.name, occurrence)
+
+    return segment.fields.flatMap((field) =>
+      fieldToSourceOptions(parsedMessage, segment, occurrence, field),
+    )
+  })
 }
 
 function fieldToSourceOptions(
   parsedMessage: ParsedHl7Message,
   segment: Hl7Segment,
+  segmentOccurrence: number,
   field: Hl7Field,
 ): SourceOption[] {
   const options: SourceOption[] = []
 
-  options.push(createSourceOption(parsedMessage, segment, field))
+  options.push(
+    createSourceOption(parsedMessage, segment, segmentOccurrence, field),
+  )
 
   field.repetitions.forEach((repetition, repetitionIndex) => {
     const sourceRepetitionIndex =
       field.repetitions.length > 1 ? repetitionIndex + 1 : undefined
+
+    const hasStructuredComponents =
+      repetition.components.length > 1 ||
+      repetition.components.some(
+        (component) => component.subComponents.length > 1,
+      )
+
+    if (!hasStructuredComponents) {
+      return
+    }
 
     repetition.components.forEach((component, componentIndex) => {
       options.push(
         createSourceOption(
           parsedMessage,
           segment,
+          segmentOccurrence,
           field,
           repetition,
           sourceRepetitionIndex,
@@ -1030,11 +1157,16 @@ function fieldToSourceOptions(
         ),
       )
 
+      if (component.subComponents.length <= 1) {
+        return
+      }
+
       component.subComponents.forEach((_, subComponentIndex) => {
         options.push(
           createSourceOption(
             parsedMessage,
             segment,
+            segmentOccurrence,
             field,
             repetition,
             sourceRepetitionIndex,
@@ -1053,6 +1185,7 @@ function fieldToSourceOptions(
 function createSourceOption(
   parsedMessage: ParsedHl7Message,
   segment: Hl7Segment,
+  segmentOccurrence: number,
   field: Hl7Field,
   repetition?: Hl7Repetition,
   repetitionIndex?: number,
@@ -1075,11 +1208,170 @@ function createSourceOption(
     path: source.path,
     source,
     segment,
+    segmentOccurrence,
     previewValue:
       typeof previewValue === "string"
         ? previewValue
         : (component?.value ?? repetition?.value ?? field.raw),
   }
+}
+
+function searchSourceOptions(
+  options: readonly SourceOption[],
+  rawQuery: string,
+  showEmpty: boolean,
+): SourceSearchResult {
+  const query = rawQuery.trim()
+  const populatedOptions = showEmpty
+    ? options
+    : options.filter((option) => option.previewValue !== "")
+
+  if (query === "") {
+    return { options: populatedOptions, error: null }
+  }
+
+  const parsedPathQuery = parseSourceQuery(query)
+
+  if (parsedPathQuery) {
+    const matchingOptions = populatedOptions
+      .filter((option) => matchesSourceQuery(option, parsedPathQuery))
+      .toSorted((left, right) => {
+        const leftExact = left.path === parsedPathQuery.sourcePath ? 0 : 1
+        const rightExact = right.path === parsedPathQuery.sourcePath ? 0 : 1
+
+        return (
+          leftExact - rightExact ||
+          left.segment.index - right.segment.index ||
+          getSourceDepth(left.source) - getSourceDepth(right.source)
+        )
+      })
+
+    return { options: matchingOptions, error: null }
+  }
+
+  if (looksLikeSourcePath(query)) {
+    return {
+      options: [],
+      error: "That HL7 path is not valid. Try PID, PID-5.1, or PID[2]-5.1.",
+    }
+  }
+
+  const valueQuery = query.toLowerCase()
+
+  return {
+    options: populatedOptions.filter((option) =>
+      [option.path, option.previewValue, option.segment.name]
+        .join(" ")
+        .toLowerCase()
+        .includes(valueQuery),
+    ),
+    error: null,
+  }
+}
+
+function parseSourceQuery(rawQuery: string): ParsedSourceQuery | null {
+  const query = rawQuery.trim().toUpperCase()
+  const match = SOURCE_QUERY_PATTERN.exec(query)
+
+  if (!match) {
+    return null
+  }
+
+  const [
+    ,
+    segment,
+    occurrenceText,
+    field,
+    repetition,
+    component,
+    subComponent,
+  ] = match
+  const sourcePath = field
+    ? `${segment}-${field}${repetition ? `[${repetition}]` : ""}${component ? `.${component}` : ""}${subComponent ? `.${subComponent}` : ""}`
+    : null
+
+  return {
+    segment: segment ?? "",
+    occurrence: occurrenceText ? Number(occurrenceText) : null,
+    sourcePath,
+  }
+}
+
+function matchesSourceQuery(
+  option: SourceOption,
+  query: ParsedSourceQuery,
+): boolean {
+  if (option.segment.name !== query.segment) {
+    return false
+  }
+
+  if (
+    query.occurrence !== null &&
+    option.segmentOccurrence !== query.occurrence
+  ) {
+    return false
+  }
+
+  if (!query.sourcePath) {
+    return true
+  }
+
+  return (
+    option.path === query.sourcePath ||
+    option.path.startsWith(`${query.sourcePath}.`) ||
+    option.path.startsWith(`${query.sourcePath}[`)
+  )
+}
+
+function looksLikeSourcePath(query: string): boolean {
+  return /^[A-Za-z0-9]{3}(?:-|\[)/.test(query.trim())
+}
+
+function groupSourceOptions(
+  options: readonly SourceOption[],
+): SourceOptionGroup[] {
+  const groups = new Map<string, SourceOptionGroup>()
+
+  options.forEach((option) => {
+    const key = getSegmentKey(option.segment)
+    const currentGroup = groups.get(key)
+
+    groups.set(key, {
+      segment: option.segment,
+      occurrence: option.segmentOccurrence,
+      options: currentGroup ? [...currentGroup.options, option] : [option],
+    })
+  })
+
+  return [...groups.values()]
+}
+
+function getSegmentKey(segment: Hl7Segment): string {
+  return `${segment.name}-${segment.index}`
+}
+
+function getSourceLevelLabel(source: SourceReference): string {
+  if (source.subComponent) {
+    return `Subcomponent ${source.subComponent}`
+  }
+
+  if (source.component) {
+    return `Component ${source.component}`
+  }
+
+  return "Entire field"
+}
+
+function getSourceDepth(source: SourceReference): number {
+  if (source.subComponent) {
+    return 2
+  }
+
+  if (source.component) {
+    return 1
+  }
+
+  return 0
 }
 
 function ReviewStatusBadge({ field }: { readonly field: ReviewableField }) {
