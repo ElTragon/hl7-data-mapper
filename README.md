@@ -85,6 +85,9 @@ More detail: [docs/project-structure.md](docs/project-structure.md)
 
 HL7 ingestion scope: [docs/hl7-ingestion.md](docs/hl7-ingestion.md)
 
+Ingestion validation backlog:
+[docs/ingestion-validation-todo.md](docs/ingestion-validation-todo.md)
+
 Normalized contracts: [docs/normalized-data-model.md](docs/normalized-data-model.md)
 
 Client profile versioning: [docs/client-profiles.md](docs/client-profiles.md)
