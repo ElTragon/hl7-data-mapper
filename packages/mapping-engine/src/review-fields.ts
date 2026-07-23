@@ -402,39 +402,31 @@ function replacePersonNameRoleSource({
   readonly notes?: string
 }): Hl7Item {
   const sourceRoles = buildPersonNameSourceRoles(item)
-  const retainedSources = item.sources.filter((existingSource, index) => {
-    const existingRole = sourceRoles.get(sourceKey(existingSource))
-
-    return (
-      existingRole !== sourceRole &&
-      PERSON_NAME_SOURCE_ROLES[index] !== sourceRole
-    )
-  })
-  const nextSources = [...retainedSources, source]
-  const sourceRoleByPath = new Map<string, PersonNameSourceRole>(
-    retainedSources.map((existingSource, index) => [
-      existingSource.path,
-      sourceRoles.get(sourceKey(existingSource)) ??
-        PERSON_NAME_SOURCE_ROLES[index] ??
-        "family",
-    ]),
+  const replacementIndex = item.sources.findIndex(
+    (existingSource, index) =>
+      (sourceRoles.get(sourceKey(existingSource)) ??
+        PERSON_NAME_SOURCE_ROLES[index]) === sourceRole,
   )
-  sourceRoleByPath.set(source.path, sourceRole)
-  const nextSourceRoles = [
-    ...retainedSources.map((existingSource, index) => ({
-      path: existingSource.path,
-      segmentIndex: existingSource.segmentIndex ?? null,
-      role:
-        sourceRoles.get(sourceKey(existingSource)) ??
-        PERSON_NAME_SOURCE_ROLES[index] ??
-        "family",
-    })),
-    {
-      path: source.path,
-      segmentIndex: source.segmentIndex ?? null,
-      role: sourceRole,
-    },
-  ]
+  const nextSources =
+    replacementIndex >= 0
+      ? item.sources.map((existingSource, index) =>
+          index === replacementIndex ? source : existingSource,
+        )
+      : [...item.sources, source]
+  const nextSourceRoles = nextSources.map((nextSource, index) => ({
+    path: nextSource.path,
+    segmentIndex: nextSource.segmentIndex ?? null,
+    role:
+      index === replacementIndex ||
+      (replacementIndex < 0 && index === nextSources.length - 1)
+        ? sourceRole
+        : (sourceRoles.get(sourceKey(nextSource)) ??
+          PERSON_NAME_SOURCE_ROLES[index] ??
+          "family"),
+  }))
+  const sourceRoleByPath = new Map<string, PersonNameSourceRole>(
+    nextSourceRoles.map((entry) => [entry.path, entry.role]),
+  )
 
   return {
     ...item,
