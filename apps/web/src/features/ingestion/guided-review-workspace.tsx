@@ -13,7 +13,6 @@ import {
 } from "lucide-react"
 
 import {
-  createSourceReference,
   REVIEW_DECISION_REASON_LABELS,
   REVIEW_DECISION_REASONS,
   REVIEW_STATUS_LABELS,
@@ -25,16 +24,9 @@ import {
   type SourceReference,
   type ValidationSeverity,
 } from "@hl7-data-mapper/contracts"
-import type {
-  Hl7Component,
-  Hl7Field,
-  Hl7Repetition,
-  Hl7Segment,
-  ParsedHl7Message,
-} from "@hl7-data-mapper/hl7-parser"
+import type { ParsedHl7Message } from "@hl7-data-mapper/hl7-parser"
 import {
   buildGuidedReviewNavigation,
-  readSourceValue,
   type MappingExecutionResult,
   type PersonNameSourceRole,
 } from "@hl7-data-mapper/mapping-engine"
@@ -66,6 +58,8 @@ import {
 } from "@/components/ui/select"
 import { Separator } from "@/components/ui/separator"
 import { Textarea } from "@/components/ui/textarea"
+
+import { Hl7SourceBrowser } from "./hl7-source-browser"
 
 type EditableReviewStatus = "incorrect" | "mapping_changed" | "unavailable"
 
@@ -795,6 +789,7 @@ function ReviewFieldInspector({
             <p className="text-sm font-medium">Choose another HL7 source</p>
           </div>
           <Hl7SourceBrowser
+            key={`${field.id}:${parsedMessage.normalizedText}`}
             parsedMessage={parsedMessage}
             field={field}
             onApplySource={onApplySource}
@@ -802,88 +797,6 @@ function ReviewFieldInspector({
         </div>
       </CardContent>
     </Card>
-  )
-}
-
-function Hl7SourceBrowser({
-  parsedMessage,
-  field,
-  onApplySource,
-}: {
-  readonly parsedMessage: ParsedHl7Message
-  readonly field: ReviewableField
-  readonly onApplySource: (
-    field: ReviewableField,
-    source: SourceReference,
-    sourceRole?: PersonNameSourceRole,
-  ) => void
-}) {
-  const options = buildSourceOptions(parsedMessage)
-  const isPersonNameField = isPersonNameReviewField(field)
-
-  return (
-    <div className="max-h-[520px] overflow-auto rounded-lg border">
-      {options.map((option) => (
-        <div
-          key={`${option.segment.index}-${option.path}`}
-          data-source-option={option.path}
-          className="border-b p-3 last:border-b-0"
-        >
-          <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0">
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="font-mono text-sm">{option.path}</span>
-                <Badge variant="outline">
-                  {option.segment.name} #{option.segment.index + 1}
-                </Badge>
-              </div>
-              <p className="mt-1 break-words text-xs text-muted-foreground">
-                {option.previewValue || "Empty value"}
-              </p>
-            </div>
-            {isPersonNameField ? (
-              <div className="grid grid-cols-2 gap-1 sm:grid-cols-3">
-                {PERSON_NAME_SOURCE_ROLES.map((sourceRole) => (
-                  <Button
-                    key={sourceRole}
-                    type="button"
-                    size="sm"
-                    variant={
-                      isCurrentSourceForRole(field, option.source)
-                        ? "secondary"
-                        : "outline"
-                    }
-                    disabled={!field.hl7ItemId}
-                    onClick={() =>
-                      onApplySource(field, option.source, sourceRole)
-                    }
-                  >
-                    {PERSON_NAME_SOURCE_LABELS[sourceRole]}
-                  </Button>
-                ))}
-              </div>
-            ) : (
-              <Button
-                type="button"
-                size="sm"
-                variant={
-                  field.primarySource?.path === option.path
-                    ? "secondary"
-                    : "outline"
-                }
-                disabled={!field.hl7ItemId}
-                onClick={() => onApplySource(field, option.source)}
-              >
-                Use source
-              </Button>
-            )}
-          </div>
-          <p className="mt-2 truncate font-mono text-[11px] text-muted-foreground">
-            {option.segment.raw}
-          </p>
-        </div>
-      ))}
-    </div>
   )
 }
 
@@ -951,135 +864,6 @@ function findSourceExpectation(
   return (
     expectations.find((expectation) => expectation.path === sourcePath) ?? null
   )
-}
-
-type SourceOption = {
-  readonly path: string
-  readonly source: SourceReference
-  readonly segment: Hl7Segment
-  readonly previewValue: string
-}
-
-const PERSON_NAME_SOURCE_ROLES: readonly PersonNameSourceRole[] = [
-  "family",
-  "given",
-  "middle",
-  "suffix",
-  "prefix",
-]
-
-const PERSON_NAME_SOURCE_LABELS: Record<PersonNameSourceRole, string> = {
-  family: "Family",
-  given: "Given",
-  middle: "Middle",
-  suffix: "Suffix",
-  prefix: "Prefix",
-}
-
-function isPersonNameReviewField(field: ReviewableField): boolean {
-  return (
-    field.normalizedPath.endsWith(".name") &&
-    field.value !== null &&
-    typeof field.value === "object" &&
-    ("family" in field.value || "given" in field.value)
-  )
-}
-
-function isCurrentSourceForRole(
-  field: ReviewableField,
-  source: SourceReference,
-): boolean {
-  return field.sources.some(
-    (fieldSource) =>
-      fieldSource.path === source.path &&
-      (fieldSource.segmentIndex ?? null) === (source.segmentIndex ?? null),
-  )
-}
-
-function buildSourceOptions(parsedMessage: ParsedHl7Message): SourceOption[] {
-  return parsedMessage.segments.flatMap((segment) =>
-    segment.fields.flatMap((field) =>
-      fieldToSourceOptions(parsedMessage, segment, field),
-    ),
-  )
-}
-
-function fieldToSourceOptions(
-  parsedMessage: ParsedHl7Message,
-  segment: Hl7Segment,
-  field: Hl7Field,
-): SourceOption[] {
-  const options: SourceOption[] = []
-
-  options.push(createSourceOption(parsedMessage, segment, field))
-
-  field.repetitions.forEach((repetition, repetitionIndex) => {
-    const sourceRepetitionIndex =
-      field.repetitions.length > 1 ? repetitionIndex + 1 : undefined
-
-    repetition.components.forEach((component, componentIndex) => {
-      options.push(
-        createSourceOption(
-          parsedMessage,
-          segment,
-          field,
-          repetition,
-          sourceRepetitionIndex,
-          component,
-          componentIndex + 1,
-        ),
-      )
-
-      component.subComponents.forEach((_, subComponentIndex) => {
-        options.push(
-          createSourceOption(
-            parsedMessage,
-            segment,
-            field,
-            repetition,
-            sourceRepetitionIndex,
-            component,
-            componentIndex + 1,
-            subComponentIndex + 1,
-          ),
-        )
-      })
-    })
-  })
-
-  return options
-}
-
-function createSourceOption(
-  parsedMessage: ParsedHl7Message,
-  segment: Hl7Segment,
-  field: Hl7Field,
-  repetition?: Hl7Repetition,
-  repetitionIndex?: number,
-  component?: Hl7Component,
-  componentIndex?: number,
-  subComponentIndex?: number,
-): SourceOption {
-  const source = createSourceReference({
-    segment: segment.name,
-    field: field.index,
-    repetition: repetitionIndex,
-    component: componentIndex,
-    subComponent: subComponentIndex,
-    segmentIndex: segment.index,
-    raw: segment.raw,
-  })
-  const previewValue = readSourceValue(parsedMessage, source)
-
-  return {
-    path: source.path,
-    source,
-    segment,
-    previewValue:
-      typeof previewValue === "string"
-        ? previewValue
-        : (component?.value ?? repetition?.value ?? field.raw),
-  }
 }
 
 function ReviewStatusBadge({ field }: { readonly field: ReviewableField }) {
