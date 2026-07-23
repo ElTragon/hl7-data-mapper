@@ -147,6 +147,19 @@ describe("review fields", () => {
         replacementSource: null,
       },
     })
+
+    const incorrectField = markReviewableFieldIncorrect(field, {
+      reasonCode: "wrong_source_mapping",
+      reviewNote: "This explanation belongs to the incorrect decision.",
+    })
+
+    expect(confirmReviewableField(incorrectField)).toMatchObject({
+      value: field.value,
+      reviewStatus: "confirmed",
+      reasonCode: null,
+      reviewNote: null,
+      correctionIntent: null,
+    })
   })
 
   it("records a selected alternate HL7 source as a correction intent", () => {
@@ -416,6 +429,35 @@ describe("review fields", () => {
       isComplete: true,
     })
     expect(navigation.nextStepId).toBe("sender")
+
+    const firstPatientIndex = updatedFields.findIndex(
+      (field) => field.stepId === "patient",
+    )
+    const blockingFields = updatedFields.map((field, index) =>
+      index === firstPatientIndex
+        ? {
+            ...field,
+            validation: [
+              {
+                code: "required-patient-value",
+                severity: "error" as const,
+                message: "A required patient value is missing.",
+              },
+            ],
+          }
+        : field,
+    )
+    const blockingNavigation = buildGuidedReviewNavigation({
+      fields: blockingFields,
+      activeStepId: "patient",
+    })
+
+    expect(
+      blockingNavigation.steps.find((step) => step.id === "patient"),
+    ).toMatchObject({
+      isComplete: false,
+      hasBlockingIssues: true,
+    })
   })
 
   it("creates warning review fields for missing fields and validation issues", () => {

@@ -137,6 +137,8 @@ export function confirmReviewableField(
   return {
     ...field,
     reviewStatus: "confirmed",
+    reasonCode: null,
+    reviewNote: null,
     correctionIntent: null,
   }
 }
@@ -689,6 +691,9 @@ export function buildGuidedReviewNavigation({
   const steps = GUIDED_REVIEW_STEPS.map((step) => {
     const stepFields = fields.filter((field) => field.stepId === step.id)
     const progress = calculateGuidedReviewProgress(stepFields)
+    const hasBlockingIssues = stepFields.some((field) =>
+      field.validation.some((issue) => issue.severity === "error"),
+    )
 
     return {
       id: step.id,
@@ -697,10 +702,9 @@ export function buildGuidedReviewNavigation({
       isComplete:
         progress.total > 0 &&
         progress.unreviewed === 0 &&
-        progress.incorrect === 0,
-      hasBlockingIssues: stepFields.some((field) =>
-        field.validation.some((issue) => issue.severity === "error"),
-      ),
+        progress.incorrect === 0 &&
+        !hasBlockingIssues,
+      hasBlockingIssues,
     }
   })
   const nextStepId =

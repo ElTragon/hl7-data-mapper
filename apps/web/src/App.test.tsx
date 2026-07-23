@@ -143,6 +143,82 @@ describe("App", () => {
     expect(storedSnapshot).not.toContain("PID|")
   }, 20_000)
 
+  it("lets a mapping change receive an explanation", async () => {
+    const user = userEvent.setup()
+    render(<App />)
+
+    await user.click(screen.getByRole("button", { name: /parse message/i }))
+    await user.click(
+      screen.getByRole("button", { name: /select patient name/i }),
+    )
+
+    await selectNameSourceRole(user, "Given")
+    await user.click(
+      within(getSourceOption("PID-5.2")).getByRole("button", {
+        name: "Select",
+      }),
+    )
+    await user.click(screen.getByRole("button", { name: /use this source/i }))
+
+    expect(screen.getAllByText("Mapping changed").length).toBeGreaterThan(0)
+
+    await user.click(screen.getByRole("button", { name: /add explanation/i }))
+    await user.type(
+      screen.getByLabelText(/review note/i),
+      "Use the client-specific given-name source.",
+    )
+    await user.click(screen.getByRole("button", { name: /save explanation/i }))
+
+    expect(
+      screen.getAllByText("Use the client-specific given-name source.").length,
+    ).toBeGreaterThan(0)
+  })
+
+  it("closes an open decision editor when the demo is reset", async () => {
+    const user = userEvent.setup()
+    render(<App />)
+
+    await user.click(screen.getByRole("button", { name: /parse message/i }))
+    await user.click(getActionButton("Incorrect"))
+
+    expect(
+      screen.getByRole("form", { name: /review decision/i }),
+    ).toBeInTheDocument()
+
+    await user.click(screen.getByRole("button", { name: /reset demo draft/i }))
+
+    expect(
+      screen.queryByRole("form", { name: /review decision/i }),
+    ).not.toBeInTheDocument()
+  })
+
+  it("does not restore a review decision onto a different message", async () => {
+    const user = userEvent.setup()
+    render(<App />)
+
+    await user.click(screen.getByRole("button", { name: /parse message/i }))
+    await user.click(getActionButton("Confirm"))
+
+    const changedMessage = sampleHl7Message.replace(
+      /^PID.*$/m,
+      "PID|1||MRN-204500^^^NORTHSTAR_LAB^MR||Rivera^Sofia^L||19920203|F",
+    )
+
+    fireEvent.change(screen.getByLabelText(/editable hl7 message/i), {
+      target: { value: changedMessage },
+    })
+    await user.click(screen.getByRole("button", { name: /parse message/i }))
+
+    const patientNameCard = getFieldCardByText(/^Patient name$/)
+
+    expect(
+      within(patientNameCard).getByText("Needs review"),
+    ).toBeInTheDocument()
+    expect(
+      within(patientNameCard).queryByText("Confirmed"),
+    ).not.toBeInTheDocument()
+  })
+
   it("does not restore unavailable status onto a field with an extracted value", async () => {
     const user = userEvent.setup()
 
@@ -739,7 +815,7 @@ async function selectNameSourceRole(
 function getFieldCardByText(text: RegExp): HTMLElement {
   const fieldCard = screen
     .getAllByText(text)
-    .map((element) => element.closest<HTMLElement>("[role='button']"))
+    .map((element) => element.closest<HTMLElement>("[data-review-field-card]"))
     .find((element): element is HTMLElement => element instanceof HTMLElement)
 
   if (!fieldCard) {

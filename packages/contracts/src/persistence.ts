@@ -265,6 +265,10 @@ export const DemoStorageReviewDecisionSchema = z
   .object({
     fieldId: z.string().min(1),
     normalizedPath: z.string().min(1),
+    messageFingerprint: z
+      .string()
+      .regex(/^[a-f0-9]{16}$/i)
+      .optional(),
     reviewStatus: ReviewStatusSchema,
     reasonCode: ReviewDecisionReasonSchema.nullable().optional(),
     reviewNote: ReviewNoteSchema.nullable().optional(),
