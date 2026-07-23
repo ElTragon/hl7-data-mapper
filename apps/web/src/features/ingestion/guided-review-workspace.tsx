@@ -825,12 +825,22 @@ function Hl7SourceBrowser({
   const [query, setQuery] = useState(field.primarySource?.segment ?? "")
   const [sourceRole, setSourceRole] = useState<PersonNameSourceRole>("family")
   const [showEmpty, setShowEmpty] = useState(false)
+  const [advancedSearchOpen, setAdvancedSearchOpen] = useState(false)
+  const [advancedFilters, setAdvancedFilters] = useState<SourceAdvancedFilters>(
+    EMPTY_SOURCE_ADVANCED_FILTERS,
+  )
   const sourceOptions = useMemo(
     () => buildSourceOptions(parsedMessage),
     [parsedMessage],
   )
   const searchResult = searchSourceOptions(sourceOptions, query, showEmpty)
-  const groupedOptions = groupSourceOptions(searchResult.options)
+  const filteredOptions = filterSourceOptions(
+    searchResult.options,
+    advancedFilters,
+  )
+  const groupedOptions = groupSourceOptions(filteredOptions)
+  const activeAdvancedFilterCount = countAdvancedFilters(advancedFilters)
+  const resolvedAdvancedPath = buildAdvancedSourcePath(advancedFilters)
 
   return (
     <div className="overflow-hidden rounded-lg border bg-background">
@@ -888,12 +898,46 @@ function Hl7SourceBrowser({
           />
           Show empty fields
         </label>
+
+        <div className="border-t pt-3">
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            className="w-full justify-between"
+            aria-expanded={advancedSearchOpen}
+            aria-controls={`advanced-source-search-${field.id}`}
+            onClick={() => setAdvancedSearchOpen((isOpen) => !isOpen)}
+          >
+            <span className="flex items-center gap-2">
+              <SlidersHorizontal data-icon="inline-start" />
+              Advanced filters
+            </span>
+            {activeAdvancedFilterCount > 0 ? (
+              <Badge variant="secondary">{activeAdvancedFilterCount}</Badge>
+            ) : (
+              <span className="text-xs text-muted-foreground">
+                {advancedSearchOpen ? "Hide" : "Show"}
+              </span>
+            )}
+          </Button>
+
+          {advancedSearchOpen ? (
+            <AdvancedSourceSearch
+              id={`advanced-source-search-${field.id}`}
+              filters={advancedFilters}
+              resolvedPath={resolvedAdvancedPath}
+              onChange={setAdvancedFilters}
+              onClear={() => setAdvancedFilters(EMPTY_SOURCE_ADVANCED_FILTERS)}
+            />
+          ) : null}
+        </div>
       </div>
 
       <div className="flex items-center justify-between gap-3 border-b px-3 py-2 text-xs text-muted-foreground">
         <span>
-          {searchResult.options.length} result
-          {searchResult.options.length === 1 ? "" : "s"}
+          {filteredOptions.length} result
+          {filteredOptions.length === 1 ? "" : "s"}
         </span>
         <span>Exact paths appear first</span>
       </div>
@@ -971,6 +1015,174 @@ function Hl7SourceBrowser({
         ) : null}
       </div>
     </div>
+  )
+}
+
+function AdvancedSourceSearch({
+  id,
+  filters,
+  resolvedPath,
+  onChange,
+  onClear,
+}: {
+  readonly id: string
+  readonly filters: SourceAdvancedFilters
+  readonly resolvedPath: string | null
+  readonly onChange: (filters: SourceAdvancedFilters) => void
+  readonly onClear: () => void
+}) {
+  const updateFilter = <Key extends keyof SourceAdvancedFilters>(
+    key: Key,
+    value: SourceAdvancedFilters[Key],
+  ) => onChange({ ...filters, [key]: value })
+
+  return (
+    <div id={id} className="mt-3 space-y-4 rounded-lg border bg-background p-3">
+      <div className="grid grid-cols-2 gap-3">
+        <Field>
+          <FieldLabel htmlFor={`${id}-segment`}>Segment</FieldLabel>
+          <Input
+            id={`${id}-segment`}
+            className="font-mono uppercase"
+            value={filters.segment}
+            maxLength={3}
+            placeholder="PID"
+            autoComplete="off"
+            spellCheck={false}
+            onChange={(event) =>
+              updateFilter("segment", event.target.value.toUpperCase())
+            }
+          />
+        </Field>
+        <AdvancedNumberFilter
+          id={`${id}-occurrence`}
+          label="Occurrence"
+          value={filters.occurrence}
+          placeholder="2"
+          onChange={(value) => updateFilter("occurrence", value)}
+        />
+        <AdvancedNumberFilter
+          id={`${id}-message-row`}
+          label="Message row"
+          value={filters.messageRow}
+          placeholder="3"
+          onChange={(value) => updateFilter("messageRow", value)}
+        />
+        <AdvancedNumberFilter
+          id={`${id}-field`}
+          label="Field"
+          value={filters.field}
+          placeholder="5"
+          onChange={(value) => updateFilter("field", value)}
+        />
+        <AdvancedNumberFilter
+          id={`${id}-repetition`}
+          label="Repetition"
+          value={filters.repetition}
+          placeholder="1"
+          onChange={(value) => updateFilter("repetition", value)}
+        />
+        <AdvancedNumberFilter
+          id={`${id}-component`}
+          label="Component"
+          value={filters.component}
+          placeholder="1"
+          onChange={(value) => updateFilter("component", value)}
+        />
+        <AdvancedNumberFilter
+          id={`${id}-subcomponent`}
+          label="Subcomponent"
+          value={filters.subComponent}
+          placeholder="1"
+          onChange={(value) => updateFilter("subComponent", value)}
+        />
+      </div>
+
+      <Field>
+        <FieldLabel htmlFor={`${id}-value`}>Value</FieldLabel>
+        <Input
+          id={`${id}-value`}
+          value={filters.value}
+          placeholder="Lopez"
+          autoComplete="off"
+          onChange={(event) => updateFilter("value", event.target.value)}
+        />
+      </Field>
+
+      <Field>
+        <FieldLabel>Value comparison</FieldLabel>
+        <div
+          role="group"
+          aria-label="Value comparison"
+          className="grid grid-cols-3 gap-1"
+        >
+          {VALUE_MATCH_MODES.map((mode) => (
+            <Button
+              key={mode}
+              type="button"
+              size="sm"
+              variant={
+                filters.valueMatchMode === mode ? "secondary" : "outline"
+              }
+              aria-pressed={filters.valueMatchMode === mode}
+              onClick={() => updateFilter("valueMatchMode", mode)}
+            >
+              {VALUE_MATCH_MODE_LABELS[mode]}
+            </Button>
+          ))}
+        </div>
+      </Field>
+
+      <div className="rounded-md border bg-muted/30 p-2.5 text-xs">
+        <p className="font-medium">Resolved search</p>
+        <p className="mt-1 break-words font-mono text-muted-foreground">
+          {resolvedPath ?? "Add a segment to preview the HL7 expression."}
+        </p>
+      </div>
+
+      <div className="flex justify-end">
+        <Button
+          type="button"
+          size="sm"
+          variant="ghost"
+          disabled={countAdvancedFilters(filters) === 0}
+          onClick={onClear}
+        >
+          <XCircle data-icon="inline-start" />
+          Clear filters
+        </Button>
+      </div>
+    </div>
+  )
+}
+
+function AdvancedNumberFilter({
+  id,
+  label,
+  value,
+  placeholder,
+  onChange,
+}: {
+  readonly id: string
+  readonly label: string
+  readonly value: string
+  readonly placeholder: string
+  readonly onChange: (value: string) => void
+}) {
+  return (
+    <Field>
+      <FieldLabel htmlFor={id}>{label}</FieldLabel>
+      <Input
+        id={id}
+        type="number"
+        min={1}
+        step={1}
+        inputMode="numeric"
+        value={value}
+        placeholder={placeholder}
+        onChange={(event) => onChange(event.target.value)}
+      />
+    </Field>
   )
 }
 
@@ -1053,6 +1265,20 @@ type SourceSearchResult = {
   readonly error: string | null
 }
 
+type ValueMatchMode = "contains" | "equals" | "starts_with"
+
+type SourceAdvancedFilters = {
+  readonly segment: string
+  readonly occurrence: string
+  readonly messageRow: string
+  readonly field: string
+  readonly repetition: string
+  readonly component: string
+  readonly subComponent: string
+  readonly value: string
+  readonly valueMatchMode: ValueMatchMode
+}
+
 type SourceOptionGroup = {
   readonly segment: Hl7Segment
   readonly occurrence: number
@@ -1067,6 +1293,30 @@ type ParsedSourceQuery = {
 
 const SOURCE_QUERY_PATTERN =
   /^([A-Z0-9]{3})(?:\[(\d+)\])?(?:-(\d+)(?:\[(\d+)\])?(?:\.(\d+))?(?:\.(\d+))?)?$/
+
+const VALUE_MATCH_MODES: readonly ValueMatchMode[] = [
+  "contains",
+  "equals",
+  "starts_with",
+]
+
+const VALUE_MATCH_MODE_LABELS: Record<ValueMatchMode, string> = {
+  contains: "Contains",
+  equals: "Equals",
+  starts_with: "Starts with",
+}
+
+const EMPTY_SOURCE_ADVANCED_FILTERS: SourceAdvancedFilters = {
+  segment: "",
+  occurrence: "",
+  messageRow: "",
+  field: "",
+  repetition: "",
+  component: "",
+  subComponent: "",
+  value: "",
+  valueMatchMode: "contains",
+}
 
 const PERSON_NAME_SOURCE_ROLES: readonly PersonNameSourceRole[] = [
   "family",
@@ -1132,6 +1382,19 @@ function fieldToSourceOptions(
   field.repetitions.forEach((repetition, repetitionIndex) => {
     const sourceRepetitionIndex =
       field.repetitions.length > 1 ? repetitionIndex + 1 : undefined
+
+    if (sourceRepetitionIndex) {
+      options.push(
+        createSourceOption(
+          parsedMessage,
+          segment,
+          segmentOccurrence,
+          field,
+          repetition,
+          sourceRepetitionIndex,
+        ),
+      )
+    }
 
     const hasStructuredComponents =
       repetition.components.length > 1 ||
@@ -1267,6 +1530,123 @@ function searchSourceOptions(
     ),
     error: null,
   }
+}
+
+function filterSourceOptions(
+  options: readonly SourceOption[],
+  filters: SourceAdvancedFilters,
+): SourceOption[] {
+  const segmentFilter = filters.segment.trim().toUpperCase()
+  const valueFilter = filters.value.trim().toLowerCase()
+
+  return options.filter((option) => {
+    if (segmentFilter && !option.segment.name.startsWith(segmentFilter)) {
+      return false
+    }
+
+    if (!matchesNumberFilter(filters.occurrence, option.segmentOccurrence)) {
+      return false
+    }
+
+    if (!matchesNumberFilter(filters.messageRow, option.segment.index + 1)) {
+      return false
+    }
+
+    if (!matchesNumberFilter(filters.field, option.source.field)) {
+      return false
+    }
+
+    if (
+      !matchesNumberFilter(filters.repetition, option.source.repetition ?? 1)
+    ) {
+      return false
+    }
+
+    if (
+      !matchesNullableNumberFilter(filters.component, option.source.component)
+    ) {
+      return false
+    }
+
+    if (
+      !matchesNullableNumberFilter(
+        filters.subComponent,
+        option.source.subComponent,
+      )
+    ) {
+      return false
+    }
+
+    if (!valueFilter) {
+      return true
+    }
+
+    const sourceValue = option.previewValue.toLowerCase()
+
+    switch (filters.valueMatchMode) {
+      case "equals":
+        return sourceValue === valueFilter
+      case "starts_with":
+        return sourceValue.startsWith(valueFilter)
+      case "contains":
+        return sourceValue.includes(valueFilter)
+    }
+  })
+}
+
+function matchesNumberFilter(filter: string, value: number): boolean {
+  if (!filter) {
+    return true
+  }
+
+  return Number(filter) === value
+}
+
+function matchesNullableNumberFilter(
+  filter: string,
+  value: number | null | undefined,
+): boolean {
+  if (!filter) {
+    return true
+  }
+
+  return value !== null && value !== undefined && Number(filter) === value
+}
+
+function countAdvancedFilters(filters: SourceAdvancedFilters): number {
+  return [
+    filters.segment,
+    filters.occurrence,
+    filters.messageRow,
+    filters.field,
+    filters.repetition,
+    filters.component,
+    filters.subComponent,
+    filters.value,
+  ].filter((value) => value.trim() !== "").length
+}
+
+function buildAdvancedSourcePath(
+  filters: SourceAdvancedFilters,
+): string | null {
+  const segment = filters.segment.trim().toUpperCase()
+
+  if (!segment) {
+    return null
+  }
+
+  const occurrence = filters.occurrence ? `[${filters.occurrence}]` : ""
+  const field = filters.field ? `-${filters.field}` : ""
+  const repetition =
+    filters.field && filters.repetition ? `[${filters.repetition}]` : ""
+  const component =
+    filters.field && filters.component ? `.${filters.component}` : ""
+  const subComponent =
+    filters.field && filters.component && filters.subComponent
+      ? `.${filters.subComponent}`
+      : ""
+
+  return `${segment}${occurrence}${field}${repetition}${component}${subComponent}`
 }
 
 function parseSourceQuery(rawQuery: string): ParsedSourceQuery | null {

@@ -272,6 +272,50 @@ describe("App", () => {
     expect(screen.getByText("Message row 2")).toBeInTheDocument()
   })
 
+  it("narrows source results with structured advanced filters", async () => {
+    const user = userEvent.setup()
+    render(<App />)
+
+    await user.click(screen.getByRole("button", { name: /parse message/i }))
+    await user.click(
+      screen.getByRole("button", { name: /select patient name/i }),
+    )
+    await user.click(screen.getByRole("button", { name: /advanced filters/i }))
+
+    fireEvent.change(screen.getByLabelText("Segment"), {
+      target: { value: "PID" },
+    })
+    fireEvent.change(screen.getByLabelText("Occurrence"), {
+      target: { value: "1" },
+    })
+    fireEvent.change(screen.getByLabelText("Field"), {
+      target: { value: "5" },
+    })
+    fireEvent.change(screen.getByLabelText("Component"), {
+      target: { value: "2" },
+    })
+    fireEvent.change(screen.getByLabelText("Value"), {
+      target: { value: "El" },
+    })
+    await user.click(
+      within(
+        screen.getByRole("group", { name: /value comparison/i }),
+      ).getByRole("button", { name: /starts with/i }),
+    )
+
+    expect(screen.getByText("PID[1]-5.2")).toBeInTheDocument()
+    expect(screen.getByText("1 result")).toBeInTheDocument()
+    expect(getSourceOption("PID-5.2")).toHaveTextContent("Elena")
+    expect(screen.queryByText("PID-5.1.1")).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole("button", { name: /clear filters/i }))
+
+    expect(screen.getByLabelText("Segment")).toHaveValue("")
+    expect(
+      screen.getByText(/add a segment to preview the hl7 expression/i),
+    ).toBeInTheDocument()
+  })
+
   it("finds a source from a specific repeated segment occurrence", async () => {
     const user = userEvent.setup()
     render(<App />)
