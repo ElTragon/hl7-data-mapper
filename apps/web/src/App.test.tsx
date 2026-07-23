@@ -197,8 +197,13 @@ describe("App", () => {
 
     await selectNameSourceRole(user, "Given")
     await user.click(
-      within(sourceOption).getByRole("button", { name: /use as given/i }),
+      within(sourceOption).getByRole("button", { name: "Select" }),
     )
+
+    expect(screen.getByText("Selected source")).toBeInTheDocument()
+    expect(screen.queryByText("Mapping changed")).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole("button", { name: /use this source/i }))
 
     expect(screen.getAllByText("Mapping changed").length).toBeGreaterThan(0)
     expect(screen.getAllByText("Elena").length).toBeGreaterThan(0)
@@ -225,9 +230,10 @@ describe("App", () => {
     await selectNameSourceRole(user, "Middle")
     await user.click(
       within(middleSourceOption).getByRole("button", {
-        name: /use as middle/i,
+        name: "Select",
       }),
     )
+    await user.click(screen.getByRole("button", { name: /use this source/i }))
 
     await waitFor(() => {
       expect(screen.getAllByText("Mapping changed").length).toBeGreaterThan(0)
@@ -272,7 +278,7 @@ describe("App", () => {
     expect(screen.getByText("Message row 2")).toBeInTheDocument()
   })
 
-  it("narrows source results with structured advanced filters", async () => {
+  it("blocks a composite source from being applied to one name part", async () => {
     const user = userEvent.setup()
     render(<App />)
 
@@ -280,40 +286,197 @@ describe("App", () => {
     await user.click(
       screen.getByRole("button", { name: /select patient name/i }),
     )
-    await user.click(screen.getByRole("button", { name: /advanced filters/i }))
 
-    fireEvent.change(screen.getByLabelText("Segment"), {
-      target: { value: "PID" },
+    const wholeNameSource = getSourceOption("PID-5")
+
+    expect(
+      within(wholeNameSource).getByText(/choose a scalar component/i),
+    ).toBeInTheDocument()
+    expect(
+      within(wholeNameSource).getByRole("button", { name: "Select" }),
+    ).toBeDisabled()
+  })
+
+  it("shows an empty source but does not allow it to be selected", async () => {
+    const user = userEvent.setup()
+    render(<App />)
+    const customMessage = sampleHl7Message.replace(
+      /^PID.*$/m,
+      "PID|1||MRN-104892^^^NORTHSTAR_LAB^MR||Lopez^||19870514|F",
+    )
+
+    fireEvent.change(screen.getByLabelText(/editable hl7 message/i), {
+      target: { value: customMessage },
     })
-    fireEvent.change(screen.getByLabelText("Occurrence"), {
-      target: { value: "1" },
+    await user.click(screen.getByRole("button", { name: /parse message/i }))
+    await user.click(
+      screen.getByRole("button", { name: /select patient name/i }),
+    )
+    await user.click(screen.getByRole("checkbox", { name: /show empty/i }))
+    fireEvent.change(screen.getByRole("textbox", { name: /find a source/i }), {
+      target: { value: "PID-5.2" },
     })
-    fireEvent.change(screen.getByLabelText("Field"), {
-      target: { value: "5" },
+
+    const emptyGivenName = getSourceOption("PID-5.2")
+
+    expect(emptyGivenName).toHaveTextContent("Empty in this message")
+    expect(
+      within(emptyGivenName).getByRole("button", { name: "Select" }),
+    ).toBeDisabled()
+  })
+
+  it("explains when the saved mapping source is absent from the message", async () => {
+    const user = userEvent.setup()
+    render(<App />)
+    const customMessage = sampleHl7Message.replace(
+      /^PID.*$/m,
+      "PID|1||MRN-104892^^^NORTHSTAR_LAB^MR",
+    )
+
+    fireEvent.change(screen.getByLabelText(/editable hl7 message/i), {
+      target: { value: customMessage },
     })
-    fireEvent.change(screen.getByLabelText("Component"), {
-      target: { value: "2" },
+    await user.click(screen.getByRole("button", { name: /parse message/i }))
+    await user.click(
+      screen.getByRole("button", { name: /select patient name/i }),
+    )
+
+    expect(screen.getByText("Current source not found")).toBeInTheDocument()
+    expect(
+      screen.getByText(/saved mapping references PID-5\.1/i),
+    ).toBeInTheDocument()
+  })
+
+  it("resets the builder to the current source for the selected name role", async () => {
+    const user = userEvent.setup()
+    render(<App />)
+
+    await user.click(screen.getByRole("button", { name: /parse message/i }))
+    await user.click(
+      screen.getByRole("button", { name: /select patient name/i }),
+    )
+    await selectNameSourceRole(user, "Given")
+    await user.click(
+      screen.getByRole("button", { name: /reset to current mapping/i }),
+    )
+
+    const preview = screen
+      .getByText("Selected source")
+      .closest<HTMLElement>("[data-selected-source-preview]")
+
+    expect(preview).not.toBeNull()
+    expect(preview).toHaveTextContent("Given")
+    expect(preview).toHaveTextContent("PID-5.2")
+    expect(screen.getByLabelText("Segment")).toHaveValue("PID")
+    expect(screen.getByLabelText("Field")).toHaveValue("5")
+    expect(screen.getByLabelText("Component")).toHaveValue("2")
+  })
+
+  it("clears a selected candidate when the source message changes", async () => {
+    const user = userEvent.setup()
+    render(<App />)
+
+    await user.click(screen.getByRole("button", { name: /parse message/i }))
+    await user.click(
+      screen.getByRole("button", { name: /select patient name/i }),
+    )
+    await user.click(
+      within(getSourceOption("PID-5.2")).getByRole("button", {
+        name: "Select",
+      }),
+    )
+
+    expect(screen.getByText("Selected source")).toBeInTheDocument()
+
+    fireEvent.change(screen.getByLabelText(/editable hl7 message/i), {
+      target: { value: `${sampleHl7Message}\nNTE|1||Updated sample` },
     })
-    fireEvent.change(screen.getByLabelText("Value"), {
-      target: { value: "El" },
-    })
+
+    expect(screen.queryByText("Selected source")).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole("button", { name: /parse message/i }))
+
+    expect(screen.queryByText("Selected source")).not.toBeInTheDocument()
+  })
+
+  it("narrows source results with the guided source builder", async () => {
+    const user = userEvent.setup()
+    render(<App />)
+
+    await user.click(screen.getByRole("button", { name: /parse message/i }))
+    await user.click(
+      screen.getByRole("button", { name: /select patient name/i }),
+    )
+    await user.click(
+      screen.getByRole("button", { name: /build a source path/i }),
+    )
+
+    await user.selectOptions(screen.getByLabelText("Segment"), "PID")
+    expect(
+      screen.queryByLabelText("Segment occurrence"),
+    ).not.toBeInTheDocument()
+    expect(screen.queryByLabelText("Component")).not.toBeInTheDocument()
+
+    await user.selectOptions(screen.getByLabelText("Field"), "5")
+    await user.selectOptions(screen.getByLabelText("Component"), "2")
+    await user.click(screen.getByText(/filter results by value/i))
+    await user.type(screen.getByLabelText("Value"), "El")
     await user.click(
       within(
         screen.getByRole("group", { name: /value comparison/i }),
       ).getByRole("button", { name: /starts with/i }),
     )
 
-    expect(screen.getByText("PID[1]-5.2")).toBeInTheDocument()
+    expect(screen.getAllByText("PID-5.2").length).toBeGreaterThan(0)
     expect(screen.getByText("1 result")).toBeInTheDocument()
     expect(getSourceOption("PID-5.2")).toHaveTextContent("Elena")
     expect(screen.queryByText("PID-5.1.1")).not.toBeInTheDocument()
 
-    await user.click(screen.getByRole("button", { name: /clear filters/i }))
+    await user.click(screen.getByRole("button", { name: /clear builder/i }))
 
     expect(screen.getByLabelText("Segment")).toHaveValue("")
     expect(
-      screen.getByText(/add a segment to preview the hl7 expression/i),
+      screen.getByText(/choose a segment and field to preview/i),
     ).toBeInTheDocument()
+
+    await user.selectOptions(screen.getByLabelText("Segment"), "PID")
+    await user.selectOptions(screen.getByLabelText("Field"), "5")
+    await user.selectOptions(screen.getByLabelText("Component"), "2")
+    await user.selectOptions(screen.getByLabelText("Field"), "8")
+
+    expect(screen.queryByLabelText("Component")).not.toBeInTheDocument()
+    expect(screen.getAllByText("PID-8").length).toBeGreaterThan(0)
+    expect(getSourceOption("PID-8")).toHaveTextContent("F")
+  })
+
+  it("reveals repetition controls only for a repeated field", async () => {
+    const user = userEvent.setup()
+    render(<App />)
+    const customMessage = sampleHl7Message.replace(
+      /^PID.*$/m,
+      "PID|1||LOCAL-1^^^NORTHSTAR_LAB^PI~MRN-104892^^^NORTHSTAR_LAB^MR||Lopez^Elena",
+    )
+
+    fireEvent.change(screen.getByLabelText(/editable hl7 message/i), {
+      target: { value: customMessage },
+    })
+    await user.click(screen.getByRole("button", { name: /parse message/i }))
+    await user.click(
+      screen.getByRole("button", { name: /select patient mrn/i }),
+    )
+    await user.click(
+      screen.getByRole("button", { name: /build a source path/i }),
+    )
+    await user.selectOptions(screen.getByLabelText("Segment"), "PID")
+
+    expect(screen.queryByLabelText("Repetition")).not.toBeInTheDocument()
+
+    await user.selectOptions(screen.getByLabelText("Field"), "3")
+    await user.selectOptions(screen.getByLabelText("Repetition"), "2")
+    await user.selectOptions(screen.getByLabelText("Component"), "1")
+
+    expect(screen.getAllByText("PID-3[2].1").length).toBeGreaterThan(0)
+    expect(getSourceOption("PID-3[2].1")).toHaveTextContent("MRN-104892")
   })
 
   it("finds a source from a specific repeated segment occurrence", async () => {
@@ -345,6 +508,35 @@ describe("App", () => {
     expect(screen.queryByText("PID occurrence 1")).not.toBeInTheDocument()
     expect(getSourceOption("PID-5.1")).toHaveTextContent("Rivera")
     expect(screen.getByText("Message row 3")).toBeInTheDocument()
+
+    await user.click(
+      screen.getByRole("button", { name: /build a source path/i }),
+    )
+    await user.selectOptions(screen.getByLabelText("Segment"), "PID")
+    await user.selectOptions(screen.getByLabelText("Segment occurrence"), "2")
+    await user.selectOptions(screen.getByLabelText("Field"), "5")
+    await user.selectOptions(screen.getByLabelText("Component"), "1")
+
+    expect(screen.getAllByText("PID[2]-5.1").length).toBeGreaterThan(0)
+    expect(getSourceOption("PID-5.1")).toHaveTextContent("Rivera")
+  })
+
+  it("shows order-group context for repeated OBR sources", async () => {
+    const user = userEvent.setup()
+    render(<App />)
+
+    await user.click(screen.getByRole("button", { name: /parse message/i }))
+    await user.click(screen.getByRole("button", { name: /^lab orders/i }))
+    await user.click(
+      screen.getByRole("button", { name: /select laboratory orders/i }),
+    )
+    fireEvent.change(screen.getByRole("textbox", { name: /find a source/i }), {
+      target: { value: "OBR-4.1" },
+    })
+
+    expect(screen.getByText("Order group 1")).toBeInTheDocument()
+    expect(screen.getByText("Order group 2")).toBeInTheDocument()
+    expect(screen.getAllByText("Test code")).toHaveLength(2)
   })
 
   it("renders composite collected values as readable field rows", async () => {
