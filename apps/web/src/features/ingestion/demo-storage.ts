@@ -64,16 +64,19 @@ export function saveDemoSnapshot(snapshot: DemoBrowserStorageSnapshot): void {
 export function saveReviewWorkspaceSnapshot({
   profile,
   reviewFields,
+  messageFingerprint,
   updatedAt,
 }: {
   readonly profile: ClientProfile
   readonly reviewFields: readonly ReviewableField[]
+  readonly messageFingerprint: string
   readonly updatedAt: string
 }): void {
   const previousSnapshot = loadDemoSnapshot()
   const nextReviewDecisions = reviewFields.map((field) => ({
     fieldId: field.id,
     normalizedPath: field.normalizedPath,
+    messageFingerprint,
     reviewStatus: field.reviewStatus,
     reasonCode: field.reasonCode ?? null,
     reviewNote: field.reviewNote ?? null,

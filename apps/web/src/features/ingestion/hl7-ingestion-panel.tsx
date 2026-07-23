@@ -14,7 +14,6 @@ import {
 import {
   applyReviewCorrectionAndRerunMapping,
   buildReviewableFields,
-  composeDefaultNormalizedOutput,
   defaultOmlO21ClientProfile,
   executeMapping,
   confirmReviewableField,
@@ -38,7 +37,13 @@ import {
   resetStoredDemoSnapshot,
   saveReviewWorkspaceSnapshot,
 } from "./demo-storage"
-import { GuidedReviewWorkspace } from "./guided-review-workspace"
+import { GuidedReviewWorkspace } from "./guided-review/guided-review-workspace"
+import { fingerprintMessage } from "./message-fingerprint"
+import {
+  buildReportReviewDecisions,
+  composeCurrentNormalizedOutput,
+} from "./review-report"
+import { hasMeaningfulValue } from "./review-value"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -90,6 +95,9 @@ export function Hl7IngestionPanel() {
   const [activeStepId, setActiveStepId] =
     useState<GuidedReviewStepId>(DEFAULT_REVIEW_STEP)
   const [selectedFieldId, setSelectedFieldId] = useState<string | null>(null)
+  const [messageFingerprint, setMessageFingerprint] = useState<string | null>(
+    null,
+  )
 
   const summary = useMemo(() => {
     if (!parsedMessage) {
@@ -169,24 +177,22 @@ export function Hl7IngestionPanel() {
     setReportError(null)
 
     try {
-      const mappingResult = executeMapping({
-        parsedMessage,
-        profile: defaultOmlO21ClientProfile,
-      })
-      const normalizedData = composeDefaultNormalizedOutput(parsedMessage)
       const reportPackage = await buildReportPackage(
         {
           appVersion: REPORT_APP_VERSION,
           generatedAt: new Date().toISOString(),
-          clientId: defaultOmlO21ClientProfile.clientId,
-          profileId: defaultOmlO21ClientProfile.profileId,
-          profileVersion: defaultOmlO21ClientProfile.profileVersion,
+          clientId: activeProfile.clientId,
+          profileId: activeProfile.profileId,
+          profileVersion: activeProfile.profileVersion,
           messageHash: await sha256Hex(rawMessage),
           messageControlId: parsedMessage.segments
             .find((segment) => segment.name === "MSH")
             ?.fields.find((field) => field.index === 10)?.raw,
           sourcePolicy: "raw_source_excluded",
-          normalizedData,
+          normalizedData: composeCurrentNormalizedOutput({
+            parsedMessage,
+            mappingResult,
+          }),
           hl7Items: activeProfile.itemSet.items,
           reviewDecisions: buildReportReviewDecisions(reviewFields),
           validationResults: mappingResult.validation,
@@ -220,10 +226,12 @@ export function Hl7IngestionPanel() {
     setReviewFields([])
     setActiveStepId(DEFAULT_REVIEW_STEP)
     setSelectedFieldId(null)
+    setMessageFingerprint(null)
   }
 
   function startReview(parsed: ParsedHl7Message) {
     const now = new Date().toISOString()
+    const nextMessageFingerprint = fingerprintMessage(parsed.normalizedText)
     const draftProfile =
       getStoredDraftProfile(defaultOmlO21ClientProfile) ??
       createDemoDraftProfile({
@@ -238,7 +246,10 @@ export function Hl7IngestionPanel() {
       mappingResult: nextMappingResult,
       profile: draftProfile,
     })
-    const nextFields = applyStoredReviewStatuses(storedFields)
+    const nextFields = applyStoredReviewStatuses(
+      storedFields,
+      nextMessageFingerprint,
+    )
 
     setActiveProfile(draftProfile)
     setMappingResult(nextMappingResult)
@@ -250,9 +261,11 @@ export function Hl7IngestionPanel() {
         nextFields[0]?.id ??
         null,
     )
+    setMessageFingerprint(nextMessageFingerprint)
     saveReviewWorkspaceSnapshot({
       profile: draftProfile,
       reviewFields: nextFields,
+      messageFingerprint: nextMessageFingerprint,
       updatedAt: now,
     })
   }
@@ -264,13 +277,14 @@ export function Hl7IngestionPanel() {
     readonly profile?: ClientProfile | null
     readonly fields: readonly ReviewableField[]
   }) {
-    if (!profile) {
+    if (!profile || !messageFingerprint) {
       return
     }
 
     saveReviewWorkspaceSnapshot({
       profile,
       reviewFields: fields,
+      messageFingerprint,
       updatedAt: new Date().toISOString(),
     })
   }
@@ -346,6 +360,8 @@ export function Hl7IngestionPanel() {
 
   function handleResetDemo() {
     resetStoredDemoSnapshot(new Date().toISOString())
+    setReportStatus("idle")
+    setReportError(null)
 
     if (parsedMessage && parsedMessage.errors.length === 0) {
       const draftProfile = createDemoDraftProfile({
@@ -370,6 +386,7 @@ export function Hl7IngestionPanel() {
           nextFields[0]?.id ??
           null,
       )
+      setMessageFingerprint(fingerprintMessage(parsedMessage.normalizedText))
     }
   }
 
@@ -647,21 +664,10 @@ export function Hl7IngestionPanel() {
   )
 }
 
-function buildReportReviewDecisions(reviewFields: readonly ReviewableField[]) {
-  return reviewFields.map((field) => ({
-    fieldId: field.id,
-    normalizedPath: field.normalizedPath,
-    hl7ItemId: field.hl7ItemId,
-    reviewStatus: field.reviewStatus,
-    sourcePath: field.primarySource?.path ?? null,
-    correctionApplied: field.reviewStatus === "mapping_changed",
-    reasonCode: field.reasonCode ?? null,
-    reviewNote: field.reviewNote ?? null,
-    updatedAt: new Date().toISOString(),
-  }))
-}
-
-function applyStoredReviewStatuses(fields: ReviewableField[]) {
+function applyStoredReviewStatuses(
+  fields: ReviewableField[],
+  messageFingerprint: string,
+) {
   const snapshot = loadDemoSnapshot()
 
   if (!snapshot) {
@@ -675,7 +681,11 @@ function applyStoredReviewStatuses(fields: ReviewableField[]) {
   return fields.map((field) => {
     const decision = decisionByFieldId.get(field.id)
 
-    if (!decision) {
+    if (
+      !decision ||
+      decision.messageFingerprint !== messageFingerprint ||
+      decision.normalizedPath !== field.normalizedPath
+    ) {
       return field
     }
 
@@ -752,29 +762,6 @@ function mergeReviewFields({
 
 function hasCollectedFieldValue(field: ReviewableField): boolean {
   return field.section !== "exceptions" && hasMeaningfulValue(field.value)
-}
-
-function hasMeaningfulValue(value: unknown): boolean {
-  if (
-    value === null ||
-    value === undefined ||
-    value === "" ||
-    (Array.isArray(value) && value.length === 0)
-  ) {
-    return false
-  }
-
-  if (Array.isArray(value)) {
-    return value.some((entry) => hasMeaningfulValue(entry))
-  }
-
-  if (typeof value === "object") {
-    return Object.values(value as Record<string, unknown>).some((entry) =>
-      hasMeaningfulValue(entry),
-    )
-  }
-
-  return true
 }
 
 async function sha256Hex(value: string) {
