@@ -5,7 +5,8 @@ import type {
   Hl7Segment,
 } from "@hl7-data-mapper/hl7-parser"
 
-import { searchSourceOptions, type SourceOption } from "./source-search"
+import type { SourceOption } from "./source-options"
+import { searchSourceOptions } from "./source-search"
 
 export type ValueMatchMode = "contains" | "equals" | "starts_with"
 

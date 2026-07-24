@@ -21,7 +21,7 @@ import {
   getSegmentLabel,
   getSourceDisplayLabel,
 } from "./source-display-metadata"
-import type { SourceOption } from "./source-search"
+import type { SourceOption } from "./source-options"
 
 const VALUE_MATCH_MODES: readonly ValueMatchMode[] = [
   "contains",

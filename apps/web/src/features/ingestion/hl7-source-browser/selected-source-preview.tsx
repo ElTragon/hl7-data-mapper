@@ -4,7 +4,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 
 import { getSourceDisplayLabel } from "./source-display-metadata"
-import type { SourceOption } from "./source-search"
+import type { SourceOption } from "./source-options"
 
 export function SelectedSourcePreview({
   candidate,

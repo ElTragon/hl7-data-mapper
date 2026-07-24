@@ -9,11 +9,11 @@ import {
   getSegmentLabel,
   getSourceDisplayLabel,
 } from "./source-display-metadata"
+import type { SourceOption } from "./source-options"
 import {
   getSegmentKey,
   getSourceLevelLabel,
   isSameSource,
-  type SourceOption,
   type SourceOptionGroup,
 } from "./source-search"
 import { getCandidateBlockReason } from "./source-selection-rules"

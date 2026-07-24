@@ -23,13 +23,12 @@ import {
   filterOptionsByBuilder,
   type SourceBuilderState,
 } from "./source-builder-model"
+import { buildSourceOptions, type SourceOption } from "./source-options"
 import { getCandidateBlockReason } from "./source-selection-rules"
 import {
-  buildSourceOptions,
   findSourceOption,
   groupSourceOptions,
   searchSourceOptions,
-  type SourceOption,
 } from "./source-search"
 
 export type Hl7SourceBrowserProps = {

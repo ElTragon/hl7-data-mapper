@@ -7,7 +7,7 @@ import {
   EMPTY_SOURCE_BUILDER,
   filterOptionsByBuilder,
 } from "./source-builder-model"
-import { buildSourceOptions } from "./source-search"
+import { buildSourceOptions } from "./source-options"
 
 const BASE_MSH =
   "MSH|^~\\&|SEND|FAC|RECV|FAC|20260706101500-0700||OML^O21^OML_O21|MSG-1|P|2.5.1"

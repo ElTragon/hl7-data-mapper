@@ -1,4 +1,4 @@
-import type { SourceOption } from "./source-search"
+import type { SourceOption } from "./source-options"
 
 export function getCandidateBlockReason(
   candidate: SourceOption | null,
