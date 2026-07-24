@@ -21,7 +21,7 @@ import {
 } from "@/components/ui/card"
 import { Separator } from "@/components/ui/separator"
 
-import { Hl7SourceBrowser } from "../hl7-source-browser"
+import { Hl7SourceBrowser } from "../hl7-source-browser/hl7-source-browser"
 import { CollectedValue } from "./collected-value"
 import {
   ReviewExplanation,

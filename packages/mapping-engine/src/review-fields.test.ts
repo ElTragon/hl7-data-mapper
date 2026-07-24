@@ -370,9 +370,9 @@ describe("review fields", () => {
     expect(updatedItem?.sources.map((source) => source.path)).toEqual([
       "PID-5.1",
       "PID-5.2",
+      "PID-2.1",
       "PID-5.4",
       "PID-5.5",
-      "PID-2.1",
     ])
     expect(updatedItem?.transform?.params).toMatchObject({
       sourceRoles: expect.arrayContaining([
@@ -381,6 +381,11 @@ describe("review fields", () => {
         expect.objectContaining({ path: "PID-2.1", role: "middle" }),
       ]),
     })
+    expect(
+      result.reviewFields
+        .find((reviewField) => reviewField.normalizedPath === "patient.name")
+        ?.sources.map((source) => source.path),
+    ).toEqual(["PID-5.1", "PID-5.2", "PID-2.1", "PID-5.4", "PID-5.5"])
     expect(result.mappingResult.normalizedDraft).toMatchObject({
       patient: {
         name: {
