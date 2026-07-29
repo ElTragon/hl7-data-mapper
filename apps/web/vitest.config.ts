@@ -14,8 +14,20 @@ export default defineConfig({
     setupFiles: "./src/test/setup.ts",
     coverage: {
       provider: "v8",
+      include: ["src/**/*.{ts,tsx}"],
+      exclude: [
+        "src/**/*.test.{ts,tsx}",
+        "src/test/**",
+        "src/routeTree.gen.ts",
+      ],
       reporter: ["text", "html", "json-summary"],
       reportsDirectory: "../../coverage/web",
+      thresholds: {
+        statements: 78,
+        branches: 78,
+        functions: 76,
+        lines: 78,
+      },
     },
   },
 })
