@@ -19,7 +19,7 @@ const fakeHash: MessageHash =
 const messageHash: MessageHash =
   "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
 
-describe("buildReportPackage", () => {
+describe("report package integration", () => {
   it("builds all required report files in memory", async () => {
     const hashedFiles: string[] = []
     const reportPackage = await buildReportPackage(
