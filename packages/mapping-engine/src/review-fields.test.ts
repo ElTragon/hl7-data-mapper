@@ -160,6 +160,12 @@ describe("review fields", () => {
       reviewNote: null,
       correctionIntent: null,
     })
+
+    expect(
+      markReviewableFieldIncorrect(field, {
+        reviewNote: "  Needs client confirmation.  ",
+      }).reviewNote,
+    ).toBe("Needs client confirmation.")
   })
 
   it("records a selected alternate HL7 source as a correction intent", () => {
@@ -205,6 +211,15 @@ describe("review fields", () => {
         (candidate) => candidate.source.path === "PID-5.2",
       ),
     ).toBe(true)
+
+    const selectedAgain = selectAlternateSourceForReviewableField({
+      field: correctedField,
+      replacementSource,
+    })
+
+    expect(selectedAgain.sourceCandidates).toHaveLength(
+      correctedField.sourceCandidates.length,
+    )
   })
 
   it("applies a selected source correction to the linked hl7Item", () => {
@@ -463,6 +478,13 @@ describe("review fields", () => {
       isComplete: false,
       hasBlockingIssues: true,
     })
+  })
+
+  it("keeps empty guided-review steps incomplete without selecting a next step", () => {
+    const navigation = buildGuidedReviewNavigation({ fields: [] })
+
+    expect(navigation.steps.every((step) => !step.isComplete)).toBe(true)
+    expect(navigation.nextStepId).toBeNull()
   })
 
   it("creates warning review fields for missing fields and validation issues", () => {
