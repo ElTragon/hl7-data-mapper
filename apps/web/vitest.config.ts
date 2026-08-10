@@ -17,16 +17,24 @@ export default defineConfig({
       include: ["src/**/*.{ts,tsx}"],
       exclude: [
         "src/**/*.test.{ts,tsx}",
+        // Bootstrap, routing, providers, and generated UI primitives contain
+        // wiring rather than application behavior. Their dependencies test
+        // those primitives; our coverage gate targets product-owned logic.
+        "src/main.tsx",
+        "src/router.tsx",
+        "src/providers/**",
+        "src/routes/**",
+        "src/components/ui/**",
         "src/test/**",
         "src/routeTree.gen.ts",
       ],
       reporter: ["text", "html", "json-summary"],
       reportsDirectory: "../../coverage/web",
       thresholds: {
-        statements: 78,
-        branches: 78,
-        functions: 76,
-        lines: 78,
+        statements: 85,
+        branches: 80,
+        functions: 85,
+        lines: 85,
       },
     },
   },
