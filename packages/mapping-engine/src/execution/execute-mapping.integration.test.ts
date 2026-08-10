@@ -6,7 +6,7 @@ import { parseHl7Message } from "@hl7-data-mapper/hl7-parser"
 import { describe, expect, it } from "vitest"
 
 import { executeMapping } from "./execute-mapping.js"
-import { defaultOmlO21ClientProfile } from "./profiles/default-oml-o21-profile.js"
+import { defaultOmlO21ClientProfile } from "../profiles/default-oml-o21-profile.js"
 
 const sampleMessage = `MSH|^~\\&|NORTHSTAR_LIS|NORTHSTAR_LAB|HL7_MAPPER|DEMO_FACILITY|20260706101500-0700||OML^O21^OML_O21|MSG-20260706-0001|P|2.5.1|||AL|NE|USA|ASCII
 PID|1||MRN-104892^^^NORTHSTAR_LAB^MR||Lopez^Elena^M||19870514|F
