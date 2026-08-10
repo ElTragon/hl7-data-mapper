@@ -6,7 +6,7 @@ import { parseHl7Message } from "@hl7-data-mapper/hl7-parser"
 import { describe, expect, it } from "vitest"
 
 import { executeMapping } from "./execute-mapping.js"
-import { defaultOmlO21ClientProfile } from "./profiles/default-oml-o21-profile.js"
+import { defaultOmlO21ClientProfile } from "../profiles/default-oml-o21-profile.js"
 
 const sampleMessage = `MSH|^~\\&|NORTHSTAR_LIS|NORTHSTAR_LAB|HL7_MAPPER|DEMO_FACILITY|20260706101500-0700||OML^O21^OML_O21|MSG-20260706-0001|P|2.5.1|||AL|NE|USA|ASCII
 PID|1||MRN-104892^^^NORTHSTAR_LAB^MR||Lopez^Elena^M||19870514|F
@@ -394,6 +394,151 @@ describe("executeMapping", () => {
       "missing_field",
     )
     expect(result.executionTrace[0]?.status).toBe("error")
+  })
+
+  it("uses prior item outputs for dependency-only mappings", () => {
+    const profile = ClientProfileSchema.parse({
+      ...defaultOmlO21ClientProfile,
+      itemSet: {
+        ...defaultOmlO21ClientProfile.itemSet,
+        items: [
+          {
+            id: "sender-application",
+            clientId: defaultOmlO21ClientProfile.clientId,
+            sequence: 1,
+            section: "sender",
+            targetPath: "sender.application",
+            label: "Sender application",
+            action: "extract",
+            sources: [createSourceReference({ segment: "MSH", field: 3 })],
+            required: true,
+          },
+          {
+            id: "sender-facility",
+            clientId: defaultOmlO21ClientProfile.clientId,
+            sequence: 2,
+            section: "sender",
+            targetPath: "sender.facility",
+            label: "Sender facility",
+            action: "extract",
+            sources: [createSourceReference({ segment: "MSH", field: 4 })],
+            required: true,
+          },
+          {
+            id: "sender-key",
+            clientId: defaultOmlO21ClientProfile.clientId,
+            sequence: 3,
+            section: "sender",
+            targetPath: "sender.key",
+            label: "Sender key",
+            action: "join",
+            sources: [],
+            dependsOn: ["sender-application", "sender-facility"],
+            required: true,
+          },
+        ],
+      },
+    })
+
+    const result = executeMapping({
+      parsedMessage: parseHl7Message(sampleMessage),
+      profile,
+    })
+    const dependencyTrace = result.executionTrace.find(
+      (entry) => entry.itemId === "sender-key",
+    )
+
+    expect(result.normalizedDraft).toMatchObject({
+      sender: {
+        key: "NORTHSTAR_LISNORTHSTAR_LAB",
+      },
+    })
+    expect(dependencyTrace?.inputValues).toEqual([
+      "NORTHSTAR_LIS",
+      "NORTHSTAR_LAB",
+    ])
+    expect(dependencyTrace?.sourceReads).toEqual([])
+  })
+
+  it("applies declared default values when an item has no input", () => {
+    const profile = ClientProfileSchema.parse({
+      ...defaultOmlO21ClientProfile,
+      itemSet: {
+        ...defaultOmlO21ClientProfile.itemSet,
+        items: [
+          {
+            id: "default-country",
+            clientId: defaultOmlO21ClientProfile.clientId,
+            sequence: 1,
+            section: "patient",
+            targetPath: "patient.defaultCountry",
+            label: "Default country",
+            action: "default_value",
+            sources: [],
+            defaultValue: "USA",
+            required: false,
+          },
+        ],
+      },
+    })
+
+    const result = executeMapping({
+      parsedMessage: parseHl7Message(sampleMessage),
+      profile,
+    })
+
+    expect(result.normalizedDraft).toEqual({
+      patient: { defaultCountry: "USA" },
+    })
+    expect(result.executionTrace[0]).toMatchObject({
+      status: "completed",
+      inputValues: [],
+      outputValue: "USA",
+    })
+  })
+
+  it("marks unknown transforms as pending without a required-value error", () => {
+    const profile = ClientProfileSchema.parse({
+      ...defaultOmlO21ClientProfile,
+      itemSet: {
+        ...defaultOmlO21ClientProfile.itemSet,
+        items: [
+          {
+            id: "future-transform",
+            clientId: defaultOmlO21ClientProfile.clientId,
+            sequence: 1,
+            section: "patient",
+            targetPath: "patient.futureValue",
+            label: "Future value",
+            action: "extract",
+            sources: [createSourceReference({ segment: "PID", field: 8 })],
+            required: true,
+            transform: {
+              name: "futureTransform",
+              params: {},
+            },
+          },
+        ],
+      },
+    })
+
+    const result = executeMapping({
+      parsedMessage: parseHl7Message(sampleMessage),
+      profile,
+    })
+
+    expect(result.executionTrace[0]).toMatchObject({
+      status: "pending_transform",
+      outputValue: null,
+      validationIssues: [
+        {
+          code: "pending-transform",
+          severity: "info",
+        },
+      ],
+    })
+    expect(result.validation.errors).toEqual([])
+    expect(result.validation.info).toHaveLength(1)
   })
 
   it("rejects archived profiles", () => {
