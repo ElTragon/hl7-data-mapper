@@ -6,14 +6,14 @@
     "node": ">=22.13.1 <23"
   },
   "scripts": {
-    "dev": "pnpm --filter web dev",
-    "dev:api": "pnpm --filter api dev",
-    "build": "pnpm -r --if-present build",
-    "typecheck": "pnpm --filter contracts build && pnpm --filter hl7-parser build && pnpm --filter mapping-engine build && pnpm --filter report-generator build && pnpm --filter api typecheck && pnpm --filter web typecheck",
-    "lint": "pnpm -r --if-present lint",
-    "test": "pnpm -r --if-present test",
-    "test:coverage": "pnpm --filter web test:coverage",
-    "deploy:api": "pnpm --filter api deploy",
+    "dev": "corepack pnpm --filter web dev",
+    "dev:api": "corepack pnpm --filter api dev",
+    "build": "corepack pnpm -r --if-present build",
+    "typecheck": "corepack pnpm --filter contracts build && corepack pnpm --filter hl7-parser build && corepack pnpm --filter mapping-engine build && corepack pnpm --filter report-generator build && corepack pnpm --filter api typecheck && corepack pnpm --filter web typecheck",
+    "lint": "corepack pnpm -r --if-present lint",
+    "test": "corepack pnpm -r --if-present test",
+    "test:coverage": "corepack pnpm --filter web test:coverage",
+    "deploy:api": "corepack pnpm --filter api deploy",
     "format": "prettier --write .",
     "format:check": "prettier --check ."
   },
