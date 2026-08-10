@@ -21,6 +21,7 @@ const messageHash: MessageHash =
 
 describe("buildReportPackage", () => {
   it("builds all required report files in memory", async () => {
+    const hashedFiles: string[] = []
     const reportPackage = await buildReportPackage(
       {
         appVersion: "0.1.0",
@@ -62,6 +63,7 @@ describe("buildReportPackage", () => {
             reviewStatus: "confirmed",
             sourcePath: "PID-5.1",
             correctionApplied: false,
+            reviewNote: "Reviewed 🧪",
             updatedAt: "2026-07-09T00:31:00-07:00",
           },
         ],
@@ -71,7 +73,11 @@ describe("buildReportPackage", () => {
           info: [],
         },
       },
-      () => fakeHash,
+      async ({ fileName }) => {
+        hashedFiles.push(fileName)
+        await Promise.resolve()
+        return fakeHash
+      },
     )
 
     expect(reportPackage.files.map((file) => file.fileName)).toEqual(
@@ -86,6 +92,21 @@ describe("buildReportPackage", () => {
       sourcePolicy: "raw_source_excluded",
     })
     expect(reportPackage.manifest.includedFiles).toHaveLength(6)
+    expect(hashedFiles).toEqual(
+      REQUIRED_REPORT_FILE_NAMES.filter(
+        (fileName) => fileName !== "manifest.json",
+      ),
+    )
+    const markdownFile = reportPackage.files.find(
+      (file) => file.fileName === "REPORT.md",
+    )
+    const markdownManifestEntry = reportPackage.manifest.includedFiles.find(
+      (file) => file.fileName === "REPORT.md",
+    )
+
+    expect(markdownManifestEntry?.byteLength).toBe(
+      new TextEncoder().encode(markdownFile?.content ?? "").byteLength,
+    )
     expect(reportPackage.files.map((file) => file.fileName)).not.toContain(
       "source.hl7",
     )
