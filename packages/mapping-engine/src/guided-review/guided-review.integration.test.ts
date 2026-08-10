@@ -5,8 +5,8 @@ import {
 } from "@hl7-data-mapper/contracts"
 import { describe, expect, it } from "vitest"
 
-import { executeMapping } from "./execute-mapping.js"
-import { defaultOmlO21ClientProfile } from "./profiles/default-oml-o21-profile.js"
+import { executeMapping } from "../execute-mapping.js"
+import { defaultOmlO21ClientProfile } from "../profiles/default-oml-o21-profile.js"
 import {
   applyReviewCorrectionAndRerunMapping,
   applyReviewFieldCorrectionToProfile,
@@ -19,7 +19,7 @@ import {
   markReviewableFieldUnavailable,
   selectAlternateSourceForReviewableField,
   selectCompositeSourceForReviewableField,
-} from "./review-fields.js"
+} from "../review-fields.js"
 
 const sampleMessage = `MSH|^~\\&|NORTHSTAR_LIS|NORTHSTAR_LAB|HL7_MAPPER|DEMO_FACILITY|20260706101500-0700||OML^O21^OML_O21|MSG-20260706-0001|P|2.5.1|||AL|NE|USA|ASCII
 PID|1||MRN-104892^^^NORTHSTAR_LAB^MR||Lopez^Elena^M||19870514|F
@@ -160,6 +160,12 @@ describe("review fields", () => {
       reviewNote: null,
       correctionIntent: null,
     })
+
+    expect(
+      markReviewableFieldIncorrect(field, {
+        reviewNote: "  Needs client confirmation.  ",
+      }).reviewNote,
+    ).toBe("Needs client confirmation.")
   })
 
   it("records a selected alternate HL7 source as a correction intent", () => {
@@ -205,6 +211,15 @@ describe("review fields", () => {
         (candidate) => candidate.source.path === "PID-5.2",
       ),
     ).toBe(true)
+
+    const selectedAgain = selectAlternateSourceForReviewableField({
+      field: correctedField,
+      replacementSource,
+    })
+
+    expect(selectedAgain.sourceCandidates).toHaveLength(
+      correctedField.sourceCandidates.length,
+    )
   })
 
   it("applies a selected source correction to the linked hl7Item", () => {
@@ -463,6 +478,13 @@ describe("review fields", () => {
       isComplete: false,
       hasBlockingIssues: true,
     })
+  })
+
+  it("keeps empty guided-review steps incomplete without selecting a next step", () => {
+    const navigation = buildGuidedReviewNavigation({ fields: [] })
+
+    expect(navigation.steps.every((step) => !step.isComplete)).toBe(true)
+    expect(navigation.nextStepId).toBeNull()
   })
 
   it("creates warning review fields for missing fields and validation issues", () => {
