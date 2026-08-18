@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest"
 
 import { buildReportPackage, buildReportZip } from "./index.js"
-import { createReportInput, fakeHash } from "./test-fixtures.js"
+import { createReportInput, fakeHash } from "./report-fixtures.test-support.js"
 
 const syntheticSource =
   "MSH|^~\\&|SYNTHETIC|LAB|HL7_MAPPER|DEMO|202607090047||OML^O21^OML_O21|MSG1|P|2.5.1\r"

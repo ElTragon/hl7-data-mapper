@@ -6,7 +6,7 @@ import {
   fakeHash,
   findReportFile,
   messageHash,
-} from "./test-fixtures.js"
+} from "./report-fixtures.test-support.js"
 
 describe("report rendering integration", () => {
   it("renders fallback text for unavailable and empty report data", async () => {

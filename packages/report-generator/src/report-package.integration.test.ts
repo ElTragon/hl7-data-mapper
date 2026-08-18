@@ -13,7 +13,7 @@ import {
   fakeHash,
   findReportFile,
   messageHash,
-} from "./test-fixtures.js"
+} from "./report-fixtures.test-support.js"
 
 describe("report package integration", () => {
   it("builds all required report files and manifest metadata", async () => {

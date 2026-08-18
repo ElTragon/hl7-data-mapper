@@ -3,7 +3,7 @@ import { strFromU8, unzipSync } from "fflate"
 import { describe, expect, it } from "vitest"
 
 import { buildReportPackage, buildReportZip } from "./index.js"
-import { createReportInput, fakeHash } from "./test-fixtures.js"
+import { createReportInput, fakeHash } from "./report-fixtures.test-support.js"
 
 describe("report ZIP integration", () => {
   it("builds a downloadable archive with all report files", async () => {
