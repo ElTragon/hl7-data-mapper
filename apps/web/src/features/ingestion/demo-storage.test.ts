@@ -5,10 +5,12 @@ import {
   executeMapping,
   markReviewableFieldIncorrect,
 } from "@hl7-data-mapper/mapping-engine"
-import { beforeEach, describe, expect, it } from "vitest"
+import { beforeEach, describe, expect, it, vi } from "vitest"
 
 import sampleHl7Message from "../../../../../fixtures/valid/oml-o21-basic.hl7?raw"
 import {
+  browserDemoSnapshotStore,
+  buildReviewWorkspaceSnapshot,
   createDemoDraftProfile,
   loadDemoSnapshot,
   saveReviewWorkspaceSnapshot,
@@ -121,5 +123,55 @@ describe("demo storage", () => {
     }
 
     expect(loadDemoSnapshot()?.demoAuditEvents).toEqual([])
+  })
+
+  it("builds snapshots without mutating its inputs", () => {
+    const { profile, reviewFields } = createWorkspace()
+    const originalProfile = structuredClone(profile)
+    const originalFields = structuredClone(reviewFields)
+
+    const snapshot = buildReviewWorkspaceSnapshot({
+      previousSnapshot: null,
+      profile,
+      reviewFields,
+      messageFingerprint: MESSAGE_FINGERPRINT,
+      updatedAt: OCCURRED_AT,
+    })
+
+    expect(snapshot.updatedAt).toBe(OCCURRED_AT)
+    expect(profile).toEqual(originalProfile)
+    expect(reviewFields).toEqual(originalFields)
+  })
+
+  it("returns typed outcomes for unavailable browser storage", () => {
+    const getItem = vi
+      .spyOn(Storage.prototype, "getItem")
+      .mockImplementation(() => {
+        throw new DOMException("Blocked", "SecurityError")
+      })
+
+    expect(browserDemoSnapshotStore.load()).toMatchObject({
+      status: "unavailable",
+    })
+    getItem.mockRestore()
+
+    const { profile, reviewFields } = createWorkspace()
+    const snapshot = buildReviewWorkspaceSnapshot({
+      previousSnapshot: null,
+      profile,
+      reviewFields,
+      messageFingerprint: MESSAGE_FINGERPRINT,
+      updatedAt: OCCURRED_AT,
+    })
+    const setItem = vi
+      .spyOn(Storage.prototype, "setItem")
+      .mockImplementation(() => {
+        throw new DOMException("Full", "QuotaExceededError")
+      })
+
+    expect(browserDemoSnapshotStore.save(snapshot)).toMatchObject({
+      status: "unavailable",
+    })
+    setItem.mockRestore()
   })
 })
