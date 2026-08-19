@@ -752,6 +752,21 @@ describe("App", () => {
     })
   })
 
+  it("keeps review usable when browser persistence is unavailable", async () => {
+    const user = userEvent.setup()
+    vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+      throw new DOMException("Storage is full", "QuotaExceededError")
+    })
+
+    render(<App />)
+    await user.click(screen.getByRole("button", { name: /parse message/i }))
+
+    expect(screen.getByText(/browser storage issue/i)).toBeInTheDocument()
+    expect(
+      screen.getAllByRole("button", { name: /^confirm$/i }).length,
+    ).toBeGreaterThan(0)
+  })
+
   it("clears browser-stored demo changes when reset is clicked", async () => {
     const user = userEvent.setup()
     render(<App />)
