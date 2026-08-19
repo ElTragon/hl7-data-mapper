@@ -140,10 +140,11 @@ export function Hl7IngestionPanel() {
     setReportError(null)
 
     try {
+      const generatedAt = new Date().toISOString()
       const reportPackage = await buildReportPackage(
         {
           appVersion: REPORT_APP_VERSION,
-          generatedAt: new Date().toISOString(),
+          generatedAt,
           clientId: activeProfile.clientId,
           profileId: activeProfile.profileId,
           profileVersion: activeProfile.profileVersion,
@@ -157,7 +158,10 @@ export function Hl7IngestionPanel() {
             mappingResult,
           }),
           hl7Items: activeProfile.itemSet.items,
-          reviewDecisions: buildReportReviewDecisions(reviewFields),
+          reviewDecisions: buildReportReviewDecisions(
+            reviewFields,
+            generatedAt,
+          ),
           validationResults: mappingResult.validation,
         },
         async ({ content }) => sha256Hex(content),

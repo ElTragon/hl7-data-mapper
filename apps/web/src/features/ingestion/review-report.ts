@@ -10,9 +10,8 @@ import {
 
 export function buildReportReviewDecisions(
   reviewFields: readonly ReviewableField[],
+  updatedAt: string,
 ) {
-  const updatedAt = new Date().toISOString()
-
   return reviewFields.map((field) => ({
     fieldId: field.id,
     normalizedPath: field.normalizedPath,
