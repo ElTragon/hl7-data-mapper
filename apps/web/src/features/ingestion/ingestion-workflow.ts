@@ -2,6 +2,7 @@ import {
   type ClientProfile,
   type DemoBrowserStorageSnapshot,
   type GuidedReviewStepId,
+  type ReviewCorrectionIntent,
   type ReviewableField,
   type SourceReference,
 } from "@hl7-data-mapper/contracts"
@@ -53,6 +54,7 @@ export function createReviewWorkflow({
     fields: buildReviewableFields({ mappingResult, profile }),
     messageFingerprint,
     storedSnapshot,
+    profile,
   })
 
   return {
@@ -147,10 +149,12 @@ export function restoreStoredReviewDecisions({
   fields,
   messageFingerprint,
   storedSnapshot,
+  profile,
 }: {
   readonly fields: readonly ReviewableField[]
   readonly messageFingerprint: string
   readonly storedSnapshot: DemoBrowserStorageSnapshot | null
+  readonly profile?: ClientProfile
 }): readonly ReviewableField[] {
   if (!storedSnapshot) return fields
 
@@ -178,8 +182,52 @@ export function restoreStoredReviewDecisions({
       reviewStatus: decision.reviewStatus,
       reasonCode: decision.reasonCode ?? null,
       reviewNote: decision.reviewNote ?? null,
+      correctionIntent: profile
+        ? restoreCorrectionIntent({ field, profile, storedSnapshot })
+        : field.correctionIntent,
     }
   })
+}
+
+function restoreCorrectionIntent({
+  field,
+  profile,
+  storedSnapshot,
+}: {
+  readonly field: ReviewableField
+  readonly profile: ClientProfile
+  readonly storedSnapshot: DemoBrowserStorageSnapshot
+}): ReviewCorrectionIntent | null {
+  const storedIntent = storedSnapshot.correctionIntents.find(
+    (intent) => intent.fieldId === field.id,
+  )
+  if (!storedIntent) return null
+
+  const targetItem = profile.itemSet.items.find(
+    (item) => item.id === storedIntent.targetHl7ItemId,
+  )
+  if (!targetItem) return null
+
+  const replacementSource =
+    storedIntent.replacementSource ??
+    (storedIntent.replacementSourcePath
+      ? (targetItem.sources.find(
+          (source) => source.path === storedIntent.replacementSourcePath,
+        ) ?? null)
+      : null)
+
+  if (storedIntent.replacementSourcePath && !replacementSource) return null
+
+  return {
+    targetHl7ItemId: storedIntent.targetHl7ItemId,
+    replacementSource,
+    replacementHl7Item:
+      storedIntent.replacementHl7Item ??
+      (replacementSource && targetItem.transform?.name === "mapXpnName"
+        ? targetItem
+        : undefined),
+    notes: storedIntent.notes ?? null,
+  }
 }
 
 export function mergeReviewFields({

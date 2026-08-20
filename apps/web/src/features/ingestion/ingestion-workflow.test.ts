@@ -1,3 +1,4 @@
+import { createSourceReference } from "@hl7-data-mapper/contracts"
 import { parseHl7Message } from "@hl7-data-mapper/hl7-parser"
 import {
   confirmReviewableField,
@@ -10,6 +11,7 @@ import { buildReviewWorkspaceSnapshot } from "./demo-storage"
 import {
   changeReviewStep,
   createReviewWorkflow,
+  applySourceCorrection,
   restoreStoredReviewDecisions,
   updateReviewedField,
 } from "./ingestion-workflow"
@@ -136,5 +138,55 @@ describe("ingestion workflow", () => {
     expect(
       restored.find((field) => field.id === valuedField.id)?.reviewStatus,
     ).toBe("unreviewed")
+  })
+
+  it("round-trips a composite correction intent through storage", () => {
+    const state = createState()
+    const field = state.reviewFields.find(
+      (candidate) => candidate.hl7ItemId === "patient-name",
+    )
+    if (!field) throw new Error("Expected the patient-name field")
+    const correctedAt = "2026-08-19T12:01:00.000Z"
+    const correctedState = applySourceCorrection({
+      state,
+      field,
+      source: createSourceReference({
+        segment: "PID",
+        field: 2,
+        component: 1,
+      }),
+      sourceRole: "middle",
+      occurredAt: correctedAt,
+    })
+    const snapshot = buildReviewWorkspaceSnapshot({
+      previousSnapshot: null,
+      profile: correctedState.profile,
+      reviewFields: correctedState.reviewFields,
+      messageFingerprint: correctedState.messageFingerprint,
+      updatedAt: correctedAt,
+    })
+    const restoredState = createReviewWorkflow({
+      parsedMessage: state.parsedMessage,
+      sourceProfile: defaultOmlO21ClientProfile,
+      storedSnapshot: snapshot,
+      occurredAt: "2026-08-19T12:02:00.000Z",
+    })
+    const restoredField = restoredState.reviewFields.find(
+      (candidate) => candidate.id === field.id,
+    )
+
+    expect(restoredField?.correctionIntent).toEqual(
+      correctedState.reviewFields.find((candidate) => candidate.id === field.id)
+        ?.correctionIntent,
+    )
+
+    const repersisted = buildReviewWorkspaceSnapshot({
+      previousSnapshot: snapshot,
+      profile: restoredState.profile,
+      reviewFields: restoredState.reviewFields,
+      messageFingerprint: restoredState.messageFingerprint,
+      updatedAt: "2026-08-19T12:03:00.000Z",
+    })
+    expect(repersisted.correctionIntents).toEqual(snapshot.correctionIntents)
   })
 })

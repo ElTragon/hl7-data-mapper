@@ -1,13 +1,18 @@
 import { z } from "zod"
 
 import { ClientProfileSchema } from "./client-profile.js"
-import { Hl7ItemActionSchema, Hl7ItemValueTypeSchema } from "./hl7-item.js"
+import {
+  Hl7ItemActionSchema,
+  Hl7ItemSchema,
+  Hl7ItemValueTypeSchema,
+} from "./hl7-item.js"
 import { NormalizedOutputSectionSchema } from "./normalized-output.js"
 import {
   ReviewDecisionReasonSchema,
   ReviewNoteSchema,
 } from "./review-decision.js"
 import { ReviewStatusSchema } from "./review-status.js"
+import { SourceReferenceSchema } from "./source-reference.js"
 
 const SHA_256_HEX_PATTERN = /^[a-f0-9]{64}$/i
 
@@ -276,11 +281,18 @@ export const DemoStorageReviewDecisionSchema = z
   })
   .strict()
 
+const PersistedSourceReferenceSchema = SourceReferenceSchema.omit({ raw: true })
+const PersistedCorrectionHl7ItemSchema = Hl7ItemSchema.safeExtend({
+  sources: z.array(PersistedSourceReferenceSchema).default([]),
+})
+
 export const DemoStorageCorrectionIntentSchema = z
   .object({
     fieldId: z.string().min(1),
     targetHl7ItemId: z.string().min(1),
     replacementSourcePath: z.string().min(1).nullable().optional(),
+    replacementSource: PersistedSourceReferenceSchema.nullable().optional(),
+    replacementHl7Item: PersistedCorrectionHl7ItemSchema.nullable().optional(),
     notes: z.string().nullable().optional(),
     updatedAt: z.string().min(1),
   })

@@ -175,11 +175,27 @@ export function buildReviewWorkspaceSnapshot({
 
       const previous = previousIntentByFieldId.get(field.id)
       const replacementSourcePath = intent.replacementSource?.path ?? null
+      const replacementSource = intent.replacementSource
+        ? { ...intent.replacementSource, raw: undefined }
+        : null
+      const replacementHl7Item = intent.replacementHl7Item
+        ? {
+            ...intent.replacementHl7Item,
+            sources: intent.replacementHl7Item.sources.map((source) => ({
+              ...source,
+              raw: undefined,
+            })),
+          }
+        : null
       const notes = intent.notes ?? null
       const didChange =
         !previous ||
         previous.targetHl7ItemId !== intent.targetHl7ItemId ||
         (previous.replacementSourcePath ?? null) !== replacementSourcePath ||
+        JSON.stringify(previous.replacementSource ?? null) !==
+          JSON.stringify(replacementSource) ||
+        JSON.stringify(previous.replacementHl7Item ?? null) !==
+          JSON.stringify(replacementHl7Item) ||
         (previous.notes ?? null) !== notes
 
       return [
@@ -187,6 +203,8 @@ export function buildReviewWorkspaceSnapshot({
           fieldId: field.id,
           targetHl7ItemId: intent.targetHl7ItemId,
           replacementSourcePath,
+          replacementSource,
+          replacementHl7Item,
           notes,
           updatedAt: didChange ? updatedAt : previous.updatedAt,
         },
