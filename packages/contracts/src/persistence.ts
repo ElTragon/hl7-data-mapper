@@ -325,6 +325,7 @@ export const DemoBrowserStorageSnapshotSchema = z
 
     for (const issue of findForbiddenPersistenceIssues({
       draftProfiles: snapshot.draftProfiles,
+      reviewDecisions: snapshot.reviewDecisions,
       correctionIntents: snapshot.correctionIntents,
     })) {
       context.addIssue({ code: "custom", message: issue })
@@ -413,6 +414,11 @@ function findForbiddenPersistenceIssues(
     return value.flatMap((item, index) =>
       findForbiddenPersistenceIssues(item, `${path}[${index}]`),
     )
+  }
+  if (typeof value === "string") {
+    return HL7_SEGMENT_LINE_PATTERN.test(value)
+      ? [`${path} must not contain raw HL7 segment text.`]
+      : []
   }
   if (typeof value !== "object" || value === null) return []
 

@@ -987,6 +987,98 @@ describe("persistence contracts", () => {
     ).toThrow(/not allowed in public demo persistence/)
   })
 
+  it.each([
+    {
+      field: "review decision notes",
+      snapshot: {
+        draftProfiles: [],
+        reviewDecisions: [
+          {
+            fieldId: "patient-name",
+            normalizedPath: "patient.name",
+            reviewStatus: "incorrect",
+            reviewNote: "PID|1||PRIVATE-PATIENT-ID",
+            updatedAt: "2026-07-08T23:57:00-07:00",
+          },
+        ],
+        correctionIntents: [],
+      },
+    },
+    {
+      field: "correction intent notes",
+      snapshot: {
+        draftProfiles: [],
+        reviewDecisions: [],
+        correctionIntents: [
+          {
+            fieldId: "patient-name",
+            targetHl7ItemId: "patient-name",
+            notes: "PID|1||PRIVATE-PATIENT-ID",
+            updatedAt: "2026-07-08T23:57:00-07:00",
+          },
+        ],
+      },
+    },
+    {
+      field: "nested mapping configuration",
+      snapshot: {
+        draftProfiles: [
+          {
+            ...demoDraftProfile,
+            itemSet: {
+              ...demoDraftProfile.itemSet,
+              items: demoDraftProfile.itemSet.items.map((item, index) =>
+                index === 0
+                  ? {
+                      ...item,
+                      transform: {
+                        name: "unsafe-example",
+                        params: { example: "PID|1||PRIVATE-PATIENT-ID" },
+                      },
+                    }
+                  : item,
+              ),
+            },
+          },
+        ],
+        reviewDecisions: [],
+        correctionIntents: [],
+      },
+    },
+  ])("rejects raw HL7 text in $field", ({ snapshot }) => {
+    expect(() =>
+      DemoBrowserStorageSnapshotSchema.parse({
+        storageVersion: 1,
+        mode: "public_demo",
+        demoAuditEvents: [],
+        updatedAt: "2026-07-08T23:57:00-07:00",
+        ...snapshot,
+      }),
+    ).toThrow(/must not contain raw HL7 segment text/)
+  })
+
+  it("accepts structured HL7 source paths without treating them as raw text", () => {
+    expect(() =>
+      DemoBrowserStorageSnapshotSchema.parse({
+        storageVersion: 1,
+        mode: "public_demo",
+        draftProfiles: [],
+        reviewDecisions: [
+          {
+            fieldId: "patient-name",
+            normalizedPath: "patient.name",
+            reviewStatus: "confirmed",
+            reviewNote: "Use PID-5.1 for this client.",
+            updatedAt: "2026-07-08T23:57:00-07:00",
+          },
+        ],
+        correctionIntents: [],
+        demoAuditEvents: [],
+        updatedAt: "2026-07-08T23:57:00-07:00",
+      }),
+    ).not.toThrow()
+  })
+
   it("creates and resets an empty browser demo storage snapshot", () => {
     const emptySnapshot = createEmptyDemoBrowserStorageSnapshot(
       "2026-07-08T23:58:00-07:00",
