@@ -13,10 +13,11 @@ import {
   browserDemoSnapshotStore,
   buildReviewWorkspaceSnapshot,
   createDemoDraftProfile,
+  DEMO_STORAGE_KEY,
+  LEGACY_DEMO_STORAGE_KEY,
   MAX_DEMO_AUDIT_EVENTS,
 } from "./demo-storage"
 
-const STORAGE_KEY = "hl7-data-mapper:demo-storage:v1"
 const OCCURRED_AT = "2026-08-19T12:00:00.000Z"
 const MESSAGE_FINGERPRINT = "0123456789abcdef"
 
@@ -69,14 +70,72 @@ describe("demo storage", () => {
   })
 
   it("treats malformed and schema-invalid snapshots as absent", () => {
-    window.localStorage.setItem(STORAGE_KEY, "not-json")
+    window.localStorage.setItem(DEMO_STORAGE_KEY, "not-json")
     expect(loadDemoSnapshot()).toBeNull()
 
     window.localStorage.setItem(
-      STORAGE_KEY,
+      DEMO_STORAGE_KEY,
       JSON.stringify({ storageVersion: 99 }),
     )
     expect(loadDemoSnapshot()).toBeNull()
+  })
+
+  it("loads version 1 snapshots and writes subsequent changes as version 2", () => {
+    const { profile, reviewFields } = createWorkspace()
+    const currentSnapshot = buildReviewWorkspaceSnapshot({
+      previousSnapshot: null,
+      profile,
+      reviewFields,
+      messageFingerprint: MESSAGE_FINGERPRINT,
+      updatedAt: OCCURRED_AT,
+    })
+    window.localStorage.setItem(
+      LEGACY_DEMO_STORAGE_KEY,
+      JSON.stringify({ ...currentSnapshot, storageVersion: 1 }),
+    )
+
+    const loadResult = browserDemoSnapshotStore.load()
+    expect(loadResult).toMatchObject({
+      status: "loaded",
+      snapshot: { storageVersion: 2 },
+    })
+    if (loadResult.status !== "loaded") {
+      throw new Error("Expected migrated snapshot")
+    }
+
+    expect(
+      browserDemoSnapshotStore.save(loadResult.snapshot, {
+        expectedSnapshot: loadResult.snapshot,
+      }),
+    ).toEqual({ status: "saved" })
+    expect(window.localStorage.getItem(DEMO_STORAGE_KEY)).toContain(
+      '"storageVersion":2',
+    )
+  })
+
+  it("prefers version 2 storage when an older tab writes version 1", () => {
+    const { profile, reviewFields } = createWorkspace()
+    const currentSnapshot = buildReviewWorkspaceSnapshot({
+      previousSnapshot: null,
+      profile,
+      reviewFields,
+      messageFingerprint: MESSAGE_FINGERPRINT,
+      updatedAt: OCCURRED_AT,
+    })
+    window.localStorage.setItem(
+      DEMO_STORAGE_KEY,
+      JSON.stringify(currentSnapshot),
+    )
+    window.localStorage.setItem(
+      LEGACY_DEMO_STORAGE_KEY,
+      JSON.stringify({
+        ...currentSnapshot,
+        storageVersion: 1,
+        updatedAt: "2026-08-19T12:10:00.000Z",
+      }),
+    )
+
+    expect(loadDemoSnapshot()?.updatedAt).toBe(OCCURRED_AT)
   })
 
   it("persists review metadata without raw HL7 content", () => {
@@ -92,7 +151,7 @@ describe("demo storage", () => {
       updatedAt: OCCURRED_AT,
     })
 
-    const serialized = window.localStorage.getItem(STORAGE_KEY)
+    const serialized = window.localStorage.getItem(DEMO_STORAGE_KEY)
     const snapshot = loadDemoSnapshot()
 
     expect(snapshot?.draftProfiles).toEqual([profile])

@@ -175,10 +175,12 @@ describe("ingestion workflow", () => {
       (candidate) => candidate.id === field.id,
     )
 
-    expect(restoredField?.correctionIntent).toEqual(
-      correctedState.reviewFields.find((candidate) => candidate.id === field.id)
-        ?.correctionIntent,
-    )
+    expect(restoredField?.correctionIntent).toMatchObject({
+      targetHl7ItemId: "patient-name",
+      replacementSource: { path: "PID-2.1" },
+      replacementHl7Item: { id: "patient-name" },
+      notes: null,
+    })
 
     const repersisted = buildReviewWorkspaceSnapshot({
       previousSnapshot: snapshot,

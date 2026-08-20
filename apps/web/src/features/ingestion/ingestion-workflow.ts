@@ -186,7 +186,7 @@ export function restoreStoredReviewDecisions({
       ...field,
       reviewStatus: decision.reviewStatus,
       reasonCode: decision.reasonCode ?? null,
-      reviewNote: decision.reviewNote ?? null,
+      reviewNote: null,
       correctionIntent: profile
         ? restoreCorrectionIntent({ field, profile, storedSnapshot })
         : field.correctionIntent,
@@ -231,7 +231,7 @@ function restoreCorrectionIntent({
       (replacementSource && targetItem.transform?.name === "mapXpnName"
         ? targetItem
         : undefined),
-    notes: storedIntent.notes ?? null,
+    notes: null,
   }
 }
 

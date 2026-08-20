@@ -13,7 +13,9 @@ import {
   createDraftClientProfileVersion,
   createSourceReference,
   createValidationSummary,
+  decodeAndMigrateDemoBrowserStorageSnapshot,
   DemoBrowserStorageSnapshotSchema,
+  DemoBrowserStorageSnapshotV1Schema,
   GUIDED_REVIEW_STEPS,
   hasBlockingValidationErrors,
   Hl7ItemSetSchema,
@@ -865,7 +867,7 @@ describe("persistence contracts", () => {
 
   it("validates a browser-only public demo storage snapshot", () => {
     const snapshot = DemoBrowserStorageSnapshotSchema.parse({
-      storageVersion: 1,
+      storageVersion: 2,
       mode: "public_demo",
       draftProfiles: [demoDraftProfile],
       reviewDecisions: [
@@ -874,7 +876,6 @@ describe("persistence contracts", () => {
           normalizedPath: "patient.name",
           reviewStatus: "confirmed",
           reasonCode: "wrong_source_mapping",
-          reviewNote: "Client sends the middle name in PID-2.1.",
           updatedAt: "2026-07-08T23:50:00-07:00",
         },
       ],
@@ -883,7 +884,6 @@ describe("persistence contracts", () => {
           fieldId: "patient-name",
           targetHl7ItemId: "patient-name",
           replacementSourcePath: "PID-5.1",
-          notes: "Reviewer confirmed the default patient-name source.",
           updatedAt: "2026-07-08T23:51:00-07:00",
         },
       ],
@@ -920,7 +920,7 @@ describe("persistence contracts", () => {
 
     expect(() =>
       DemoBrowserStorageSnapshotSchema.parse({
-        storageVersion: 1,
+        storageVersion: 2,
         mode: "public_demo",
         draftProfiles: [publishedProfile],
         reviewDecisions: [],
@@ -934,7 +934,7 @@ describe("persistence contracts", () => {
   it("rejects browser demo snapshots with raw HL7 in demo audit events", () => {
     expect(() =>
       DemoBrowserStorageSnapshotSchema.parse({
-        storageVersion: 1,
+        storageVersion: 2,
         mode: "public_demo",
         draftProfiles: [],
         reviewDecisions: [],
@@ -976,7 +976,7 @@ describe("persistence contracts", () => {
 
     expect(() =>
       DemoBrowserStorageSnapshotSchema.parse({
-        storageVersion: 1,
+        storageVersion: 2,
         mode: "public_demo",
         draftProfiles: [profileWithRawSource],
         reviewDecisions: [],
@@ -1047,7 +1047,7 @@ describe("persistence contracts", () => {
     },
   ])("rejects raw HL7 text in $field", ({ snapshot }) => {
     expect(() =>
-      DemoBrowserStorageSnapshotSchema.parse({
+      DemoBrowserStorageSnapshotV1Schema.parse({
         storageVersion: 1,
         mode: "public_demo",
         demoAuditEvents: [],
@@ -1059,7 +1059,7 @@ describe("persistence contracts", () => {
 
   it("accepts structured HL7 source paths without treating them as raw text", () => {
     expect(() =>
-      DemoBrowserStorageSnapshotSchema.parse({
+      DemoBrowserStorageSnapshotV1Schema.parse({
         storageVersion: 1,
         mode: "public_demo",
         draftProfiles: [],
@@ -1088,7 +1088,7 @@ describe("persistence contracts", () => {
     )
 
     expect(emptySnapshot).toMatchObject({
-      storageVersion: 1,
+      storageVersion: 2,
       mode: "public_demo",
       draftProfiles: [],
       reviewDecisions: [],
@@ -1097,6 +1097,36 @@ describe("persistence contracts", () => {
     })
     expect(resetSnapshot.updatedAt).toBe("2026-07-08T23:59:00-07:00")
     expect(resetSnapshot.draftProfiles).toEqual([])
+  })
+
+  it("migrates version 1 browser snapshots without mutating the input", () => {
+    const versionOneSnapshot = {
+      storageVersion: 1 as const,
+      mode: "public_demo" as const,
+      draftProfiles: [demoDraftProfile],
+      reviewDecisions: [],
+      correctionIntents: [
+        {
+          fieldId: "patient-name",
+          targetHl7ItemId: "patient-name",
+          replacementSourcePath: "PID-5.1",
+          notes: "Use the configured source.",
+          updatedAt: "2026-07-08T23:59:00-07:00",
+        },
+      ],
+      demoAuditEvents: [],
+      updatedAt: "2026-07-08T23:59:00-07:00",
+    }
+    const original = structuredClone(versionOneSnapshot)
+
+    const migrated =
+      decodeAndMigrateDemoBrowserStorageSnapshot(versionOneSnapshot)
+
+    expect(migrated.storageVersion).toBe(2)
+    expect(migrated.correctionIntents[0]).toMatchObject({
+      replacementSourcePath: "PID-5.1",
+    })
+    expect(versionOneSnapshot).toEqual(original)
   })
 })
 

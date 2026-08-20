@@ -300,37 +300,59 @@ export const DemoStorageCorrectionIntentSchema = z
   })
   .strict()
 
-export const DemoBrowserStorageSnapshotSchema = z
+const DemoStorageCorrectionIntentV1Schema = z
+  .object({
+    fieldId: z.string().min(1),
+    targetHl7ItemId: z.string().min(1),
+    replacementSourcePath: z.string().min(1).nullable().optional(),
+    notes: z.string().nullable().optional(),
+    updatedAt: z.string().min(1),
+  })
+  .strict()
+
+const DemoStorageReviewDecisionV2Schema = DemoStorageReviewDecisionSchema.omit({
+  reviewNote: true,
+}).strict()
+const DemoStorageCorrectionIntentV2Schema =
+  DemoStorageCorrectionIntentSchema.omit({ notes: true }).strict()
+
+export const DemoBrowserStorageSnapshotV1Schema = z
   .object({
     storageVersion: z.literal(1),
     mode: z.literal("public_demo"),
     draftProfiles: z.array(ClientProfileSchema).default([]),
     reviewDecisions: z.array(DemoStorageReviewDecisionSchema).default([]),
-    correctionIntents: z.array(DemoStorageCorrectionIntentSchema).default([]),
+    correctionIntents: z
+      .array(
+        z.union([
+          DemoStorageCorrectionIntentSchema,
+          DemoStorageCorrectionIntentV1Schema,
+        ]),
+      )
+      .default([]),
     demoAuditEvents: z.array(AuditEventSchema).default([]),
     updatedAt: z.string().min(1),
   })
   .strict()
-  .superRefine((snapshot, context) => {
-    snapshot.draftProfiles.forEach((profile, index) => {
-      if (profile.status !== "draft") {
-        context.addIssue({
-          code: "custom",
-          message:
-            "Public demo storage may only contain editable draft profile copies.",
-          path: ["draftProfiles", index, "status"],
-        })
-      }
-    })
+  .superRefine(addDemoSnapshotIssues)
 
-    for (const issue of findForbiddenPersistenceIssues({
-      draftProfiles: snapshot.draftProfiles,
-      reviewDecisions: snapshot.reviewDecisions,
-      correctionIntents: snapshot.correctionIntents,
-    })) {
-      context.addIssue({ code: "custom", message: issue })
-    }
+export const DemoBrowserStorageSnapshotSchema = z
+  .object({
+    storageVersion: z.literal(2),
+    mode: z.literal("public_demo"),
+    draftProfiles: z.array(ClientProfileSchema).default([]),
+    reviewDecisions: z.array(DemoStorageReviewDecisionV2Schema).default([]),
+    correctionIntents: z.array(DemoStorageCorrectionIntentV2Schema).default([]),
+    demoAuditEvents: z.array(AuditEventSchema).default([]),
+    updatedAt: z.string().min(1),
   })
+  .strict()
+  .superRefine(addDemoSnapshotIssues)
+
+export const StoredDemoBrowserStorageSnapshotSchema = z.union([
+  DemoBrowserStorageSnapshotSchema,
+  DemoBrowserStorageSnapshotV1Schema,
+])
 
 export const DemoPersistencePolicySchema = z
   .object({
@@ -348,7 +370,7 @@ export function createEmptyDemoBrowserStorageSnapshot(
   updatedAt: string,
 ): DemoBrowserStorageSnapshot {
   return DemoBrowserStorageSnapshotSchema.parse({
-    storageVersion: 1,
+    storageVersion: 2,
     mode: "public_demo",
     draftProfiles: [],
     reviewDecisions: [],
@@ -366,6 +388,62 @@ export function resetDemoBrowserStorageSnapshot(
 
 export function isSafeAuditMetadata(metadata: unknown): boolean {
   return SafeAuditMetadataSchema.safeParse(metadata).success
+}
+
+export function decodeAndMigrateDemoBrowserStorageSnapshot(
+  value: unknown,
+): DemoBrowserStorageSnapshot {
+  const storedSnapshot = StoredDemoBrowserStorageSnapshotSchema.parse(value)
+
+  if (storedSnapshot.storageVersion === 2) return storedSnapshot
+
+  const reviewDecisions = storedSnapshot.reviewDecisions.map(
+    ({ reviewNote, ...decision }) => {
+      void reviewNote
+      return decision
+    },
+  )
+  const correctionIntents = storedSnapshot.correctionIntents.map(
+    ({ notes, ...intent }) => {
+      void notes
+      return intent
+    },
+  )
+
+  return DemoBrowserStorageSnapshotSchema.parse({
+    ...storedSnapshot,
+    storageVersion: 2,
+    reviewDecisions,
+    correctionIntents,
+  })
+}
+
+function addDemoSnapshotIssues(
+  snapshot: {
+    readonly draftProfiles: readonly z.infer<typeof ClientProfileSchema>[]
+    readonly reviewDecisions: readonly DemoStorageReviewDecision[]
+    readonly correctionIntents: readonly unknown[]
+  },
+  context: z.RefinementCtx,
+) {
+  snapshot.draftProfiles.forEach((profile, index) => {
+    if (profile.status !== "draft") {
+      context.addIssue({
+        code: "custom",
+        message:
+          "Public demo storage may only contain editable draft profile copies.",
+        path: ["draftProfiles", index, "status"],
+      })
+    }
+  })
+
+  for (const issue of findForbiddenPersistenceIssues({
+    draftProfiles: snapshot.draftProfiles,
+    reviewDecisions: snapshot.reviewDecisions,
+    correctionIntents: snapshot.correctionIntents,
+  })) {
+    context.addIssue({ code: "custom", message: issue })
+  }
 }
 
 function findUnsafeMetadataIssues(value: unknown, path = "metadata"): string[] {
@@ -461,5 +539,8 @@ export type DemoStorageCorrectionIntent = z.infer<
 >
 export type DemoBrowserStorageSnapshot = z.infer<
   typeof DemoBrowserStorageSnapshotSchema
+>
+export type DemoBrowserStorageSnapshotV1 = z.infer<
+  typeof DemoBrowserStorageSnapshotV1Schema
 >
 export type DemoPersistencePolicy = z.infer<typeof DemoPersistencePolicySchema>

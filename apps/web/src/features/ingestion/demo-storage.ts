@@ -1,5 +1,6 @@
 import {
   createDraftClientProfileVersion,
+  decodeAndMigrateDemoBrowserStorageSnapshot,
   DemoBrowserStorageSnapshotSchema,
   resetDemoBrowserStorageSnapshot,
   type ClientProfile,
@@ -7,7 +8,8 @@ import {
   type ReviewableField,
 } from "@hl7-data-mapper/contracts"
 
-const DEMO_STORAGE_KEY = "hl7-data-mapper:demo-storage:v1"
+export const DEMO_STORAGE_KEY = "hl7-data-mapper:demo-storage:v2"
+export const LEGACY_DEMO_STORAGE_KEY = "hl7-data-mapper:demo-storage:v1"
 export const MAX_DEMO_AUDIT_EVENTS = 250
 
 export type SnapshotLoadResult =
@@ -47,6 +49,9 @@ export const browserDemoSnapshotStore: DemoSnapshotStore = {
 
     try {
       rawSnapshot = window.localStorage.getItem(DEMO_STORAGE_KEY)
+      if (!rawSnapshot) {
+        rawSnapshot = window.localStorage.getItem(LEGACY_DEMO_STORAGE_KEY)
+      }
     } catch (error) {
       return { status: "unavailable", error }
     }
@@ -58,7 +63,7 @@ export const browserDemoSnapshotStore: DemoSnapshotStore = {
     try {
       return {
         status: "loaded",
-        snapshot: DemoBrowserStorageSnapshotSchema.parse(
+        snapshot: decodeAndMigrateDemoBrowserStorageSnapshot(
           JSON.parse(rawSnapshot),
         ),
       }
@@ -170,14 +175,12 @@ export function buildReviewWorkspaceSnapshot({
   const nextReviewDecisions = reviewFields.map((field) => {
     const previous = previousDecisionByFieldId.get(field.id)
     const reasonCode = field.reasonCode ?? null
-    const reviewNote = field.reviewNote ?? null
     const didChange =
       !previous ||
       previous.normalizedPath !== field.normalizedPath ||
       previous.messageFingerprint !== messageFingerprint ||
       previous.reviewStatus !== field.reviewStatus ||
-      (previous.reasonCode ?? null) !== reasonCode ||
-      (previous.reviewNote ?? null) !== reviewNote
+      (previous.reasonCode ?? null) !== reasonCode
 
     return {
       fieldId: field.id,
@@ -185,13 +188,12 @@ export function buildReviewWorkspaceSnapshot({
       messageFingerprint,
       reviewStatus: field.reviewStatus,
       reasonCode,
-      reviewNote,
       updatedAt: didChange ? updatedAt : previous.updatedAt,
     }
   })
 
   return DemoBrowserStorageSnapshotSchema.parse({
-    storageVersion: 1,
+    storageVersion: 2,
     mode: "public_demo",
     draftProfiles: [safeProfile],
     reviewDecisions: nextReviewDecisions,
@@ -213,7 +215,6 @@ export function buildReviewWorkspaceSnapshot({
             ),
           }
         : null
-      const notes = intent.notes ?? null
       const didChange =
         !previous ||
         previous.targetHl7ItemId !== intent.targetHl7ItemId ||
@@ -221,8 +222,7 @@ export function buildReviewWorkspaceSnapshot({
         JSON.stringify(previous.replacementSource ?? null) !==
           JSON.stringify(replacementSource) ||
         JSON.stringify(previous.replacementHl7Item ?? null) !==
-          JSON.stringify(replacementHl7Item) ||
-        (previous.notes ?? null) !== notes
+          JSON.stringify(replacementHl7Item)
 
       return [
         {
@@ -231,7 +231,6 @@ export function buildReviewWorkspaceSnapshot({
           replacementSourcePath,
           replacementSource,
           replacementHl7Item,
-          notes,
           updatedAt: didChange ? updatedAt : previous.updatedAt,
         },
       ]
@@ -274,13 +273,11 @@ function buildReviewDecisionAuditEvents({
   return reviewFields.flatMap((field) => {
     const previous = previousByFieldId.get(field.id)
     const nextReasonCode = field.reasonCode ?? null
-    const nextReviewNote = field.reviewNote ?? null
 
     if (
       !previous ||
       (previous.reviewStatus === field.reviewStatus &&
-        (previous.reasonCode ?? null) === nextReasonCode &&
-        (previous.reviewNote ?? null) === nextReviewNote)
+        (previous.reasonCode ?? null) === nextReasonCode)
     ) {
       return []
     }
@@ -304,7 +301,7 @@ function buildReviewDecisionAuditEvents({
           previousStatus: previous.reviewStatus,
           nextStatus: field.reviewStatus,
           reasonCode: nextReasonCode,
-          noteChanged: (previous.reviewNote ?? null) !== nextReviewNote,
+          noteChanged: Boolean(field.reviewNote),
         },
         createdAt: updatedAt,
       },

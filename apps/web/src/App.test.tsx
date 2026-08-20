@@ -132,11 +132,11 @@ describe("App", () => {
     ).toBeGreaterThan(0)
 
     const storedSnapshot = window.localStorage.getItem(
-      "hl7-data-mapper:demo-storage:v1",
+      "hl7-data-mapper:demo-storage:v2",
     )
 
-    expect(storedSnapshot).toContain(
-      '"reviewNote":"Northstar does not send an MRN in this sample feed."',
+    expect(storedSnapshot).not.toContain(
+      "Northstar does not send an MRN in this sample feed.",
     )
     expect(storedSnapshot).toContain('"eventType":"review_decision_changed"')
     expect(storedSnapshot).not.toContain("MSH|")
@@ -318,7 +318,7 @@ describe("App", () => {
     })
 
     const storedSnapshot = window.localStorage.getItem(
-      "hl7-data-mapper:demo-storage:v1",
+      "hl7-data-mapper:demo-storage:v2",
     )
 
     expect(storedSnapshot).toContain('"path":"PID-2"')
@@ -742,7 +742,7 @@ describe("App", () => {
 
     await waitFor(() => {
       const storedSnapshot = window.localStorage.getItem(
-        "hl7-data-mapper:demo-storage:v1",
+        "hl7-data-mapper:demo-storage:v2",
       )
 
       expect(storedSnapshot).toContain('"draftProfiles"')
@@ -773,7 +773,7 @@ describe("App", () => {
 
     expect(screen.queryByText(/browser storage issue/i)).not.toBeInTheDocument()
     expect(
-      window.localStorage.getItem("hl7-data-mapper:demo-storage:v1"),
+      window.localStorage.getItem("hl7-data-mapper:demo-storage:v2"),
     ).toContain('"reviewStatus":"confirmed"')
   })
 
@@ -814,7 +814,7 @@ describe("App", () => {
 
     await waitFor(() => {
       const storedSnapshot = window.localStorage.getItem(
-        "hl7-data-mapper:demo-storage:v1",
+        "hl7-data-mapper:demo-storage:v2",
       )
 
       expect(storedSnapshot).toContain('"draftProfiles":[]')
