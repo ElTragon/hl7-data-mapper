@@ -20,7 +20,17 @@ function createMemoryStore(
 ) {
   let snapshot = initialSnapshot
   const save = vi.fn(
-    (nextSnapshot: DemoBrowserStorageSnapshot): SnapshotSaveResult => {
+    (
+      nextSnapshot: DemoBrowserStorageSnapshot,
+      options: Parameters<DemoSnapshotStore["save"]>[1] = {},
+    ): SnapshotSaveResult => {
+      if (
+        "expectedSnapshot" in options &&
+        JSON.stringify(snapshot) !== JSON.stringify(options.expectedSnapshot)
+      ) {
+        return { status: "conflict" }
+      }
+
       snapshot = nextSnapshot
       return { status: "saved" }
     },
@@ -148,6 +158,52 @@ describe("use ingestion workflow", () => {
 
     expect(result.current.state).not.toBeNull()
     expect(result.current.storageError).toMatch(/another session/i)
+  })
+
+  it("prevents a stale workflow from overwriting a newer shared snapshot", () => {
+    const memory = createMemoryStore()
+    const firstHook = renderHook(() =>
+      useIngestionWorkflow({ store: memory.store, now: () => FIRST_TIME }),
+    )
+    const secondHook = renderHook(() =>
+      useIngestionWorkflow({ store: memory.store, now: () => SECOND_TIME }),
+    )
+    const parsedMessage = parseHl7Message(sampleHl7Message)
+
+    act(() => firstHook.result.current.startReview(parsedMessage))
+    act(() => secondHook.result.current.startReview(parsedMessage))
+    const firstField = firstHook.result.current.state?.reviewFields[0]
+    const secondField = secondHook.result.current.state?.reviewFields[1]
+    if (!firstField || !secondField) {
+      throw new Error("Expected two review fields")
+    }
+
+    act(() =>
+      secondHook.result.current.updateField(
+        confirmReviewableField(secondField),
+      ),
+    )
+    const newerSnapshot = memory.getSnapshot()
+    const saveCountBeforeConflict = memory.save.mock.calls.length
+
+    act(() =>
+      firstHook.result.current.updateField(confirmReviewableField(firstField)),
+    )
+
+    expect(firstHook.result.current.storageError).toMatch(/another session/i)
+    expect(memory.getSnapshot()).toEqual(newerSnapshot)
+    expect(memory.save).toHaveBeenCalledTimes(saveCountBeforeConflict + 1)
+
+    act(() =>
+      firstHook.result.current.updateField(
+        confirmReviewableField(
+          firstHook.result.current.state?.reviewFields[2] ?? firstField,
+        ),
+      ),
+    )
+
+    expect(memory.save).toHaveBeenCalledTimes(saveCountBeforeConflict + 1)
+    expect(memory.getSnapshot()).toEqual(newerSnapshot)
   })
 
   it("reports a failed reset while rebuilding valid in-memory state", () => {

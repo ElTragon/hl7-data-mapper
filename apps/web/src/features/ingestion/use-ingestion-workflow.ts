@@ -1,6 +1,7 @@
 import { useRef, useState } from "react"
 
 import {
+  resetDemoBrowserStorageSnapshot,
   type GuidedReviewStepId,
   type ReviewableField,
   type SourceReference,
@@ -23,6 +24,12 @@ import {
   updateReviewedField,
   type ReviewWorkflowState,
 } from "./ingestion-workflow"
+import {
+  applyReviewPersistenceResult,
+  beginReviewPersistenceSession,
+  type ReviewPersistenceIssue,
+  type ReviewPersistenceSession,
+} from "./review-persistence-session"
 
 const STORAGE_ERROR_MESSAGE =
   "This review is available for this session, but browser storage could not be accessed safely."
@@ -41,49 +48,50 @@ export function useIngestionWorkflow({
   const [state, setState] = useState<ReviewWorkflowState | null>(null)
   const [storageError, setStorageError] = useState<string | null>(null)
   const stateRef = useRef<ReviewWorkflowState | null>(null)
+  const persistenceSessionRef = useRef<ReviewPersistenceSession | null>(null)
 
   function replaceState(nextState: ReviewWorkflowState | null) {
     stateRef.current = nextState
     setState(nextState)
   }
 
+  function setStorageIssue(issue: ReviewPersistenceIssue | null) {
+    setStorageError(storageIssueMessage(issue))
+  }
+
   function persist(nextState: ReviewWorkflowState, occurredAt: string) {
-    const loadResult = store.load()
-
-    if (loadResult.status === "unavailable") {
-      setStorageError(STORAGE_ERROR_MESSAGE)
-      return
-    }
-    if (loadResult.status === "invalid") {
-      setStorageError(INVALID_STORAGE_MESSAGE)
+    const session = persistenceSessionRef.current
+    if (!session) return
+    if (session.status === "blocked") {
+      setStorageIssue(session.issue)
       return
     }
 
-    const previousSnapshot =
-      loadResult.status === "loaded" ? loadResult.snapshot : null
-    const saveResult = store.save(
-      buildReviewWorkspaceSnapshot({
-        previousSnapshot,
-        profile: nextState.profile,
-        reviewFields: nextState.reviewFields,
-        messageFingerprint: nextState.messageFingerprint,
-        updatedAt: occurredAt,
-      }),
-      { expectedSnapshot: previousSnapshot },
-    )
+    const previousSnapshot = session.baseSnapshot
+    const nextSnapshot = buildReviewWorkspaceSnapshot({
+      previousSnapshot,
+      profile: nextState.profile,
+      reviewFields: nextState.reviewFields,
+      messageFingerprint: nextState.messageFingerprint,
+      updatedAt: occurredAt,
+    })
+    const saveResult = store.save(nextSnapshot, {
+      expectedSnapshot: previousSnapshot,
+    })
+    const transition = applyReviewPersistenceResult({
+      session,
+      savedSnapshot: nextSnapshot,
+      saveResult,
+    })
 
-    setStorageError(
-      saveResult.status === "unavailable"
-        ? STORAGE_ERROR_MESSAGE
-        : saveResult.status === "conflict"
-          ? STORAGE_CONFLICT_MESSAGE
-          : null,
-    )
+    persistenceSessionRef.current = transition.session
+    setStorageIssue(transition.issue)
   }
 
   function startReview(parsedMessage: ParsedHl7Message) {
     const occurredAt = now()
     const loadResult = store.load()
+    const persistenceTransition = beginReviewPersistenceSession(loadResult)
     const nextState = createReviewWorkflow({
       parsedMessage,
       sourceProfile: defaultOmlO21ClientProfile,
@@ -93,35 +101,14 @@ export function useIngestionWorkflow({
     })
 
     replaceState(nextState)
+    persistenceSessionRef.current = persistenceTransition.session
 
-    if (loadResult.status === "unavailable") {
-      setStorageError(STORAGE_ERROR_MESSAGE)
-      return
-    }
-    if (loadResult.status === "invalid") {
-      setStorageError(INVALID_STORAGE_MESSAGE)
+    if (persistenceTransition.session.status === "blocked") {
+      setStorageIssue(persistenceTransition.issue)
       return
     }
 
-    const previousSnapshot =
-      loadResult.status === "loaded" ? loadResult.snapshot : null
-    const saveResult = store.save(
-      buildReviewWorkspaceSnapshot({
-        previousSnapshot,
-        profile: nextState.profile,
-        reviewFields: nextState.reviewFields,
-        messageFingerprint: nextState.messageFingerprint,
-        updatedAt: occurredAt,
-      }),
-      { expectedSnapshot: previousSnapshot },
-    )
-    setStorageError(
-      saveResult.status === "unavailable"
-        ? STORAGE_ERROR_MESSAGE
-        : saveResult.status === "conflict"
-          ? STORAGE_CONFLICT_MESSAGE
-          : null,
-    )
+    persist(nextState, occurredAt)
   }
 
   function commit(
@@ -142,9 +129,18 @@ export function useIngestionWorkflow({
   function reset(parsedMessage: ParsedHl7Message | null) {
     const occurredAt = now()
     const resetResult = store.reset(occurredAt)
-    setStorageError(
-      resetResult.status === "unavailable" ? STORAGE_ERROR_MESSAGE : null,
-    )
+    if (resetResult.status === "saved") {
+      persistenceSessionRef.current = {
+        status: "ready",
+        baseSnapshot: resetDemoBrowserStorageSnapshot(occurredAt),
+      }
+      setStorageIssue(null)
+    } else {
+      const issue =
+        resetResult.status === "conflict" ? "conflict" : "unavailable"
+      persistenceSessionRef.current = { status: "blocked", issue }
+      setStorageIssue(issue)
+    }
 
     if (!parsedMessage || parsedMessage.errors.length > 0) {
       replaceState(null)
@@ -173,6 +169,7 @@ export function useIngestionWorkflow({
     storageError,
     clear: () => {
       replaceState(null)
+      persistenceSessionRef.current = null
       setStorageError(null)
     },
     startReview,
@@ -197,5 +194,18 @@ export function useIngestionWorkflow({
         }),
       ),
     reset,
+  }
+}
+
+function storageIssueMessage(issue: ReviewPersistenceIssue | null) {
+  switch (issue) {
+    case "conflict":
+      return STORAGE_CONFLICT_MESSAGE
+    case "invalid":
+      return INVALID_STORAGE_MESSAGE
+    case "unavailable":
+      return STORAGE_ERROR_MESSAGE
+    case null:
+      return null
   }
 }
