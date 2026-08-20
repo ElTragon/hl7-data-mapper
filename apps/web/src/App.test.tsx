@@ -132,11 +132,11 @@ describe("App", () => {
     ).toBeGreaterThan(0)
 
     const storedSnapshot = window.localStorage.getItem(
-      "hl7-data-mapper:demo-storage:v1",
+      "hl7-data-mapper:demo-storage:v2",
     )
 
-    expect(storedSnapshot).toContain(
-      '"reviewNote":"Northstar does not send an MRN in this sample feed."',
+    expect(storedSnapshot).not.toContain(
+      "Northstar does not send an MRN in this sample feed.",
     )
     expect(storedSnapshot).toContain('"eventType":"review_decision_changed"')
     expect(storedSnapshot).not.toContain("MSH|")
@@ -318,7 +318,7 @@ describe("App", () => {
     })
 
     const storedSnapshot = window.localStorage.getItem(
-      "hl7-data-mapper:demo-storage:v1",
+      "hl7-data-mapper:demo-storage:v2",
     )
 
     expect(storedSnapshot).toContain('"path":"PID-2"')
@@ -742,7 +742,7 @@ describe("App", () => {
 
     await waitFor(() => {
       const storedSnapshot = window.localStorage.getItem(
-        "hl7-data-mapper:demo-storage:v1",
+        "hl7-data-mapper:demo-storage:v2",
       )
 
       expect(storedSnapshot).toContain('"draftProfiles"')
@@ -750,6 +750,58 @@ describe("App", () => {
       expect(storedSnapshot).not.toContain("MSH|")
       expect(storedSnapshot).not.toContain("PID|")
     })
+  })
+
+  it("keeps review usable when browser persistence is unavailable", async () => {
+    const user = userEvent.setup()
+    const setItem = vi
+      .spyOn(Storage.prototype, "setItem")
+      .mockImplementation(() => {
+        throw new DOMException("Storage is full", "QuotaExceededError")
+      })
+
+    render(<App />)
+    await user.click(screen.getByRole("button", { name: /parse message/i }))
+
+    expect(screen.getByText(/browser storage issue/i)).toBeInTheDocument()
+    expect(
+      screen.getAllByRole("button", { name: /^confirm$/i }).length,
+    ).toBeGreaterThan(0)
+
+    setItem.mockRestore()
+    await user.click(getActionButton("Confirm"))
+
+    expect(screen.queryByText(/browser storage issue/i)).not.toBeInTheDocument()
+    expect(
+      window.localStorage.getItem("hl7-data-mapper:demo-storage:v2"),
+    ).toContain('"reviewStatus":"confirmed"')
+  })
+
+  it("does not overwrite storage when the existing snapshot cannot be read", async () => {
+    const user = userEvent.setup()
+    const setItem = vi.spyOn(Storage.prototype, "setItem")
+    vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => {
+      throw new DOMException("Storage is blocked", "SecurityError")
+    })
+
+    render(<App />)
+    await user.click(screen.getByRole("button", { name: /parse message/i }))
+
+    expect(setItem).not.toHaveBeenCalled()
+    expect(screen.getByText(/browser storage issue/i)).toBeInTheDocument()
+  })
+
+  it("preserves an invalid snapshot until the user resets the demo", async () => {
+    const user = userEvent.setup()
+    window.localStorage.setItem("hl7-data-mapper:demo-storage:v1", "not-json")
+
+    render(<App />)
+    await user.click(screen.getByRole("button", { name: /parse message/i }))
+
+    expect(screen.getByText(/stored demo data is invalid/i)).toBeInTheDocument()
+    expect(window.localStorage.getItem("hl7-data-mapper:demo-storage:v1")).toBe(
+      "not-json",
+    )
   })
 
   it("clears browser-stored demo changes when reset is clicked", async () => {
@@ -762,7 +814,7 @@ describe("App", () => {
 
     await waitFor(() => {
       const storedSnapshot = window.localStorage.getItem(
-        "hl7-data-mapper:demo-storage:v1",
+        "hl7-data-mapper:demo-storage:v2",
       )
 
       expect(storedSnapshot).toContain('"draftProfiles":[]')

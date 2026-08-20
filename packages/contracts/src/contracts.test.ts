@@ -13,7 +13,11 @@ import {
   createDraftClientProfileVersion,
   createSourceReference,
   createValidationSummary,
+  decodeAndMigrateDemoBrowserStorageSnapshot,
   DemoBrowserStorageSnapshotSchema,
+  DemoBrowserStorageSnapshotV1Schema,
+  DemoStorageCorrectionIntentSchema,
+  DemoStorageReviewDecisionSchema,
   GUIDED_REVIEW_STEPS,
   hasBlockingValidationErrors,
   Hl7ItemSetSchema,
@@ -865,7 +869,7 @@ describe("persistence contracts", () => {
 
   it("validates a browser-only public demo storage snapshot", () => {
     const snapshot = DemoBrowserStorageSnapshotSchema.parse({
-      storageVersion: 1,
+      storageVersion: 2,
       mode: "public_demo",
       draftProfiles: [demoDraftProfile],
       reviewDecisions: [
@@ -874,7 +878,6 @@ describe("persistence contracts", () => {
           normalizedPath: "patient.name",
           reviewStatus: "confirmed",
           reasonCode: "wrong_source_mapping",
-          reviewNote: "Client sends the middle name in PID-2.1.",
           updatedAt: "2026-07-08T23:50:00-07:00",
         },
       ],
@@ -883,7 +886,6 @@ describe("persistence contracts", () => {
           fieldId: "patient-name",
           targetHl7ItemId: "patient-name",
           replacementSourcePath: "PID-5.1",
-          notes: "Reviewer confirmed the default patient-name source.",
           updatedAt: "2026-07-08T23:51:00-07:00",
         },
       ],
@@ -920,7 +922,7 @@ describe("persistence contracts", () => {
 
     expect(() =>
       DemoBrowserStorageSnapshotSchema.parse({
-        storageVersion: 1,
+        storageVersion: 2,
         mode: "public_demo",
         draftProfiles: [publishedProfile],
         reviewDecisions: [],
@@ -934,7 +936,7 @@ describe("persistence contracts", () => {
   it("rejects browser demo snapshots with raw HL7 in demo audit events", () => {
     expect(() =>
       DemoBrowserStorageSnapshotSchema.parse({
-        storageVersion: 1,
+        storageVersion: 2,
         mode: "public_demo",
         draftProfiles: [],
         reviewDecisions: [],
@@ -955,6 +957,169 @@ describe("persistence contracts", () => {
     ).toThrow()
   })
 
+  it("rejects raw source values in public demo draft profiles", () => {
+    const firstItem = demoDraftProfile.itemSet.items[0]
+    if (!firstItem) throw new Error("Expected a profile item")
+    const profileWithRawSource = {
+      ...demoDraftProfile,
+      itemSet: {
+        ...demoDraftProfile.itemSet,
+        items: [
+          {
+            ...firstItem,
+            sources: firstItem.sources.map((source, index) =>
+              index === 0 ? { ...source, raw: "Lopez^Elena" } : source,
+            ),
+          },
+          ...demoDraftProfile.itemSet.items.slice(1),
+        ],
+      },
+    }
+
+    expect(() =>
+      DemoBrowserStorageSnapshotSchema.parse({
+        storageVersion: 2,
+        mode: "public_demo",
+        draftProfiles: [profileWithRawSource],
+        reviewDecisions: [],
+        correctionIntents: [],
+        demoAuditEvents: [],
+        updatedAt: "2026-07-08T23:57:00-07:00",
+      }),
+    ).toThrow(/not allowed in public demo persistence/)
+  })
+
+  it.each([
+    {
+      field: "review decision notes",
+      snapshot: {
+        draftProfiles: [],
+        reviewDecisions: [
+          {
+            fieldId: "patient-name",
+            normalizedPath: "patient.name",
+            reviewStatus: "incorrect",
+            reviewNote: "PID|1||PRIVATE-PATIENT-ID",
+            updatedAt: "2026-07-08T23:57:00-07:00",
+          },
+        ],
+        correctionIntents: [],
+      },
+    },
+    {
+      field: "correction intent notes",
+      snapshot: {
+        draftProfiles: [],
+        reviewDecisions: [],
+        correctionIntents: [
+          {
+            fieldId: "patient-name",
+            targetHl7ItemId: "patient-name",
+            notes: "PID|1||PRIVATE-PATIENT-ID",
+            updatedAt: "2026-07-08T23:57:00-07:00",
+          },
+        ],
+      },
+    },
+    {
+      field: "nested mapping configuration",
+      snapshot: {
+        draftProfiles: [
+          {
+            ...demoDraftProfile,
+            itemSet: {
+              ...demoDraftProfile.itemSet,
+              items: demoDraftProfile.itemSet.items.map((item, index) =>
+                index === 0
+                  ? {
+                      ...item,
+                      transform: {
+                        name: "unsafe-example",
+                        params: { example: "PID|1||PRIVATE-PATIENT-ID" },
+                      },
+                    }
+                  : item,
+              ),
+            },
+          },
+        ],
+        reviewDecisions: [],
+        correctionIntents: [],
+      },
+    },
+  ])("rejects raw HL7 text in $field", ({ snapshot }) => {
+    expect(() =>
+      DemoBrowserStorageSnapshotV1Schema.parse({
+        storageVersion: 1,
+        mode: "public_demo",
+        demoAuditEvents: [],
+        updatedAt: "2026-07-08T23:57:00-07:00",
+        ...snapshot,
+      }),
+    ).toThrow(/must not contain raw HL7 segment text/)
+  })
+
+  it("accepts structured HL7 source paths without treating them as raw text", () => {
+    expect(() =>
+      DemoBrowserStorageSnapshotV1Schema.parse({
+        storageVersion: 1,
+        mode: "public_demo",
+        draftProfiles: [],
+        reviewDecisions: [
+          {
+            fieldId: "patient-name",
+            normalizedPath: "patient.name",
+            reviewStatus: "confirmed",
+            reviewNote: "Use PID-5.1 for this client.",
+            updatedAt: "2026-07-08T23:57:00-07:00",
+          },
+        ],
+        correctionIntents: [],
+        demoAuditEvents: [],
+        updatedAt: "2026-07-08T23:57:00-07:00",
+      }),
+    ).not.toThrow()
+  })
+
+  it("exports storage item schemas that compose with the current snapshot", () => {
+    const reviewDecision = DemoStorageReviewDecisionSchema.parse({
+      fieldId: "patient-name",
+      normalizedPath: "patient.name",
+      reviewStatus: "confirmed",
+      updatedAt: "2026-07-08T23:57:00-07:00",
+    })
+    const correctionIntent = DemoStorageCorrectionIntentSchema.parse({
+      fieldId: "patient-name",
+      targetHl7ItemId: "patient-name",
+      replacementSourcePath: "PID-5.1",
+      updatedAt: "2026-07-08T23:57:00-07:00",
+    })
+
+    expect(() =>
+      DemoBrowserStorageSnapshotSchema.parse({
+        storageVersion: 2,
+        mode: "public_demo",
+        draftProfiles: [],
+        reviewDecisions: [reviewDecision],
+        correctionIntents: [correctionIntent],
+        demoAuditEvents: [],
+        updatedAt: "2026-07-08T23:57:00-07:00",
+      }),
+    ).not.toThrow()
+    expect(() =>
+      DemoStorageReviewDecisionSchema.parse({
+        ...reviewDecision,
+        reviewNote: "Must remain in memory.",
+      }),
+    ).toThrow()
+    expect(() =>
+      DemoStorageCorrectionIntentSchema.parse({
+        ...correctionIntent,
+        notes: "Must remain in memory.",
+      }),
+    ).toThrow()
+  })
+
   it("creates and resets an empty browser demo storage snapshot", () => {
     const emptySnapshot = createEmptyDemoBrowserStorageSnapshot(
       "2026-07-08T23:58:00-07:00",
@@ -964,7 +1129,7 @@ describe("persistence contracts", () => {
     )
 
     expect(emptySnapshot).toMatchObject({
-      storageVersion: 1,
+      storageVersion: 2,
       mode: "public_demo",
       draftProfiles: [],
       reviewDecisions: [],
@@ -973,6 +1138,46 @@ describe("persistence contracts", () => {
     })
     expect(resetSnapshot.updatedAt).toBe("2026-07-08T23:59:00-07:00")
     expect(resetSnapshot.draftProfiles).toEqual([])
+  })
+
+  it("migrates version 1 browser snapshots without mutating the input", () => {
+    const versionOneSnapshot = {
+      storageVersion: 1 as const,
+      mode: "public_demo" as const,
+      draftProfiles: [demoDraftProfile],
+      reviewDecisions: [
+        {
+          fieldId: "patient-name",
+          normalizedPath: "patient.name",
+          reviewStatus: "confirmed" as const,
+          reviewNote: "Legacy note that must not migrate.",
+          updatedAt: "2026-07-08T23:59:00-07:00",
+        },
+      ],
+      correctionIntents: [
+        {
+          fieldId: "patient-name",
+          targetHl7ItemId: "patient-name",
+          replacementSourcePath: "PID-5.1",
+          notes: "Use the configured source.",
+          updatedAt: "2026-07-08T23:59:00-07:00",
+        },
+      ],
+      demoAuditEvents: [],
+      updatedAt: "2026-07-08T23:59:00-07:00",
+    }
+    const original = structuredClone(versionOneSnapshot)
+
+    const migrated =
+      decodeAndMigrateDemoBrowserStorageSnapshot(versionOneSnapshot)
+
+    expect(migrated.storageVersion).toBe(2)
+    expect(migrated.correctionIntents[0]).toMatchObject({
+      replacementSourcePath: "PID-5.1",
+    })
+    expect(migrated.reviewDecisions[0]).not.toHaveProperty("reviewNote")
+    expect(migrated.correctionIntents[0]).not.toHaveProperty("notes")
+    expect(versionOneSnapshot).toEqual(original)
   })
 })
 

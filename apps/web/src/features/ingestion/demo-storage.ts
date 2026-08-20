@@ -1,6 +1,6 @@
 import {
   createDraftClientProfileVersion,
-  createEmptyDemoBrowserStorageSnapshot,
+  decodeAndMigrateDemoBrowserStorageSnapshot,
   DemoBrowserStorageSnapshotSchema,
   resetDemoBrowserStorageSnapshot,
   type ClientProfile,
@@ -8,7 +8,118 @@ import {
   type ReviewableField,
 } from "@hl7-data-mapper/contracts"
 
-const DEMO_STORAGE_KEY = "hl7-data-mapper:demo-storage:v1"
+export const DEMO_STORAGE_KEY = "hl7-data-mapper:demo-storage:v2"
+export const LEGACY_DEMO_STORAGE_KEY = "hl7-data-mapper:demo-storage:v1"
+export const MAX_DEMO_AUDIT_EVENTS = 250
+
+export type SnapshotLoadResult =
+  | { readonly status: "loaded"; readonly snapshot: DemoBrowserStorageSnapshot }
+  | { readonly status: "empty" }
+  | { readonly status: "invalid" }
+  | { readonly status: "unavailable"; readonly error: unknown }
+
+export type SnapshotSaveResult =
+  | { readonly status: "saved" }
+  | { readonly status: "saved_with_cleanup_warning"; readonly error: unknown }
+  | { readonly status: "conflict" }
+  | { readonly status: "unavailable"; readonly error: unknown }
+
+export type SnapshotSaveOptions = {
+  readonly expectedSnapshot?: DemoBrowserStorageSnapshot | null
+}
+
+export interface DemoSnapshotStore {
+  load(): SnapshotLoadResult
+  save(
+    snapshot: DemoBrowserStorageSnapshot,
+    options?: SnapshotSaveOptions,
+  ): SnapshotSaveResult
+  reset(updatedAt: string): SnapshotSaveResult
+}
+
+export const browserDemoSnapshotStore: DemoSnapshotStore = {
+  load() {
+    if (typeof window === "undefined") {
+      return {
+        status: "unavailable",
+        error: new Error("Window is unavailable."),
+      }
+    }
+
+    let rawSnapshot: string | null
+
+    try {
+      rawSnapshot = window.localStorage.getItem(DEMO_STORAGE_KEY)
+      if (rawSnapshot === null) {
+        rawSnapshot = window.localStorage.getItem(LEGACY_DEMO_STORAGE_KEY)
+      }
+    } catch (error) {
+      return { status: "unavailable", error }
+    }
+
+    if (rawSnapshot === null) {
+      return { status: "empty" }
+    }
+
+    try {
+      return {
+        status: "loaded",
+        snapshot: decodeAndMigrateDemoBrowserStorageSnapshot(
+          JSON.parse(rawSnapshot),
+        ),
+      }
+    } catch {
+      return { status: "invalid" }
+    }
+  },
+  save(snapshot, options = {}) {
+    if (typeof window === "undefined") {
+      return {
+        status: "unavailable",
+        error: new Error("Window is unavailable."),
+      }
+    }
+
+    try {
+      const safeSnapshot = DemoBrowserStorageSnapshotSchema.parse(snapshot)
+
+      if ("expectedSnapshot" in options) {
+        const current = browserDemoSnapshotStore.load()
+        if (current.status === "unavailable") return current
+        if (current.status === "invalid") return { status: "conflict" }
+
+        const currentSnapshot =
+          current.status === "loaded" ? current.snapshot : null
+        if (
+          JSON.stringify(currentSnapshot) !==
+          JSON.stringify(options.expectedSnapshot)
+        ) {
+          return { status: "conflict" }
+        }
+      }
+
+      window.localStorage.setItem(
+        DEMO_STORAGE_KEY,
+        JSON.stringify(safeSnapshot),
+      )
+
+      try {
+        window.localStorage.removeItem(LEGACY_DEMO_STORAGE_KEY)
+      } catch (error) {
+        return { status: "saved_with_cleanup_warning", error }
+      }
+
+      return { status: "saved" }
+    } catch (error) {
+      return { status: "unavailable", error }
+    }
+  },
+  reset(updatedAt) {
+    return browserDemoSnapshotStore.save(
+      resetDemoBrowserStorageSnapshot(updatedAt),
+    )
+  },
+}
 
 export function createDemoDraftProfile({
   sourceProfile,
@@ -34,74 +145,101 @@ export function createDemoDraftProfile({
   }
 }
 
-export function loadDemoSnapshot(): DemoBrowserStorageSnapshot | null {
-  if (typeof window === "undefined") {
-    return null
-  }
-
-  const rawSnapshot = window.localStorage.getItem(DEMO_STORAGE_KEY)
-
-  if (!rawSnapshot) {
-    return null
-  }
-
-  try {
-    return DemoBrowserStorageSnapshotSchema.parse(JSON.parse(rawSnapshot))
-  } catch {
-    return null
-  }
-}
-
-export function saveDemoSnapshot(snapshot: DemoBrowserStorageSnapshot): void {
-  if (typeof window === "undefined") {
-    return
-  }
-
-  const safeSnapshot = DemoBrowserStorageSnapshotSchema.parse(snapshot)
-  window.localStorage.setItem(DEMO_STORAGE_KEY, JSON.stringify(safeSnapshot))
-}
-
-export function saveReviewWorkspaceSnapshot({
+export function buildReviewWorkspaceSnapshot({
+  previousSnapshot,
   profile,
   reviewFields,
   messageFingerprint,
   updatedAt,
 }: {
+  readonly previousSnapshot: DemoBrowserStorageSnapshot | null
   readonly profile: ClientProfile
   readonly reviewFields: readonly ReviewableField[]
   readonly messageFingerprint: string
   readonly updatedAt: string
-}): void {
-  const previousSnapshot = loadDemoSnapshot()
-  const nextReviewDecisions = reviewFields.map((field) => ({
-    fieldId: field.id,
-    normalizedPath: field.normalizedPath,
-    messageFingerprint,
-    reviewStatus: field.reviewStatus,
-    reasonCode: field.reasonCode ?? null,
-    reviewNote: field.reviewNote ?? null,
-    updatedAt,
-  }))
+}): DemoBrowserStorageSnapshot {
+  const safeProfile = {
+    ...profile,
+    itemSet: {
+      ...profile.itemSet,
+      items: profile.itemSet.items.map((item) => ({
+        ...item,
+        sources: item.sources.map(withoutRawSourceValue),
+      })),
+    },
+  }
+  const previousDecisionByFieldId = new Map(
+    previousSnapshot?.reviewDecisions.map((decision) => [
+      decision.fieldId,
+      decision,
+    ]) ?? [],
+  )
+  const previousIntentByFieldId = new Map(
+    previousSnapshot?.correctionIntents.map((intent) => [
+      intent.fieldId,
+      intent,
+    ]) ?? [],
+  )
+  const nextReviewDecisions = reviewFields.map((field) => {
+    const previous = previousDecisionByFieldId.get(field.id)
+    const reasonCode = field.reasonCode ?? null
+    const didChange =
+      !previous ||
+      previous.normalizedPath !== field.normalizedPath ||
+      previous.messageFingerprint !== messageFingerprint ||
+      previous.reviewStatus !== field.reviewStatus ||
+      (previous.reasonCode ?? null) !== reasonCode
 
-  saveDemoSnapshot({
-    storageVersion: 1,
+    return {
+      fieldId: field.id,
+      normalizedPath: field.normalizedPath,
+      messageFingerprint,
+      reviewStatus: field.reviewStatus,
+      reasonCode,
+      updatedAt: didChange ? updatedAt : previous.updatedAt,
+    }
+  })
+
+  return DemoBrowserStorageSnapshotSchema.parse({
+    storageVersion: 2,
     mode: "public_demo",
-    draftProfiles: [profile],
+    draftProfiles: [safeProfile],
     reviewDecisions: nextReviewDecisions,
     correctionIntents: reviewFields.flatMap((field) => {
       const intent = field.correctionIntent
 
-      if (!intent) {
-        return []
-      }
+      if (!intent) return []
+
+      const previous = previousIntentByFieldId.get(field.id)
+      const replacementSourcePath = intent.replacementSource?.path ?? null
+      const replacementSource = intent.replacementSource
+        ? withoutRawSourceValue(intent.replacementSource)
+        : null
+      const replacementHl7Item = intent.replacementHl7Item
+        ? {
+            ...intent.replacementHl7Item,
+            sources: intent.replacementHl7Item.sources.map(
+              withoutRawSourceValue,
+            ),
+          }
+        : null
+      const didChange =
+        !previous ||
+        previous.targetHl7ItemId !== intent.targetHl7ItemId ||
+        (previous.replacementSourcePath ?? null) !== replacementSourcePath ||
+        JSON.stringify(previous.replacementSource ?? null) !==
+          JSON.stringify(replacementSource) ||
+        JSON.stringify(previous.replacementHl7Item ?? null) !==
+          JSON.stringify(replacementHl7Item)
 
       return [
         {
           fieldId: field.id,
           targetHl7ItemId: intent.targetHl7ItemId,
-          replacementSourcePath: intent.replacementSource?.path ?? null,
-          notes: intent.notes ?? null,
-          updatedAt,
+          replacementSourcePath,
+          replacementSource,
+          replacementHl7Item,
+          updatedAt: didChange ? updatedAt : previous.updatedAt,
         },
       ]
     }),
@@ -113,7 +251,7 @@ export function saveReviewWorkspaceSnapshot({
         profile,
         updatedAt,
       }),
-    ],
+    ].slice(-MAX_DEMO_AUDIT_EVENTS),
     updatedAt,
   })
 }
@@ -143,20 +281,23 @@ function buildReviewDecisionAuditEvents({
   return reviewFields.flatMap((field) => {
     const previous = previousByFieldId.get(field.id)
     const nextReasonCode = field.reasonCode ?? null
-    const nextReviewNote = field.reviewNote ?? null
 
     if (
       !previous ||
       (previous.reviewStatus === field.reviewStatus &&
-        (previous.reasonCode ?? null) === nextReasonCode &&
-        (previous.reviewNote ?? null) === nextReviewNote)
+        (previous.reasonCode ?? null) === nextReasonCode)
     ) {
       return []
     }
 
+    const eventIdPrefix = `review-${updatedAt}-${field.id}`
+    const occurrence = previousSnapshot.demoAuditEvents.filter((event) =>
+      event.eventId.startsWith(eventIdPrefix),
+    ).length
+
     return [
       {
-        eventId: `review-${updatedAt}-${field.id}`,
+        eventId: `${eventIdPrefix}-${occurrence}`,
         eventType: "review_decision_changed" as const,
         actorType: "demo_user" as const,
         clientId: profile.clientId,
@@ -168,7 +309,7 @@ function buildReviewDecisionAuditEvents({
           previousStatus: previous.reviewStatus,
           nextStatus: field.reviewStatus,
           reasonCode: nextReasonCode,
-          noteChanged: (previous.reviewNote ?? null) !== nextReviewNote,
+          notePresent: Boolean(field.reviewNote),
         },
         createdAt: updatedAt,
       },
@@ -176,24 +317,10 @@ function buildReviewDecisionAuditEvents({
   })
 }
 
-export function getStoredDraftProfile(
-  sourceProfile: ClientProfile,
-): ClientProfile | null {
-  const snapshot = loadDemoSnapshot()
-
-  return (
-    snapshot?.draftProfiles.find(
-      (profile) => profile.profileId === sourceProfile.profileId,
-    ) ?? null
-  )
-}
-
-export function resetStoredDemoSnapshot(updatedAt: string): void {
-  saveDemoSnapshot(resetDemoBrowserStorageSnapshot(updatedAt))
-}
-
-export function createEmptyStoredDemoSnapshot(
-  updatedAt: string,
-): DemoBrowserStorageSnapshot {
-  return createEmptyDemoBrowserStorageSnapshot(updatedAt)
+function withoutRawSourceValue<T extends { readonly raw?: unknown }>(
+  source: T,
+): Omit<T, "raw"> {
+  const { raw, ...safeSource } = source
+  void raw
+  return safeSource
 }

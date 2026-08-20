@@ -1,28 +1,15 @@
 import { useMemo, useState, type ChangeEvent } from "react"
 import { AlertCircle, CheckCircle2, Download, FileText } from "lucide-react"
 
-import {
-  type ClientProfile,
-  type GuidedReviewStepId,
-  type ReviewableField,
-  type SourceReference,
-} from "@hl7-data-mapper/contracts"
+import { type ReviewableField } from "@hl7-data-mapper/contracts"
 import {
   parseHl7Message,
   type ParsedHl7Message,
 } from "@hl7-data-mapper/hl7-parser"
 import {
-  applyReviewCorrectionAndRerunMapping,
-  buildReviewableFields,
-  defaultOmlO21ClientProfile,
-  executeMapping,
   confirmReviewableField,
   markReviewableFieldIncorrect,
   markReviewableFieldUnavailable,
-  selectCompositeSourceForReviewableField,
-  selectAlternateSourceForReviewableField,
-  type MappingExecutionResult,
-  type PersonNameSourceRole,
 } from "@hl7-data-mapper/mapping-engine"
 import {
   buildReportPackage,
@@ -30,20 +17,12 @@ import {
 } from "@hl7-data-mapper/report-generator"
 
 import sampleHl7Message from "../../../../../fixtures/valid/oml-o21-basic.hl7?raw"
-import {
-  createDemoDraftProfile,
-  getStoredDraftProfile,
-  loadDemoSnapshot,
-  resetStoredDemoSnapshot,
-  saveReviewWorkspaceSnapshot,
-} from "./demo-storage"
 import { GuidedReviewWorkspace } from "./guided-review/guided-review-workspace"
-import { fingerprintMessage } from "./message-fingerprint"
 import {
   buildReportReviewDecisions,
   composeCurrentNormalizedOutput,
 } from "./review-report"
-import { hasMeaningfulValue } from "./review-value"
+import { useIngestionWorkflow } from "./use-ingestion-workflow"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -68,14 +47,13 @@ import { Textarea } from "@/components/ui/textarea"
 
 const MAX_FILE_SIZE_BYTES = 1024 * 1024
 const REPORT_APP_VERSION = "0.1.0"
-const DEFAULT_REVIEW_STEP: GuidedReviewStepId = "patient"
-
 function getSegmentCount(parsed: ParsedHl7Message, segmentName: string) {
   return parsed.segments.filter((segment) => segment.name === segmentName)
     .length
 }
 
 export function Hl7IngestionPanel() {
+  const reviewWorkflow = useIngestionWorkflow()
   const [rawMessage, setRawMessage] = useState(sampleHl7Message.trim())
   const [parsedMessage, setParsedMessage] = useState<ParsedHl7Message | null>(
     null,
@@ -85,19 +63,9 @@ export function Hl7IngestionPanel() {
     "idle" | "generating" | "downloaded"
   >("idle")
   const [reportError, setReportError] = useState<string | null>(null)
-  const [workflowState, setWorkflowState] = useState<
-    "input" | "parsed" | "review"
-  >("input")
-  const [activeProfile, setActiveProfile] = useState<ClientProfile | null>(null)
-  const [mappingResult, setMappingResult] =
-    useState<MappingExecutionResult | null>(null)
-  const [reviewFields, setReviewFields] = useState<ReviewableField[]>([])
-  const [activeStepId, setActiveStepId] =
-    useState<GuidedReviewStepId>(DEFAULT_REVIEW_STEP)
-  const [selectedFieldId, setSelectedFieldId] = useState<string | null>(null)
-  const [messageFingerprint, setMessageFingerprint] = useState<string | null>(
-    null,
-  )
+  const activeProfile = reviewWorkflow.state?.profile ?? null
+  const mappingResult = reviewWorkflow.state?.mappingResult ?? null
+  const reviewFields = reviewWorkflow.state?.reviewFields ?? []
 
   const summary = useMemo(() => {
     if (!parsedMessage) {
@@ -130,7 +98,7 @@ export function Hl7IngestionPanel() {
     setInputError(null)
     setReportStatus("idle")
     setReportError(null)
-    clearReviewState()
+    reviewWorkflow.clear()
   }
 
   function handleLoadSample() {
@@ -139,7 +107,7 @@ export function Hl7IngestionPanel() {
     setInputError(null)
     setReportStatus("idle")
     setReportError(null)
-    clearReviewState()
+    reviewWorkflow.clear()
   }
 
   function handleParse() {
@@ -149,17 +117,12 @@ export function Hl7IngestionPanel() {
     setInputError(null)
     setReportStatus("idle")
     setReportError(null)
-    setWorkflowState("parsed")
-
     if (parsed.errors.length > 0) {
-      setActiveProfile(null)
-      setMappingResult(null)
-      setReviewFields([])
-      setSelectedFieldId(null)
+      reviewWorkflow.clear()
       return
     }
 
-    startReview(parsed)
+    reviewWorkflow.startReview(parsed)
   }
 
   async function handleDownloadReport() {
@@ -177,10 +140,11 @@ export function Hl7IngestionPanel() {
     setReportError(null)
 
     try {
+      const generatedAt = new Date().toISOString()
       const reportPackage = await buildReportPackage(
         {
           appVersion: REPORT_APP_VERSION,
-          generatedAt: new Date().toISOString(),
+          generatedAt,
           clientId: activeProfile.clientId,
           profileId: activeProfile.profileId,
           profileVersion: activeProfile.profileVersion,
@@ -194,7 +158,10 @@ export function Hl7IngestionPanel() {
             mappingResult,
           }),
           hl7Items: activeProfile.itemSet.items,
-          reviewDecisions: buildReportReviewDecisions(reviewFields),
+          reviewDecisions: buildReportReviewDecisions(
+            reviewFields,
+            generatedAt,
+          ),
           validationResults: mappingResult.validation,
         },
         async ({ content }) => sha256Hex(content),
@@ -219,175 +186,14 @@ export function Hl7IngestionPanel() {
     }
   }
 
-  function clearReviewState() {
-    setWorkflowState("input")
-    setActiveProfile(null)
-    setMappingResult(null)
-    setReviewFields([])
-    setActiveStepId(DEFAULT_REVIEW_STEP)
-    setSelectedFieldId(null)
-    setMessageFingerprint(null)
-  }
-
-  function startReview(parsed: ParsedHl7Message) {
-    const now = new Date().toISOString()
-    const nextMessageFingerprint = fingerprintMessage(parsed.normalizedText)
-    const draftProfile =
-      getStoredDraftProfile(defaultOmlO21ClientProfile) ??
-      createDemoDraftProfile({
-        sourceProfile: defaultOmlO21ClientProfile,
-        createdAt: now,
-      })
-    const nextMappingResult = executeMapping({
-      parsedMessage: parsed,
-      profile: draftProfile,
-    })
-    const storedFields = buildReviewableFields({
-      mappingResult: nextMappingResult,
-      profile: draftProfile,
-    })
-    const nextFields = applyStoredReviewStatuses(
-      storedFields,
-      nextMessageFingerprint,
-    )
-
-    setActiveProfile(draftProfile)
-    setMappingResult(nextMappingResult)
-    setReviewFields(nextFields)
-    setWorkflowState("review")
-    setActiveStepId(DEFAULT_REVIEW_STEP)
-    setSelectedFieldId(
-      nextFields.find((field) => field.stepId === DEFAULT_REVIEW_STEP)?.id ??
-        nextFields[0]?.id ??
-        null,
-    )
-    setMessageFingerprint(nextMessageFingerprint)
-    saveReviewWorkspaceSnapshot({
-      profile: draftProfile,
-      reviewFields: nextFields,
-      messageFingerprint: nextMessageFingerprint,
-      updatedAt: now,
-    })
-  }
-
-  function persistReviewState({
-    profile = activeProfile,
-    fields,
-  }: {
-    readonly profile?: ClientProfile | null
-    readonly fields: readonly ReviewableField[]
-  }) {
-    if (!profile || !messageFingerprint) {
-      return
-    }
-
-    saveReviewWorkspaceSnapshot({
-      profile,
-      reviewFields: fields,
-      messageFingerprint,
-      updatedAt: new Date().toISOString(),
-    })
-  }
-
   function updateReviewField(updatedField: ReviewableField) {
-    const nextFields = reviewFields.map((field) =>
-      field.id === updatedField.id ? updatedField : field,
-    )
-
-    setReviewFields(nextFields)
-    setSelectedFieldId(updatedField.id)
-    persistReviewState({ fields: nextFields })
-  }
-
-  function handleActiveStepChange(stepId: GuidedReviewStepId) {
-    setActiveStepId(stepId)
-    setSelectedFieldId(
-      reviewFields.find((field) => field.stepId === stepId)?.id ?? null,
-    )
-  }
-
-  function handleApplySource(
-    field: ReviewableField,
-    source: SourceReference,
-    sourceRole?: PersonNameSourceRole,
-  ) {
-    if (!parsedMessage || !activeProfile) {
-      return
-    }
-
-    const replacementSource = {
-      ...source,
-      raw: undefined,
-    }
-    const correctedField = sourceRole
-      ? selectCompositeSourceForReviewableField({
-          profile: activeProfile,
-          field,
-          replacementSource,
-          sourceRole,
-          rawSegment: source.raw,
-          notes: `Use ${replacementSource.path} as ${sourceRole} for ${field.normalizedPath}.`,
-        })
-      : selectAlternateSourceForReviewableField({
-          field,
-          replacementSource,
-          rawSegment: source.raw,
-          notes: `Use ${replacementSource.path} for ${field.normalizedPath}.`,
-        })
-    const result = applyReviewCorrectionAndRerunMapping({
-      parsedMessage,
-      profile: activeProfile,
-      field: correctedField,
-      updatedAt: new Date().toISOString(),
-    })
-    const nextFields = mergeReviewFields({
-      previousFields: reviewFields,
-      nextFields: result.reviewFields,
-      overrideFieldId: field.id,
-      overrideStatus: "mapping_changed",
-      correctionIntent: correctedField.correctionIntent ?? null,
-    })
-
-    setActiveProfile(result.profile)
-    setMappingResult(result.mappingResult)
-    setReviewFields(nextFields)
-    setSelectedFieldId(field.id)
-    persistReviewState({
-      profile: result.profile,
-      fields: nextFields,
-    })
+    reviewWorkflow.updateField(updatedField)
   }
 
   function handleResetDemo() {
-    resetStoredDemoSnapshot(new Date().toISOString())
     setReportStatus("idle")
     setReportError(null)
-
-    if (parsedMessage && parsedMessage.errors.length === 0) {
-      const draftProfile = createDemoDraftProfile({
-        sourceProfile: defaultOmlO21ClientProfile,
-        createdAt: new Date().toISOString(),
-      })
-      const nextMappingResult = executeMapping({
-        parsedMessage,
-        profile: draftProfile,
-      })
-      const nextFields = buildReviewableFields({
-        mappingResult: nextMappingResult,
-        profile: draftProfile,
-      })
-
-      setActiveProfile(draftProfile)
-      setMappingResult(nextMappingResult)
-      setReviewFields(nextFields)
-      setActiveStepId(DEFAULT_REVIEW_STEP)
-      setSelectedFieldId(
-        nextFields.find((field) => field.stepId === DEFAULT_REVIEW_STEP)?.id ??
-          nextFields[0]?.id ??
-          null,
-      )
-      setMessageFingerprint(fingerprintMessage(parsedMessage.normalizedText))
-    }
+    reviewWorkflow.reset(parsedMessage)
   }
 
   return (
@@ -447,6 +253,7 @@ export function Hl7IngestionPanel() {
                   onChange={(event) => {
                     setRawMessage(event.target.value)
                     setParsedMessage(null)
+                    reviewWorkflow.clear()
                     setInputError(null)
                     setReportStatus("idle")
                     setReportError(null)
@@ -564,22 +371,35 @@ export function Hl7IngestionPanel() {
                   </CardContent>
                 </Card>
 
-                {workflowState === "parsed" &&
-                parsedMessage.errors.length === 0 ? (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => setWorkflowState("review")}
-                  >
-                    Open guided review
-                  </Button>
-                ) : null}
-
                 {reportError ? (
                   <Alert variant="destructive">
                     <AlertCircle />
                     <AlertTitle>Report issue</AlertTitle>
                     <AlertDescription>{reportError}</AlertDescription>
+                  </Alert>
+                ) : null}
+
+                {reviewWorkflow.storageError ? (
+                  <Alert variant="destructive">
+                    <AlertCircle />
+                    <AlertTitle>Browser storage issue</AlertTitle>
+                    <AlertDescription className="flex flex-col items-start gap-3">
+                      {reviewWorkflow.storageError}
+                      {reviewWorkflow.storageIssue === "conflict" &&
+                      parsedMessage &&
+                      parsedMessage.errors.length === 0 ? (
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          onClick={() =>
+                            reviewWorkflow.reloadReview(parsedMessage)
+                          }
+                        >
+                          Reload stored review
+                        </Button>
+                      ) : null}
+                    </AlertDescription>
                   </Alert>
                 ) : null}
 
@@ -625,18 +445,18 @@ export function Hl7IngestionPanel() {
       {parsedMessage &&
       activeProfile &&
       mappingResult &&
-      workflowState === "review" ? (
+      reviewWorkflow.state ? (
         <div className="mx-auto mt-8 max-w-7xl px-5 lg:px-8">
           <GuidedReviewWorkspace
             parsedMessage={parsedMessage}
             profile={activeProfile}
             mappingResult={mappingResult}
             reviewFields={reviewFields}
-            activeStepId={activeStepId}
-            selectedFieldId={selectedFieldId}
+            activeStepId={reviewWorkflow.state.activeStepId}
+            selectedFieldId={reviewWorkflow.state.selectedFieldId}
             reportStatus={reportStatus}
-            onActiveStepChange={handleActiveStepChange}
-            onSelectedFieldChange={setSelectedFieldId}
+            onActiveStepChange={reviewWorkflow.changeStep}
+            onSelectedFieldChange={reviewWorkflow.selectField}
             onConfirmField={(field) =>
               updateReviewField(confirmReviewableField(field))
             }
@@ -654,7 +474,7 @@ export function Hl7IngestionPanel() {
 
               updateReviewField(updatedField)
             }}
-            onApplySource={handleApplySource}
+            onApplySource={reviewWorkflow.applySource}
             onDownloadReport={() => void handleDownloadReport()}
             onResetDemo={handleResetDemo}
           />
@@ -662,106 +482,6 @@ export function Hl7IngestionPanel() {
       ) : null}
     </section>
   )
-}
-
-function applyStoredReviewStatuses(
-  fields: ReviewableField[],
-  messageFingerprint: string,
-) {
-  const snapshot = loadDemoSnapshot()
-
-  if (!snapshot) {
-    return fields
-  }
-
-  const decisionByFieldId = new Map(
-    snapshot.reviewDecisions.map((decision) => [decision.fieldId, decision]),
-  )
-
-  return fields.map((field) => {
-    const decision = decisionByFieldId.get(field.id)
-
-    if (
-      !decision ||
-      decision.messageFingerprint !== messageFingerprint ||
-      decision.normalizedPath !== field.normalizedPath
-    ) {
-      return field
-    }
-
-    if (
-      decision.reviewStatus === "unavailable" &&
-      hasCollectedFieldValue(field)
-    ) {
-      return field
-    }
-
-    return {
-      ...field,
-      reviewStatus: decision.reviewStatus,
-      reasonCode: decision.reasonCode ?? null,
-      reviewNote: decision.reviewNote ?? null,
-    }
-  })
-}
-
-function mergeReviewFields({
-  previousFields,
-  nextFields,
-  overrideFieldId,
-  overrideStatus,
-  correctionIntent,
-}: {
-  readonly previousFields: readonly ReviewableField[]
-  readonly nextFields: readonly ReviewableField[]
-  readonly overrideFieldId: string
-  readonly overrideStatus: ReviewableField["reviewStatus"]
-  readonly correctionIntent: ReviewableField["correctionIntent"] | null
-}) {
-  const previousFieldById = new Map(
-    previousFields.map((field) => [field.id, field]),
-  )
-
-  return nextFields.map((field) => {
-    if (field.id === overrideFieldId) {
-      if (overrideStatus === "unavailable" && hasCollectedFieldValue(field)) {
-        return field
-      }
-
-      return {
-        ...field,
-        reviewStatus: overrideStatus,
-        correctionIntent,
-        reasonCode: previousFieldById.get(field.id)?.reasonCode ?? null,
-        reviewNote: previousFieldById.get(field.id)?.reviewNote ?? null,
-      }
-    }
-
-    const previousField = previousFieldById.get(field.id)
-
-    if (!previousField || previousField.reviewStatus === "unreviewed") {
-      return field
-    }
-
-    if (
-      previousField.reviewStatus === "unavailable" &&
-      hasCollectedFieldValue(field)
-    ) {
-      return field
-    }
-
-    return {
-      ...field,
-      reviewStatus: previousField.reviewStatus,
-      correctionIntent: previousField.correctionIntent,
-      reasonCode: previousField.reasonCode ?? null,
-      reviewNote: previousField.reviewNote ?? null,
-    }
-  })
-}
-
-function hasCollectedFieldValue(field: ReviewableField): boolean {
-  return field.section !== "exceptions" && hasMeaningfulValue(field.value)
 }
 
 async function sha256Hex(value: string) {
