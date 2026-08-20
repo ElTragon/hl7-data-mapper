@@ -18,11 +18,19 @@ export type SnapshotLoadResult =
 
 export type SnapshotSaveResult =
   | { readonly status: "saved" }
+  | { readonly status: "conflict" }
   | { readonly status: "unavailable"; readonly error: unknown }
+
+export type SnapshotSaveOptions = {
+  readonly expectedUpdatedAt?: string | null
+}
 
 export interface DemoSnapshotStore {
   load(): SnapshotLoadResult
-  save(snapshot: DemoBrowserStorageSnapshot): SnapshotSaveResult
+  save(
+    snapshot: DemoBrowserStorageSnapshot,
+    options?: SnapshotSaveOptions,
+  ): SnapshotSaveResult
   reset(updatedAt: string): SnapshotSaveResult
 }
 
@@ -58,7 +66,7 @@ export const browserDemoSnapshotStore: DemoSnapshotStore = {
       return { status: "invalid" }
     }
   },
-  save(snapshot) {
+  save(snapshot, options = {}) {
     if (typeof window === "undefined") {
       return {
         status: "unavailable",
@@ -68,6 +76,19 @@ export const browserDemoSnapshotStore: DemoSnapshotStore = {
 
     try {
       const safeSnapshot = DemoBrowserStorageSnapshotSchema.parse(snapshot)
+
+      if ("expectedUpdatedAt" in options) {
+        const current = browserDemoSnapshotStore.load()
+        if (current.status === "unavailable") return current
+        if (current.status === "invalid") return { status: "conflict" }
+
+        const currentUpdatedAt =
+          current.status === "loaded" ? current.snapshot.updatedAt : null
+        if (currentUpdatedAt !== options.expectedUpdatedAt) {
+          return { status: "conflict" }
+        }
+      }
+
       window.localStorage.setItem(
         DEMO_STORAGE_KEY,
         JSON.stringify(safeSnapshot),
@@ -78,7 +99,9 @@ export const browserDemoSnapshotStore: DemoSnapshotStore = {
     }
   },
   reset(updatedAt) {
-    return this.save(resetDemoBrowserStorageSnapshot(updatedAt))
+    return browserDemoSnapshotStore.save(
+      resetDemoBrowserStorageSnapshot(updatedAt),
+    )
   },
 }
 

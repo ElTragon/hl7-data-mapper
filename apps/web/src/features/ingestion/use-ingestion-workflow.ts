@@ -28,6 +28,8 @@ const STORAGE_ERROR_MESSAGE =
   "This review is available for this session, but browser storage could not be accessed safely."
 const INVALID_STORAGE_MESSAGE =
   "Stored demo data is invalid and was preserved. Reset the demo to replace it."
+const STORAGE_CONFLICT_MESSAGE =
+  "Stored demo data changed in another session. Reload the message before saving again."
 
 export function useIngestionWorkflow({
   store = browserDemoSnapshotStore,
@@ -67,10 +69,15 @@ export function useIngestionWorkflow({
         messageFingerprint: nextState.messageFingerprint,
         updatedAt: occurredAt,
       }),
+      { expectedUpdatedAt: previousSnapshot?.updatedAt ?? null },
     )
 
     setStorageError(
-      saveResult.status === "unavailable" ? STORAGE_ERROR_MESSAGE : null,
+      saveResult.status === "unavailable"
+        ? STORAGE_ERROR_MESSAGE
+        : saveResult.status === "conflict"
+          ? STORAGE_CONFLICT_MESSAGE
+          : null,
     )
   }
 
@@ -96,18 +103,24 @@ export function useIngestionWorkflow({
       return
     }
 
+    const previousSnapshot =
+      loadResult.status === "loaded" ? loadResult.snapshot : null
     const saveResult = store.save(
       buildReviewWorkspaceSnapshot({
-        previousSnapshot:
-          loadResult.status === "loaded" ? loadResult.snapshot : null,
+        previousSnapshot,
         profile: nextState.profile,
         reviewFields: nextState.reviewFields,
         messageFingerprint: nextState.messageFingerprint,
         updatedAt: occurredAt,
       }),
+      { expectedUpdatedAt: previousSnapshot?.updatedAt ?? null },
     )
     setStorageError(
-      saveResult.status === "unavailable" ? STORAGE_ERROR_MESSAGE : null,
+      saveResult.status === "unavailable"
+        ? STORAGE_ERROR_MESSAGE
+        : saveResult.status === "conflict"
+          ? STORAGE_CONFLICT_MESSAGE
+          : null,
     )
   }
 

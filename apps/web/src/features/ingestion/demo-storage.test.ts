@@ -205,4 +205,35 @@ describe("demo storage", () => {
     })
     setItem.mockRestore()
   })
+
+  it("rejects a stale writer without replacing the current snapshot", () => {
+    const { profile, reviewFields } = createWorkspace()
+    const firstSnapshot = buildReviewWorkspaceSnapshot({
+      previousSnapshot: null,
+      profile,
+      reviewFields,
+      messageFingerprint: MESSAGE_FINGERPRINT,
+      updatedAt: OCCURRED_AT,
+    })
+    expect(
+      browserDemoSnapshotStore.save(firstSnapshot, {
+        expectedUpdatedAt: null,
+      }),
+    ).toEqual({ status: "saved" })
+
+    const currentSnapshot = {
+      ...firstSnapshot,
+      updatedAt: "2026-08-19T12:01:00.000Z",
+    }
+    expect(browserDemoSnapshotStore.save(currentSnapshot)).toEqual({
+      status: "saved",
+    })
+
+    expect(
+      browserDemoSnapshotStore.save(firstSnapshot, {
+        expectedUpdatedAt: OCCURRED_AT,
+      }),
+    ).toEqual({ status: "conflict" })
+    expect(loadDemoSnapshot()?.updatedAt).toBe(currentSnapshot.updatedAt)
+  })
 })
