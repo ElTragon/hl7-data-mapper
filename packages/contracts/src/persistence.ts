@@ -266,7 +266,7 @@ export const AuditEventRecordSchema = z
   })
   .strict()
 
-export const DemoStorageReviewDecisionSchema = z
+const DemoStorageReviewDecisionV1Schema = z
   .object({
     fieldId: z.string().min(1),
     normalizedPath: z.string().min(1),
@@ -288,7 +288,7 @@ const PersistedCorrectionHl7ItemSchema = Hl7ItemSchema.safeExtend({
   sources: z.array(PersistedSourceReferenceSchema).default([]),
 })
 
-export const DemoStorageCorrectionIntentSchema = z
+const DemoStorageCorrectionIntentWithNotesSchema = z
   .object({
     fieldId: z.string().min(1),
     targetHl7ItemId: z.string().min(1),
@@ -310,22 +310,23 @@ const DemoStorageCorrectionIntentV1Schema = z
   })
   .strict()
 
-const DemoStorageReviewDecisionV2Schema = DemoStorageReviewDecisionSchema.omit({
-  reviewNote: true,
-}).strict()
-const DemoStorageCorrectionIntentV2Schema =
-  DemoStorageCorrectionIntentSchema.omit({ notes: true }).strict()
+export const DemoStorageReviewDecisionSchema =
+  DemoStorageReviewDecisionV1Schema.omit({
+    reviewNote: true,
+  }).strict()
+export const DemoStorageCorrectionIntentSchema =
+  DemoStorageCorrectionIntentWithNotesSchema.omit({ notes: true }).strict()
 
 export const DemoBrowserStorageSnapshotV1Schema = z
   .object({
     storageVersion: z.literal(1),
     mode: z.literal("public_demo"),
     draftProfiles: z.array(ClientProfileSchema).default([]),
-    reviewDecisions: z.array(DemoStorageReviewDecisionSchema).default([]),
+    reviewDecisions: z.array(DemoStorageReviewDecisionV1Schema).default([]),
     correctionIntents: z
       .array(
         z.union([
-          DemoStorageCorrectionIntentSchema,
+          DemoStorageCorrectionIntentWithNotesSchema,
           DemoStorageCorrectionIntentV1Schema,
         ]),
       )
@@ -341,8 +342,8 @@ export const DemoBrowserStorageSnapshotSchema = z
     storageVersion: z.literal(2),
     mode: z.literal("public_demo"),
     draftProfiles: z.array(ClientProfileSchema).default([]),
-    reviewDecisions: z.array(DemoStorageReviewDecisionV2Schema).default([]),
-    correctionIntents: z.array(DemoStorageCorrectionIntentV2Schema).default([]),
+    reviewDecisions: z.array(DemoStorageReviewDecisionSchema).default([]),
+    correctionIntents: z.array(DemoStorageCorrectionIntentSchema).default([]),
     demoAuditEvents: z.array(AuditEventSchema).default([]),
     updatedAt: z.string().min(1),
   })

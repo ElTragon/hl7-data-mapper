@@ -16,6 +16,8 @@ import {
   decodeAndMigrateDemoBrowserStorageSnapshot,
   DemoBrowserStorageSnapshotSchema,
   DemoBrowserStorageSnapshotV1Schema,
+  DemoStorageCorrectionIntentSchema,
+  DemoStorageReviewDecisionSchema,
   GUIDED_REVIEW_STEPS,
   hasBlockingValidationErrors,
   Hl7ItemSetSchema,
@@ -1079,6 +1081,45 @@ describe("persistence contracts", () => {
     ).not.toThrow()
   })
 
+  it("exports storage item schemas that compose with the current snapshot", () => {
+    const reviewDecision = DemoStorageReviewDecisionSchema.parse({
+      fieldId: "patient-name",
+      normalizedPath: "patient.name",
+      reviewStatus: "confirmed",
+      updatedAt: "2026-07-08T23:57:00-07:00",
+    })
+    const correctionIntent = DemoStorageCorrectionIntentSchema.parse({
+      fieldId: "patient-name",
+      targetHl7ItemId: "patient-name",
+      replacementSourcePath: "PID-5.1",
+      updatedAt: "2026-07-08T23:57:00-07:00",
+    })
+
+    expect(() =>
+      DemoBrowserStorageSnapshotSchema.parse({
+        storageVersion: 2,
+        mode: "public_demo",
+        draftProfiles: [],
+        reviewDecisions: [reviewDecision],
+        correctionIntents: [correctionIntent],
+        demoAuditEvents: [],
+        updatedAt: "2026-07-08T23:57:00-07:00",
+      }),
+    ).not.toThrow()
+    expect(() =>
+      DemoStorageReviewDecisionSchema.parse({
+        ...reviewDecision,
+        reviewNote: "Must remain in memory.",
+      }),
+    ).toThrow()
+    expect(() =>
+      DemoStorageCorrectionIntentSchema.parse({
+        ...correctionIntent,
+        notes: "Must remain in memory.",
+      }),
+    ).toThrow()
+  })
+
   it("creates and resets an empty browser demo storage snapshot", () => {
     const emptySnapshot = createEmptyDemoBrowserStorageSnapshot(
       "2026-07-08T23:58:00-07:00",
@@ -1104,7 +1145,15 @@ describe("persistence contracts", () => {
       storageVersion: 1 as const,
       mode: "public_demo" as const,
       draftProfiles: [demoDraftProfile],
-      reviewDecisions: [],
+      reviewDecisions: [
+        {
+          fieldId: "patient-name",
+          normalizedPath: "patient.name",
+          reviewStatus: "confirmed" as const,
+          reviewNote: "Legacy note that must not migrate.",
+          updatedAt: "2026-07-08T23:59:00-07:00",
+        },
+      ],
       correctionIntents: [
         {
           fieldId: "patient-name",
@@ -1126,6 +1175,8 @@ describe("persistence contracts", () => {
     expect(migrated.correctionIntents[0]).toMatchObject({
       replacementSourcePath: "PID-5.1",
     })
+    expect(migrated.reviewDecisions[0]).not.toHaveProperty("reviewNote")
+    expect(migrated.correctionIntents[0]).not.toHaveProperty("notes")
     expect(versionOneSnapshot).toEqual(original)
   })
 })
