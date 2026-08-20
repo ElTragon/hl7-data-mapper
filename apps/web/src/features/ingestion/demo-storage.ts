@@ -309,7 +309,7 @@ function buildReviewDecisionAuditEvents({
           previousStatus: previous.reviewStatus,
           nextStatus: field.reviewStatus,
           reasonCode: nextReasonCode,
-          noteChanged: Boolean(field.reviewNote),
+          notePresent: Boolean(field.reviewNote),
         },
         createdAt: updatedAt,
       },

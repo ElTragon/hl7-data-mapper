@@ -5,6 +5,7 @@ import {
   defaultOmlO21ClientProfile,
   executeMapping,
   markReviewableFieldIncorrect,
+  markReviewableFieldUnavailable,
 } from "@hl7-data-mapper/mapping-engine"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
@@ -249,9 +250,54 @@ describe("demo storage", () => {
         fieldId: field.id,
         previousStatus: "unreviewed",
         nextStatus: "incorrect",
-        noteChanged: true,
+        notePresent: true,
       },
     })
+  })
+
+  it("records note presence without claiming an unchanged note changed", () => {
+    const { profile, reviewFields } = createWorkspace()
+    const field = reviewFields[0]
+    if (!field) throw new Error("Expected a reviewable field")
+    const initial = buildReviewWorkspaceSnapshot({
+      previousSnapshot: null,
+      profile,
+      reviewFields,
+      messageFingerprint: MESSAGE_FINGERPRINT,
+      updatedAt: OCCURRED_AT,
+    })
+    const incorrectField = markReviewableFieldIncorrect(field, {
+      reasonCode: "wrong_source_mapping",
+      reviewNote: "Use the client-specific source.",
+    })
+    const incorrect = buildReviewWorkspaceSnapshot({
+      previousSnapshot: initial,
+      profile,
+      reviewFields: [incorrectField, ...reviewFields.slice(1)],
+      messageFingerprint: MESSAGE_FINGERPRINT,
+      updatedAt: "2026-08-19T12:01:00.000Z",
+    })
+    const unavailable = buildReviewWorkspaceSnapshot({
+      previousSnapshot: incorrect,
+      profile,
+      reviewFields: [
+        markReviewableFieldUnavailable(incorrectField, {
+          reasonCode: "wrong_source_mapping",
+          reviewNote: "Use the client-specific source.",
+        }),
+        ...reviewFields.slice(1),
+      ],
+      messageFingerprint: MESSAGE_FINGERPRINT,
+      updatedAt: "2026-08-19T12:02:00.000Z",
+    })
+    const metadata = unavailable.demoAuditEvents.find(
+      (event) =>
+        event.createdAt === "2026-08-19T12:02:00.000Z" &&
+        event.metadata.fieldId === field.id,
+    )?.metadata
+
+    expect(metadata).toMatchObject({ notePresent: true })
+    expect(metadata).not.toHaveProperty("noteChanged")
   })
 
   it("does not append audit events when decisions are unchanged", () => {
