@@ -189,4 +189,31 @@ describe("ingestion workflow", () => {
     })
     expect(repersisted.correctionIntents).toEqual(snapshot.correctionIntents)
   })
+
+  it("ignores a stored draft from an incompatible base profile version", () => {
+    const state = createState()
+    const snapshot = buildReviewWorkspaceSnapshot({
+      previousSnapshot: null,
+      profile: {
+        ...state.profile,
+        basedOnProfileVersion: 999,
+        updatedAt: "2026-08-19T11:00:00.000Z",
+      },
+      reviewFields: state.reviewFields,
+      messageFingerprint: state.messageFingerprint,
+      updatedAt: "2026-08-19T11:00:00.000Z",
+    })
+    const occurredAt = "2026-08-19T13:00:00.000Z"
+    const restored = createReviewWorkflow({
+      parsedMessage: state.parsedMessage,
+      sourceProfile: defaultOmlO21ClientProfile,
+      storedSnapshot: snapshot,
+      occurredAt,
+    })
+
+    expect(restored.profile.basedOnProfileVersion).toBe(
+      defaultOmlO21ClientProfile.profileVersion,
+    )
+    expect(restored.profile.updatedAt).toBe(occurredAt)
+  })
 })

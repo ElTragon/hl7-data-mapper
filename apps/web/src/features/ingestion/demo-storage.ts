@@ -1,6 +1,5 @@
 import {
   createDraftClientProfileVersion,
-  createEmptyDemoBrowserStorageSnapshot,
   DemoBrowserStorageSnapshotSchema,
   resetDemoBrowserStorageSnapshot,
   type ClientProfile,
@@ -23,7 +22,7 @@ export type SnapshotSaveResult =
   | { readonly status: "unavailable"; readonly error: unknown }
 
 export type SnapshotSaveOptions = {
-  readonly expectedUpdatedAt?: string | null
+  readonly expectedSnapshot?: DemoBrowserStorageSnapshot | null
 }
 
 export interface DemoSnapshotStore {
@@ -78,14 +77,17 @@ export const browserDemoSnapshotStore: DemoSnapshotStore = {
     try {
       const safeSnapshot = DemoBrowserStorageSnapshotSchema.parse(snapshot)
 
-      if ("expectedUpdatedAt" in options) {
+      if ("expectedSnapshot" in options) {
         const current = browserDemoSnapshotStore.load()
         if (current.status === "unavailable") return current
         if (current.status === "invalid") return { status: "conflict" }
 
-        const currentUpdatedAt =
-          current.status === "loaded" ? current.snapshot.updatedAt : null
-        if (currentUpdatedAt !== options.expectedUpdatedAt) {
+        const currentSnapshot =
+          current.status === "loaded" ? current.snapshot : null
+        if (
+          JSON.stringify(currentSnapshot) !==
+          JSON.stringify(options.expectedSnapshot)
+        ) {
           return { status: "conflict" }
         }
       }
@@ -128,15 +130,6 @@ export function createDemoDraftProfile({
     archivedAt: undefined,
     updatedAt: createdAt,
   }
-}
-
-export function loadDemoSnapshot(): DemoBrowserStorageSnapshot | null {
-  const result = browserDemoSnapshotStore.load()
-  return result.status === "loaded" ? result.snapshot : null
-}
-
-export function saveDemoSnapshot(snapshot: DemoBrowserStorageSnapshot): void {
-  browserDemoSnapshotStore.save(snapshot)
 }
 
 export function buildReviewWorkspaceSnapshot({
@@ -256,30 +249,6 @@ export function buildReviewWorkspaceSnapshot({
   })
 }
 
-export function saveReviewWorkspaceSnapshot({
-  profile,
-  reviewFields,
-  messageFingerprint,
-  updatedAt,
-}: {
-  readonly profile: ClientProfile
-  readonly reviewFields: readonly ReviewableField[]
-  readonly messageFingerprint: string
-  readonly updatedAt: string
-}): void {
-  const previousSnapshot = loadDemoSnapshot()
-
-  saveDemoSnapshot(
-    buildReviewWorkspaceSnapshot({
-      previousSnapshot,
-      profile,
-      reviewFields,
-      messageFingerprint,
-      updatedAt,
-    }),
-  )
-}
-
 function buildReviewDecisionAuditEvents({
   previousSnapshot,
   reviewFields,
@@ -349,26 +318,4 @@ function withoutRawSourceValue<T extends { readonly raw?: unknown }>(
   const { raw, ...safeSource } = source
   void raw
   return safeSource
-}
-
-export function getStoredDraftProfile(
-  sourceProfile: ClientProfile,
-): ClientProfile | null {
-  const snapshot = loadDemoSnapshot()
-
-  return (
-    snapshot?.draftProfiles.find(
-      (profile) => profile.profileId === sourceProfile.profileId,
-    ) ?? null
-  )
-}
-
-export function resetStoredDemoSnapshot(updatedAt: string): void {
-  browserDemoSnapshotStore.reset(updatedAt)
-}
-
-export function createEmptyStoredDemoSnapshot(
-  updatedAt: string,
-): DemoBrowserStorageSnapshot {
-  return createEmptyDemoBrowserStorageSnapshot(updatedAt)
 }

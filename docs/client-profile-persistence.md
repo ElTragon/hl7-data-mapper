@@ -471,6 +471,20 @@ Built-in profiles stay in application code as read-only examples. If a reviewer
 changes a built-in profile, the app should create a draft browser copy instead
 of editing the built-in profile directly.
 
+Browser writes compare the complete previously loaded snapshot as a best-effort
+optimistic revision. A stale tab must not overwrite a newer valid snapshot; it
+keeps its in-memory review and asks the reviewer to reload. Because
+`localStorage` has no atomic compare-and-swap operation, this detects stale
+writers but is not a substitute for transactional server persistence.
+
+An unavailable read must never be treated as empty storage, and an invalid
+snapshot is preserved until the reviewer explicitly resets the demo. Failed
+writes leave the current in-memory review usable and may be retried by a later
+review action.
+
+Temporary demo audit history retains the newest 250 events. Event identifiers
+remain unique when multiple actions share the same millisecond timestamp.
+
 ## Public demo reset behavior
 
 Reset should clear:

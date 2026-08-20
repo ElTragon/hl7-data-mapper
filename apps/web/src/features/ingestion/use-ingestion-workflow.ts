@@ -69,7 +69,7 @@ export function useIngestionWorkflow({
         messageFingerprint: nextState.messageFingerprint,
         updatedAt: occurredAt,
       }),
-      { expectedUpdatedAt: previousSnapshot?.updatedAt ?? null },
+      { expectedSnapshot: previousSnapshot },
     )
 
     setStorageError(
@@ -113,7 +113,7 @@ export function useIngestionWorkflow({
         messageFingerprint: nextState.messageFingerprint,
         updatedAt: occurredAt,
       }),
-      { expectedUpdatedAt: previousSnapshot?.updatedAt ?? null },
+      { expectedSnapshot: previousSnapshot },
     )
     setStorageError(
       saveResult.status === "unavailable"

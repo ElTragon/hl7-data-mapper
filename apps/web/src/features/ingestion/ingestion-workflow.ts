@@ -46,7 +46,12 @@ export function createReviewWorkflow({
 }): ReviewWorkflowState {
   const profile =
     storedSnapshot?.draftProfiles.find(
-      (candidate) => candidate.profileId === sourceProfile.profileId,
+      (candidate) =>
+        candidate.clientId === sourceProfile.clientId &&
+        candidate.profileId === sourceProfile.profileId &&
+        (sourceProfile.status === "published"
+          ? candidate.basedOnProfileVersion === sourceProfile.profileVersion
+          : candidate.profileVersion === sourceProfile.profileVersion),
     ) ?? createDemoDraftProfile({ sourceProfile, createdAt: occurredAt })
   const mappingResult = executeMapping({ parsedMessage, profile })
   const messageFingerprint = fingerprintMessage(parsedMessage.normalizedText)

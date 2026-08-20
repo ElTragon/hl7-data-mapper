@@ -13,14 +13,41 @@ import {
   browserDemoSnapshotStore,
   buildReviewWorkspaceSnapshot,
   createDemoDraftProfile,
-  loadDemoSnapshot,
   MAX_DEMO_AUDIT_EVENTS,
-  saveReviewWorkspaceSnapshot,
 } from "./demo-storage"
 
 const STORAGE_KEY = "hl7-data-mapper:demo-storage:v1"
 const OCCURRED_AT = "2026-08-19T12:00:00.000Z"
 const MESSAGE_FINGERPRINT = "0123456789abcdef"
+
+function loadDemoSnapshot() {
+  const result = browserDemoSnapshotStore.load()
+  return result.status === "loaded" ? result.snapshot : null
+}
+
+function saveReviewWorkspaceSnapshot({
+  profile,
+  reviewFields,
+  messageFingerprint,
+  updatedAt,
+}: Omit<
+  Parameters<typeof buildReviewWorkspaceSnapshot>[0],
+  "previousSnapshot"
+>) {
+  const loadResult = browserDemoSnapshotStore.load()
+  const previousSnapshot =
+    loadResult.status === "loaded" ? loadResult.snapshot : null
+
+  return browserDemoSnapshotStore.save(
+    buildReviewWorkspaceSnapshot({
+      previousSnapshot,
+      profile,
+      reviewFields,
+      messageFingerprint,
+      updatedAt,
+    }),
+  )
+}
 
 function createWorkspace() {
   const parsedMessage = parseHl7Message(sampleHl7Message)
@@ -222,13 +249,17 @@ describe("demo storage", () => {
     })
     expect(
       browserDemoSnapshotStore.save(firstSnapshot, {
-        expectedUpdatedAt: null,
+        expectedSnapshot: null,
       }),
     ).toEqual({ status: "saved" })
 
     const currentSnapshot = {
       ...firstSnapshot,
-      updatedAt: "2026-08-19T12:01:00.000Z",
+      reviewDecisions: firstSnapshot.reviewDecisions.map((decision, index) =>
+        index === 0
+          ? { ...decision, reviewStatus: "confirmed" as const }
+          : decision,
+      ),
     }
     expect(browserDemoSnapshotStore.save(currentSnapshot)).toEqual({
       status: "saved",
@@ -236,10 +267,12 @@ describe("demo storage", () => {
 
     expect(
       browserDemoSnapshotStore.save(firstSnapshot, {
-        expectedUpdatedAt: OCCURRED_AT,
+        expectedSnapshot: firstSnapshot,
       }),
     ).toEqual({ status: "conflict" })
-    expect(loadDemoSnapshot()?.updatedAt).toBe(currentSnapshot.updatedAt)
+    expect(loadDemoSnapshot()?.reviewDecisions[0]?.reviewStatus).toBe(
+      "confirmed",
+    )
   })
 
   it("creates unique audit IDs when timestamps collide", () => {
