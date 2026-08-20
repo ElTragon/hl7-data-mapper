@@ -6,6 +6,7 @@ import { describe, expect, it } from "vitest"
 
 import {
   applyReviewPersistenceResult,
+  applyReviewPersistenceResetResult,
   beginReviewPersistenceSession,
   type ReviewPersistenceSession,
 } from "./review-persistence-session"
@@ -92,5 +93,39 @@ describe("review persistence session", () => {
         saveResult: { status: "unavailable", error: new Error("full") },
       }),
     ).toEqual({ session, issue: "unavailable" })
+  })
+
+  it.each([
+    {
+      resetResult: { status: "saved" } as const,
+      expected: {
+        session: { status: "ready", baseSnapshot: NEXT_SNAPSHOT },
+        issue: null,
+      },
+    },
+    {
+      resetResult: { status: "conflict" } as const,
+      expected: {
+        session: { status: "blocked", issue: "conflict" },
+        issue: "conflict",
+      },
+    },
+    {
+      resetResult: {
+        status: "unavailable",
+        error: new Error("blocked"),
+      } as const,
+      expected: {
+        session: { status: "blocked", issue: "unavailable" },
+        issue: "unavailable",
+      },
+    },
+  ])("models reset result $resetResult.status", ({ resetResult, expected }) => {
+    expect(
+      applyReviewPersistenceResetResult({
+        resetSnapshot: NEXT_SNAPSHOT,
+        resetResult,
+      }),
+    ).toEqual(expected)
   })
 })

@@ -69,15 +69,20 @@ describe("demo storage", () => {
     window.localStorage.clear()
   })
 
-  it("treats malformed and schema-invalid snapshots as absent", () => {
-    window.localStorage.setItem(DEMO_STORAGE_KEY, "not-json")
-    expect(loadDemoSnapshot()).toBeNull()
+  it.each(["", "not-json"])(
+    "preserves malformed snapshot value %j as invalid",
+    (storedValue) => {
+      window.localStorage.setItem(DEMO_STORAGE_KEY, storedValue)
+      expect(browserDemoSnapshotStore.load()).toEqual({ status: "invalid" })
+    },
+  )
 
+  it("preserves schema-invalid snapshots as invalid", () => {
     window.localStorage.setItem(
       DEMO_STORAGE_KEY,
       JSON.stringify({ storageVersion: 99 }),
     )
-    expect(loadDemoSnapshot()).toBeNull()
+    expect(browserDemoSnapshotStore.load()).toEqual({ status: "invalid" })
   })
 
   it("loads version 1 snapshots and writes subsequent changes as version 2", () => {

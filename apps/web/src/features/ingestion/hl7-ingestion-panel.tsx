@@ -383,8 +383,22 @@ export function Hl7IngestionPanel() {
                   <Alert variant="destructive">
                     <AlertCircle />
                     <AlertTitle>Browser storage issue</AlertTitle>
-                    <AlertDescription>
+                    <AlertDescription className="flex flex-col items-start gap-3">
                       {reviewWorkflow.storageError}
+                      {reviewWorkflow.storageIssue === "conflict" &&
+                      parsedMessage &&
+                      parsedMessage.errors.length === 0 ? (
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          onClick={() =>
+                            reviewWorkflow.reloadReview(parsedMessage)
+                          }
+                        >
+                          Reload stored review
+                        </Button>
+                      ) : null}
                     </AlertDescription>
                   </Alert>
                 ) : null}

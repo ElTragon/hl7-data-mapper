@@ -26,6 +26,7 @@ import {
 } from "./ingestion-workflow"
 import {
   applyReviewPersistenceResult,
+  applyReviewPersistenceResetResult,
   beginReviewPersistenceSession,
   type ReviewPersistenceIssue,
   type ReviewPersistenceSession,
@@ -46,7 +47,8 @@ export function useIngestionWorkflow({
   readonly now?: () => string
 } = {}) {
   const [state, setState] = useState<ReviewWorkflowState | null>(null)
-  const [storageError, setStorageError] = useState<string | null>(null)
+  const [storageIssue, setStorageIssueState] =
+    useState<ReviewPersistenceIssue | null>(null)
   const stateRef = useRef<ReviewWorkflowState | null>(null)
   const persistenceSessionRef = useRef<ReviewPersistenceSession | null>(null)
 
@@ -56,7 +58,7 @@ export function useIngestionWorkflow({
   }
 
   function setStorageIssue(issue: ReviewPersistenceIssue | null) {
-    setStorageError(storageIssueMessage(issue))
+    setStorageIssueState(issue)
   }
 
   function persist(nextState: ReviewWorkflowState, occurredAt: string) {
@@ -88,7 +90,10 @@ export function useIngestionWorkflow({
     setStorageIssue(transition.issue)
   }
 
-  function startReview(parsedMessage: ParsedHl7Message) {
+  function initializeReview(
+    parsedMessage: ParsedHl7Message,
+    persistInitialSnapshot: boolean,
+  ) {
     const occurredAt = now()
     const loadResult = store.load()
     const persistenceTransition = beginReviewPersistenceSession(loadResult)
@@ -108,7 +113,16 @@ export function useIngestionWorkflow({
       return
     }
 
-    persist(nextState, occurredAt)
+    setStorageIssue(null)
+    if (persistInitialSnapshot) persist(nextState, occurredAt)
+  }
+
+  function startReview(parsedMessage: ParsedHl7Message) {
+    initializeReview(parsedMessage, true)
+  }
+
+  function reloadReview(parsedMessage: ParsedHl7Message) {
+    initializeReview(parsedMessage, false)
   }
 
   function commit(
@@ -128,19 +142,14 @@ export function useIngestionWorkflow({
 
   function reset(parsedMessage: ParsedHl7Message | null) {
     const occurredAt = now()
+    const resetSnapshot = resetDemoBrowserStorageSnapshot(occurredAt)
     const resetResult = store.reset(occurredAt)
-    if (resetResult.status === "saved") {
-      persistenceSessionRef.current = {
-        status: "ready",
-        baseSnapshot: resetDemoBrowserStorageSnapshot(occurredAt),
-      }
-      setStorageIssue(null)
-    } else {
-      const issue =
-        resetResult.status === "conflict" ? "conflict" : "unavailable"
-      persistenceSessionRef.current = { status: "blocked", issue }
-      setStorageIssue(issue)
-    }
+    const transition = applyReviewPersistenceResetResult({
+      resetSnapshot,
+      resetResult,
+    })
+    persistenceSessionRef.current = transition.session
+    setStorageIssue(transition.issue)
 
     if (!parsedMessage || parsedMessage.errors.length > 0) {
       replaceState(null)
@@ -166,13 +175,15 @@ export function useIngestionWorkflow({
 
   return {
     state,
-    storageError,
+    storageIssue,
+    storageError: storageIssueMessage(storageIssue),
     clear: () => {
       replaceState(null)
       persistenceSessionRef.current = null
-      setStorageError(null)
+      setStorageIssue(null)
     },
     startReview,
+    reloadReview,
     updateField: (field: ReviewableField) =>
       commit((current) => updateReviewedField(current, field)),
     changeStep: (stepId: GuidedReviewStepId) =>

@@ -49,14 +49,14 @@ export const browserDemoSnapshotStore: DemoSnapshotStore = {
 
     try {
       rawSnapshot = window.localStorage.getItem(DEMO_STORAGE_KEY)
-      if (!rawSnapshot) {
+      if (rawSnapshot === null) {
         rawSnapshot = window.localStorage.getItem(LEGACY_DEMO_STORAGE_KEY)
       }
     } catch (error) {
       return { status: "unavailable", error }
     }
 
-    if (!rawSnapshot) {
+    if (rawSnapshot === null) {
       return { status: "empty" }
     }
 

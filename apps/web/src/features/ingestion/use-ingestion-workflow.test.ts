@@ -204,6 +204,29 @@ describe("use ingestion workflow", () => {
 
     expect(memory.save).toHaveBeenCalledTimes(saveCountBeforeConflict + 1)
     expect(memory.getSnapshot()).toEqual(newerSnapshot)
+
+    act(() => firstHook.result.current.reloadReview(parsedMessage))
+
+    expect(firstHook.result.current.storageError).toBeNull()
+    expect(firstHook.result.current.state?.reviewFields[1]?.reviewStatus).toBe(
+      "confirmed",
+    )
+    expect(memory.save).toHaveBeenCalledTimes(saveCountBeforeConflict + 1)
+
+    const reloadedFirstField = firstHook.result.current.state?.reviewFields[0]
+    if (!reloadedFirstField) throw new Error("Expected the first review field")
+    act(() =>
+      firstHook.result.current.updateField(
+        confirmReviewableField(reloadedFirstField),
+      ),
+    )
+
+    expect(memory.getSnapshot()?.reviewDecisions[0]?.reviewStatus).toBe(
+      "confirmed",
+    )
+    expect(memory.getSnapshot()?.reviewDecisions[1]?.reviewStatus).toBe(
+      "confirmed",
+    )
   })
 
   it("reports a failed reset while rebuilding valid in-memory state", () => {
@@ -222,5 +245,24 @@ describe("use ingestion workflow", () => {
 
     expect(result.current.state).not.toBeNull()
     expect(result.current.storageError).not.toBeNull()
+  })
+
+  it("reports reset conflicts and blocks later writes until reload", () => {
+    const memory = createMemoryStore()
+    const parsedMessage = parseHl7Message(sampleHl7Message)
+    const { result } = renderHook(() =>
+      useIngestionWorkflow({ store: memory.store, now: () => FIRST_TIME }),
+    )
+    act(() => result.current.startReview(parsedMessage))
+    memory.store.reset = () => ({ status: "conflict" })
+    memory.save.mockClear()
+
+    act(() => result.current.reset(parsedMessage))
+    const field = result.current.state?.reviewFields[0]
+    if (!field) throw new Error("Expected a review field")
+    act(() => result.current.updateField(confirmReviewableField(field)))
+
+    expect(result.current.storageError).toMatch(/another session/i)
+    expect(memory.save).not.toHaveBeenCalled()
   })
 })

@@ -450,6 +450,10 @@ database.
 The shared contract is `DemoBrowserStorageSnapshotSchema` in
 `packages/contracts/src/persistence.ts`.
 
+The current browser format is version 2. Version 1 snapshots are decoded through
+a pure migration, while new writes use a separate version 2 key. Once version 2
+exists, later writes from an older version 1 tab are ignored by the current app.
+
 The browser snapshot may store:
 
 - editable draft profile copies created during the demo;
@@ -457,6 +461,11 @@ The browser snapshot may store:
 - correction intents, such as "use `PID-5.1` for this field";
 - temporary safe demo audit events; and
 - the snapshot update timestamp.
+
+Free-text review and correction notes remain available to the active in-memory
+review and generated report, but are not written to browser storage. Persisted
+decisions use structured statuses, reason codes, source paths, and correction
+configuration so arbitrary pasted PHI cannot enter the snapshot through notes.
 
 The browser snapshot must not store:
 
@@ -471,9 +480,11 @@ Built-in profiles stay in application code as read-only examples. If a reviewer
 changes a built-in profile, the app should create a draft browser copy instead
 of editing the built-in profile directly.
 
-Browser writes compare the complete previously loaded snapshot as a best-effort
-optimistic revision. A stale tab must not overwrite a newer valid snapshot; it
-keeps its in-memory review and asks the reviewer to reload. Because
+Each review session retains the complete snapshot on which it was created and
+uses that snapshot as a best-effort optimistic revision for every write. The
+base advances only after a successful save. A stale tab must not overwrite a
+newer valid snapshot; it keeps its in-memory review, blocks later writes, and
+asks the reviewer to explicitly reload the stored review. Because
 `localStorage` has no atomic compare-and-swap operation, this detects stale
 writers but is not a substitute for transactional server persistence.
 

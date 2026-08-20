@@ -74,3 +74,29 @@ export function applyReviewPersistenceResult({
       return { session, issue: "unavailable" }
   }
 }
+
+export function applyReviewPersistenceResetResult({
+  resetSnapshot,
+  resetResult,
+}: {
+  readonly resetSnapshot: DemoBrowserStorageSnapshot
+  readonly resetResult: SnapshotSaveResult
+}): ReviewPersistenceTransition {
+  switch (resetResult.status) {
+    case "saved":
+      return {
+        session: { status: "ready", baseSnapshot: resetSnapshot },
+        issue: null,
+      }
+    case "conflict":
+      return {
+        session: { status: "blocked", issue: "conflict" },
+        issue: "conflict",
+      }
+    case "unavailable":
+      return {
+        session: { status: "blocked", issue: "unavailable" },
+        issue: "unavailable",
+      }
+  }
+}
