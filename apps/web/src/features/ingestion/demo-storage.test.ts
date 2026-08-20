@@ -14,6 +14,7 @@ import {
   buildReviewWorkspaceSnapshot,
   createDemoDraftProfile,
   loadDemoSnapshot,
+  MAX_DEMO_AUDIT_EVENTS,
   saveReviewWorkspaceSnapshot,
 } from "./demo-storage"
 
@@ -53,10 +54,13 @@ describe("demo storage", () => {
 
   it("persists review metadata without raw HL7 content", () => {
     const { profile, reviewFields } = createWorkspace()
+    const privateValue = "PRIVATE-VALUE-DO-NOT-PERSIST"
 
     saveReviewWorkspaceSnapshot({
       profile,
-      reviewFields,
+      reviewFields: reviewFields.map((field, index) =>
+        index === 0 ? { ...field, value: privateValue } : field,
+      ),
       messageFingerprint: MESSAGE_FINGERPRINT,
       updatedAt: OCCURRED_AT,
     })
@@ -71,6 +75,7 @@ describe("demo storage", () => {
     )
     expect(serialized).not.toContain("MSH|")
     expect(serialized).not.toContain("PID|")
+    expect(serialized).not.toContain(privateValue)
   })
 
   it("appends one audit event when a decision changes", () => {
@@ -235,5 +240,76 @@ describe("demo storage", () => {
       }),
     ).toEqual({ status: "conflict" })
     expect(loadDemoSnapshot()?.updatedAt).toBe(currentSnapshot.updatedAt)
+  })
+
+  it("creates unique audit IDs when timestamps collide", () => {
+    const { profile, reviewFields } = createWorkspace()
+    const field = reviewFields[0]
+    if (!field) throw new Error("Expected a reviewable field")
+    const initial = buildReviewWorkspaceSnapshot({
+      previousSnapshot: null,
+      profile,
+      reviewFields,
+      messageFingerprint: MESSAGE_FINGERPRINT,
+      updatedAt: OCCURRED_AT,
+    })
+    const incorrect = buildReviewWorkspaceSnapshot({
+      previousSnapshot: initial,
+      profile,
+      reviewFields: [
+        markReviewableFieldIncorrect(field),
+        ...reviewFields.slice(1),
+      ],
+      messageFingerprint: MESSAGE_FINGERPRINT,
+      updatedAt: OCCURRED_AT,
+    })
+    const confirmed = buildReviewWorkspaceSnapshot({
+      previousSnapshot: incorrect,
+      profile,
+      reviewFields: [confirmReviewableField(field), ...reviewFields.slice(1)],
+      messageFingerprint: MESSAGE_FINGERPRINT,
+      updatedAt: OCCURRED_AT,
+    })
+
+    expect(
+      new Set(confirmed.demoAuditEvents.map((event) => event.eventId)).size,
+    ).toBe(confirmed.demoAuditEvents.length)
+  })
+
+  it("retains only the newest bounded audit history", () => {
+    const { profile, reviewFields } = createWorkspace()
+    const base = buildReviewWorkspaceSnapshot({
+      previousSnapshot: null,
+      profile,
+      reviewFields,
+      messageFingerprint: MESSAGE_FINGERPRINT,
+      updatedAt: OCCURRED_AT,
+    })
+    const previousSnapshot = {
+      ...base,
+      demoAuditEvents: Array.from(
+        { length: MAX_DEMO_AUDIT_EVENTS + 10 },
+        (_, index) => ({
+          eventId: `event-${index}`,
+          eventType: "review_decision_changed" as const,
+          actorType: "demo_user" as const,
+          metadata: { index },
+          createdAt: OCCURRED_AT,
+        }),
+      ),
+    }
+    const next = buildReviewWorkspaceSnapshot({
+      previousSnapshot,
+      profile,
+      reviewFields,
+      messageFingerprint: MESSAGE_FINGERPRINT,
+      updatedAt: "2026-08-19T12:05:00.000Z",
+    })
+
+    expect(next.demoAuditEvents).toHaveLength(MAX_DEMO_AUDIT_EVENTS)
+    expect(next.demoAuditEvents[0]?.eventId).toBe("event-10")
+    expect(next.demoAuditEvents.at(-1)?.eventId).toBe(
+      `event-${MAX_DEMO_AUDIT_EVENTS + 9}`,
+    )
   })
 })

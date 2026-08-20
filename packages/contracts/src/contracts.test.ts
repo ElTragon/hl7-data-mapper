@@ -955,6 +955,38 @@ describe("persistence contracts", () => {
     ).toThrow()
   })
 
+  it("rejects raw source values in public demo draft profiles", () => {
+    const firstItem = demoDraftProfile.itemSet.items[0]
+    if (!firstItem) throw new Error("Expected a profile item")
+    const profileWithRawSource = {
+      ...demoDraftProfile,
+      itemSet: {
+        ...demoDraftProfile.itemSet,
+        items: [
+          {
+            ...firstItem,
+            sources: firstItem.sources.map((source, index) =>
+              index === 0 ? { ...source, raw: "Lopez^Elena" } : source,
+            ),
+          },
+          ...demoDraftProfile.itemSet.items.slice(1),
+        ],
+      },
+    }
+
+    expect(() =>
+      DemoBrowserStorageSnapshotSchema.parse({
+        storageVersion: 1,
+        mode: "public_demo",
+        draftProfiles: [profileWithRawSource],
+        reviewDecisions: [],
+        correctionIntents: [],
+        demoAuditEvents: [],
+        updatedAt: "2026-07-08T23:57:00-07:00",
+      }),
+    ).toThrow(/not allowed in public demo persistence/)
+  })
+
   it("creates and resets an empty browser demo storage snapshot", () => {
     const emptySnapshot = createEmptyDemoBrowserStorageSnapshot(
       "2026-07-08T23:58:00-07:00",

@@ -9,6 +9,7 @@ import {
 } from "@hl7-data-mapper/contracts"
 
 const DEMO_STORAGE_KEY = "hl7-data-mapper:demo-storage:v1"
+export const MAX_DEMO_AUDIT_EVENTS = 250
 
 export type SnapshotLoadResult =
   | { readonly status: "loaded"; readonly snapshot: DemoBrowserStorageSnapshot }
@@ -151,6 +152,16 @@ export function buildReviewWorkspaceSnapshot({
   readonly messageFingerprint: string
   readonly updatedAt: string
 }): DemoBrowserStorageSnapshot {
+  const safeProfile = {
+    ...profile,
+    itemSet: {
+      ...profile.itemSet,
+      items: profile.itemSet.items.map((item) => ({
+        ...item,
+        sources: item.sources.map(withoutRawSourceValue),
+      })),
+    },
+  }
   const previousDecisionByFieldId = new Map(
     previousSnapshot?.reviewDecisions.map((decision) => [
       decision.fieldId,
@@ -189,7 +200,7 @@ export function buildReviewWorkspaceSnapshot({
   return DemoBrowserStorageSnapshotSchema.parse({
     storageVersion: 1,
     mode: "public_demo",
-    draftProfiles: [profile],
+    draftProfiles: [safeProfile],
     reviewDecisions: nextReviewDecisions,
     correctionIntents: reviewFields.flatMap((field) => {
       const intent = field.correctionIntent
@@ -199,15 +210,14 @@ export function buildReviewWorkspaceSnapshot({
       const previous = previousIntentByFieldId.get(field.id)
       const replacementSourcePath = intent.replacementSource?.path ?? null
       const replacementSource = intent.replacementSource
-        ? { ...intent.replacementSource, raw: undefined }
+        ? withoutRawSourceValue(intent.replacementSource)
         : null
       const replacementHl7Item = intent.replacementHl7Item
         ? {
             ...intent.replacementHl7Item,
-            sources: intent.replacementHl7Item.sources.map((source) => ({
-              ...source,
-              raw: undefined,
-            })),
+            sources: intent.replacementHl7Item.sources.map(
+              withoutRawSourceValue,
+            ),
           }
         : null
       const notes = intent.notes ?? null
@@ -241,7 +251,7 @@ export function buildReviewWorkspaceSnapshot({
         profile,
         updatedAt,
       }),
-    ],
+    ].slice(-MAX_DEMO_AUDIT_EVENTS),
     updatedAt,
   })
 }
@@ -306,9 +316,14 @@ function buildReviewDecisionAuditEvents({
       return []
     }
 
+    const eventIdPrefix = `review-${updatedAt}-${field.id}`
+    const occurrence = previousSnapshot.demoAuditEvents.filter((event) =>
+      event.eventId.startsWith(eventIdPrefix),
+    ).length
+
     return [
       {
-        eventId: `review-${updatedAt}-${field.id}`,
+        eventId: `${eventIdPrefix}-${occurrence}`,
         eventType: "review_decision_changed" as const,
         actorType: "demo_user" as const,
         clientId: profile.clientId,
@@ -326,6 +341,14 @@ function buildReviewDecisionAuditEvents({
       },
     ]
   })
+}
+
+function withoutRawSourceValue<T extends { readonly raw?: unknown }>(
+  source: T,
+): Omit<T, "raw"> {
+  const { raw, ...safeSource } = source
+  void raw
+  return safeSource
 }
 
 export function getStoredDraftProfile(

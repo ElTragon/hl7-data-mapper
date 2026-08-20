@@ -281,7 +281,9 @@ export const DemoStorageReviewDecisionSchema = z
   })
   .strict()
 
-const PersistedSourceReferenceSchema = SourceReferenceSchema.omit({ raw: true })
+const PersistedSourceReferenceSchema = SourceReferenceSchema.omit({
+  raw: true,
+}).strict()
 const PersistedCorrectionHl7ItemSchema = Hl7ItemSchema.safeExtend({
   sources: z.array(PersistedSourceReferenceSchema).default([]),
 })
@@ -320,6 +322,13 @@ export const DemoBrowserStorageSnapshotSchema = z
         })
       }
     })
+
+    for (const issue of findForbiddenPersistenceIssues({
+      draftProfiles: snapshot.draftProfiles,
+      correctionIntents: snapshot.correctionIntents,
+    })) {
+      context.addIssue({ code: "custom", message: issue })
+    }
   })
 
 export const DemoPersistencePolicySchema = z
@@ -394,6 +403,35 @@ function findUnsafeMetadataIssues(value: unknown, path = "metadata"): string[] {
   }
 
   return issues
+}
+
+function findForbiddenPersistenceIssues(
+  value: unknown,
+  path = "snapshot",
+): string[] {
+  if (Array.isArray(value)) {
+    return value.flatMap((item, index) =>
+      findForbiddenPersistenceIssues(item, `${path}[${index}]`),
+    )
+  }
+  if (typeof value !== "object" || value === null) return []
+
+  return Object.entries(value).flatMap(([key, childValue]) => {
+    const normalizedKey = key.toLowerCase().replace(/[^a-z0-9]/g, "")
+    const issues = [
+      "raw",
+      "rawsegment",
+      "rawmessage",
+      "normalizedtext",
+    ].includes(normalizedKey)
+      ? [`${path}.${key} is not allowed in public demo persistence.`]
+      : []
+
+    return [
+      ...issues,
+      ...findForbiddenPersistenceIssues(childValue, `${path}.${key}`),
+    ]
+  })
 }
 
 export type MessageHash = z.infer<typeof MessageHashSchema>
