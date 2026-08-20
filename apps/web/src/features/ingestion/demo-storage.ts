@@ -128,15 +128,40 @@ export function buildReviewWorkspaceSnapshot({
   readonly messageFingerprint: string
   readonly updatedAt: string
 }): DemoBrowserStorageSnapshot {
-  const nextReviewDecisions = reviewFields.map((field) => ({
-    fieldId: field.id,
-    normalizedPath: field.normalizedPath,
-    messageFingerprint,
-    reviewStatus: field.reviewStatus,
-    reasonCode: field.reasonCode ?? null,
-    reviewNote: field.reviewNote ?? null,
-    updatedAt,
-  }))
+  const previousDecisionByFieldId = new Map(
+    previousSnapshot?.reviewDecisions.map((decision) => [
+      decision.fieldId,
+      decision,
+    ]) ?? [],
+  )
+  const previousIntentByFieldId = new Map(
+    previousSnapshot?.correctionIntents.map((intent) => [
+      intent.fieldId,
+      intent,
+    ]) ?? [],
+  )
+  const nextReviewDecisions = reviewFields.map((field) => {
+    const previous = previousDecisionByFieldId.get(field.id)
+    const reasonCode = field.reasonCode ?? null
+    const reviewNote = field.reviewNote ?? null
+    const didChange =
+      !previous ||
+      previous.normalizedPath !== field.normalizedPath ||
+      previous.messageFingerprint !== messageFingerprint ||
+      previous.reviewStatus !== field.reviewStatus ||
+      (previous.reasonCode ?? null) !== reasonCode ||
+      (previous.reviewNote ?? null) !== reviewNote
+
+    return {
+      fieldId: field.id,
+      normalizedPath: field.normalizedPath,
+      messageFingerprint,
+      reviewStatus: field.reviewStatus,
+      reasonCode,
+      reviewNote,
+      updatedAt: didChange ? updatedAt : previous.updatedAt,
+    }
+  })
 
   return DemoBrowserStorageSnapshotSchema.parse({
     storageVersion: 1,
@@ -146,17 +171,26 @@ export function buildReviewWorkspaceSnapshot({
     correctionIntents: reviewFields.flatMap((field) => {
       const intent = field.correctionIntent
 
-      return intent
-        ? [
-            {
-              fieldId: field.id,
-              targetHl7ItemId: intent.targetHl7ItemId,
-              replacementSourcePath: intent.replacementSource?.path ?? null,
-              notes: intent.notes ?? null,
-              updatedAt,
-            },
-          ]
-        : []
+      if (!intent) return []
+
+      const previous = previousIntentByFieldId.get(field.id)
+      const replacementSourcePath = intent.replacementSource?.path ?? null
+      const notes = intent.notes ?? null
+      const didChange =
+        !previous ||
+        previous.targetHl7ItemId !== intent.targetHl7ItemId ||
+        (previous.replacementSourcePath ?? null) !== replacementSourcePath ||
+        (previous.notes ?? null) !== notes
+
+      return [
+        {
+          fieldId: field.id,
+          targetHl7ItemId: intent.targetHl7ItemId,
+          replacementSourcePath,
+          notes,
+          updatedAt: didChange ? updatedAt : previous.updatedAt,
+        },
+      ]
     }),
     demoAuditEvents: [
       ...(previousSnapshot?.demoAuditEvents ?? []),

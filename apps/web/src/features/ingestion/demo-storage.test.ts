@@ -1,6 +1,7 @@
 import { parseHl7Message } from "@hl7-data-mapper/hl7-parser"
 import {
   buildReviewableFields,
+  confirmReviewableField,
   defaultOmlO21ClientProfile,
   executeMapping,
   markReviewableFieldIncorrect,
@@ -122,7 +123,37 @@ describe("demo storage", () => {
       })
     }
 
-    expect(loadDemoSnapshot()?.demoAuditEvents).toEqual([])
+    const snapshot = loadDemoSnapshot()
+    expect(snapshot?.demoAuditEvents).toEqual([])
+    expect(
+      snapshot?.reviewDecisions.every(
+        (decision) => decision.updatedAt === OCCURRED_AT,
+      ),
+    ).toBe(true)
+  })
+
+  it("updates only the changed decision timestamp", () => {
+    const { profile, reviewFields } = createWorkspace()
+    const firstSnapshot = buildReviewWorkspaceSnapshot({
+      previousSnapshot: null,
+      profile,
+      reviewFields,
+      messageFingerprint: MESSAGE_FINGERPRINT,
+      updatedAt: OCCURRED_AT,
+    })
+    const field = reviewFields[0]
+    if (!field) throw new Error("Expected a reviewable field")
+    const changedAt = "2026-08-19T12:01:00.000Z"
+    const nextSnapshot = buildReviewWorkspaceSnapshot({
+      previousSnapshot: firstSnapshot,
+      profile,
+      reviewFields: [confirmReviewableField(field), ...reviewFields.slice(1)],
+      messageFingerprint: MESSAGE_FINGERPRINT,
+      updatedAt: changedAt,
+    })
+
+    expect(nextSnapshot.reviewDecisions[0]?.updatedAt).toBe(changedAt)
+    expect(nextSnapshot.reviewDecisions[1]?.updatedAt).toBe(OCCURRED_AT)
   })
 
   it("builds snapshots without mutating its inputs", () => {
