@@ -25,7 +25,9 @@ import {
 } from "./ingestion-workflow"
 
 const STORAGE_ERROR_MESSAGE =
-  "This review is available for this session, but browser storage could not save it."
+  "This review is available for this session, but browser storage could not be accessed safely."
+const INVALID_STORAGE_MESSAGE =
+  "Stored demo data is invalid and was preserved. Reset the demo to replace it."
 
 export function useIngestionWorkflow({
   store = browserDemoSnapshotStore,
@@ -45,6 +47,16 @@ export function useIngestionWorkflow({
 
   function persist(nextState: ReviewWorkflowState, occurredAt: string) {
     const loadResult = store.load()
+
+    if (loadResult.status === "unavailable") {
+      setStorageError(STORAGE_ERROR_MESSAGE)
+      return
+    }
+    if (loadResult.status === "invalid") {
+      setStorageError(INVALID_STORAGE_MESSAGE)
+      return
+    }
+
     const previousSnapshot =
       loadResult.status === "loaded" ? loadResult.snapshot : null
     const saveResult = store.save(
@@ -58,9 +70,7 @@ export function useIngestionWorkflow({
     )
 
     setStorageError(
-      loadResult.status === "unavailable" || saveResult.status === "unavailable"
-        ? STORAGE_ERROR_MESSAGE
-        : null,
+      saveResult.status === "unavailable" ? STORAGE_ERROR_MESSAGE : null,
     )
   }
 
@@ -76,6 +86,16 @@ export function useIngestionWorkflow({
     })
 
     replaceState(nextState)
+
+    if (loadResult.status === "unavailable") {
+      setStorageError(STORAGE_ERROR_MESSAGE)
+      return
+    }
+    if (loadResult.status === "invalid") {
+      setStorageError(INVALID_STORAGE_MESSAGE)
+      return
+    }
+
     const saveResult = store.save(
       buildReviewWorkspaceSnapshot({
         previousSnapshot:
@@ -87,9 +107,7 @@ export function useIngestionWorkflow({
       }),
     )
     setStorageError(
-      loadResult.status === "unavailable" || saveResult.status === "unavailable"
-        ? STORAGE_ERROR_MESSAGE
-        : null,
+      saveResult.status === "unavailable" ? STORAGE_ERROR_MESSAGE : null,
     )
   }
 
@@ -140,7 +158,10 @@ export function useIngestionWorkflow({
   return {
     state,
     storageError,
-    clear: () => replaceState(null),
+    clear: () => {
+      replaceState(null)
+      setStorageError(null)
+    },
     startReview,
     updateField: (field: ReviewableField) =>
       commit((current) => updateReviewedField(current, field)),
