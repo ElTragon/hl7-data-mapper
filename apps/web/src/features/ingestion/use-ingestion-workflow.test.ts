@@ -160,6 +160,36 @@ describe("use ingestion workflow", () => {
     expect(result.current.storageError).toMatch(/another session/i)
   })
 
+  it("advances the session while reporting a legacy cleanup warning", () => {
+    const savedSnapshots: DemoBrowserStorageSnapshot[] = []
+    const save = vi.fn<DemoSnapshotStore["save"]>((snapshot) => {
+      savedSnapshots.push(snapshot)
+      return savedSnapshots.length === 1
+        ? {
+            status: "saved_with_cleanup_warning",
+            error: new Error("blocked"),
+          }
+        : { status: "saved" }
+    })
+    const store: DemoSnapshotStore = {
+      load: () => ({ status: "empty" }),
+      save,
+      reset: () => ({ status: "saved" }),
+    }
+    const { result } = renderHook(() =>
+      useIngestionWorkflow({ store, now: () => FIRST_TIME }),
+    )
+    act(() => result.current.startReview(parseHl7Message(sampleHl7Message)))
+
+    expect(result.current.storageError).toMatch(/older browser data/i)
+    const field = result.current.state?.reviewFields[0]
+    if (!field) throw new Error("Expected a review field")
+    act(() => result.current.updateField(confirmReviewableField(field)))
+
+    expect(result.current.storageError).toBeNull()
+    expect(save.mock.calls[1]?.[1]?.expectedSnapshot).toEqual(savedSnapshots[0])
+  })
+
   it("prevents a stale workflow from overwriting a newer shared snapshot", () => {
     const memory = createMemoryStore()
     const firstHook = renderHook(() =>

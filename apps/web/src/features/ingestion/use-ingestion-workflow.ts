@@ -38,6 +38,8 @@ const INVALID_STORAGE_MESSAGE =
   "Stored demo data is invalid and was preserved. Reset the demo to replace it."
 const STORAGE_CONFLICT_MESSAGE =
   "Stored demo data changed in another session. Reload the message before saving again."
+const STORAGE_CLEANUP_MESSAGE =
+  "This review was saved, but older browser data could not be cleared. Check browser storage permissions and try again."
 
 export function useIngestionWorkflow({
   store = browserDemoSnapshotStore,
@@ -210,6 +212,8 @@ export function useIngestionWorkflow({
 
 function storageIssueMessage(issue: ReviewPersistenceIssue | null) {
   switch (issue) {
+    case "cleanup_failed":
+      return STORAGE_CLEANUP_MESSAGE
     case "conflict":
       return STORAGE_CONFLICT_MESSAGE
     case "invalid":

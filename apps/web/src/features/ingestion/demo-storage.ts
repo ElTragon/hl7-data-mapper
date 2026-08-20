@@ -20,6 +20,7 @@ export type SnapshotLoadResult =
 
 export type SnapshotSaveResult =
   | { readonly status: "saved" }
+  | { readonly status: "saved_with_cleanup_warning"; readonly error: unknown }
   | { readonly status: "conflict" }
   | { readonly status: "unavailable"; readonly error: unknown }
 
@@ -101,6 +102,13 @@ export const browserDemoSnapshotStore: DemoSnapshotStore = {
         DEMO_STORAGE_KEY,
         JSON.stringify(safeSnapshot),
       )
+
+      try {
+        window.localStorage.removeItem(LEGACY_DEMO_STORAGE_KEY)
+      } catch (error) {
+        return { status: "saved_with_cleanup_warning", error }
+      }
+
       return { status: "saved" }
     } catch (error) {
       return { status: "unavailable", error }

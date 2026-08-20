@@ -116,6 +116,53 @@ describe("demo storage", () => {
     expect(window.localStorage.getItem(DEMO_STORAGE_KEY)).toContain(
       '"storageVersion":2',
     )
+    expect(window.localStorage.getItem(LEGACY_DEMO_STORAGE_KEY)).toBeNull()
+  })
+
+  it("clears legacy data when the demo is reset", () => {
+    window.localStorage.setItem(
+      LEGACY_DEMO_STORAGE_KEY,
+      JSON.stringify({ reviewNote: "legacy private note" }),
+    )
+
+    expect(browserDemoSnapshotStore.reset(OCCURRED_AT)).toEqual({
+      status: "saved",
+    })
+    expect(window.localStorage.getItem(LEGACY_DEMO_STORAGE_KEY)).toBeNull()
+    expect(loadDemoSnapshot()).toMatchObject({
+      draftProfiles: [],
+      reviewDecisions: [],
+      correctionIntents: [],
+      demoAuditEvents: [],
+    })
+  })
+
+  it("reports legacy cleanup failure after preserving the version 2 save", () => {
+    const { profile, reviewFields } = createWorkspace()
+    const snapshot = buildReviewWorkspaceSnapshot({
+      previousSnapshot: null,
+      profile,
+      reviewFields,
+      messageFingerprint: MESSAGE_FINGERPRINT,
+      updatedAt: OCCURRED_AT,
+    })
+    window.localStorage.setItem(LEGACY_DEMO_STORAGE_KEY, "legacy data")
+    const removeItem = vi
+      .spyOn(Storage.prototype, "removeItem")
+      .mockImplementation(() => {
+        throw new DOMException("Blocked", "SecurityError")
+      })
+
+    expect(browserDemoSnapshotStore.save(snapshot)).toMatchObject({
+      status: "saved_with_cleanup_warning",
+    })
+    expect(window.localStorage.getItem(DEMO_STORAGE_KEY)).toContain(
+      '"storageVersion":2',
+    )
+    expect(window.localStorage.getItem(LEGACY_DEMO_STORAGE_KEY)).toBe(
+      "legacy data",
+    )
+    removeItem.mockRestore()
   })
 
   it("prefers version 2 storage when an older tab writes version 1", () => {

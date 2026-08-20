@@ -68,6 +68,20 @@ describe("review persistence session", () => {
       session: { status: "ready", baseSnapshot: NEXT_SNAPSHOT },
       issue: null,
     })
+
+    expect(
+      applyReviewPersistenceResult({
+        session,
+        savedSnapshot: NEXT_SNAPSHOT,
+        saveResult: {
+          status: "saved_with_cleanup_warning",
+          error: new Error("blocked"),
+        },
+      }),
+    ).toEqual({
+      session: { status: "ready", baseSnapshot: NEXT_SNAPSHOT },
+      issue: "cleanup_failed",
+    })
   })
 
   it("blocks conflicts and leaves unavailable writes retryable", () => {
@@ -101,6 +115,16 @@ describe("review persistence session", () => {
       expected: {
         session: { status: "ready", baseSnapshot: NEXT_SNAPSHOT },
         issue: null,
+      },
+    },
+    {
+      resetResult: {
+        status: "saved_with_cleanup_warning",
+        error: new Error("blocked"),
+      } as const,
+      expected: {
+        session: { status: "ready", baseSnapshot: NEXT_SNAPSHOT },
+        issue: "cleanup_failed",
       },
     },
     {

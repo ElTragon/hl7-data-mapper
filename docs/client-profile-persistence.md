@@ -453,6 +453,9 @@ The shared contract is `DemoBrowserStorageSnapshotSchema` in
 The current browser format is version 2. Version 1 snapshots are decoded through
 a pure migration, while new writes use a separate version 2 key. Once version 2
 exists, later writes from an older version 1 tab are ignored by the current app.
+After a successful version 2 write, the storage adapter removes the legacy key.
+If that cleanup fails, the version 2 save remains valid and the UI reports that
+older browser data could not be cleared.
 
 The browser snapshot may store:
 

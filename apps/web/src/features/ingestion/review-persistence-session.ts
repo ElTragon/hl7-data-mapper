@@ -2,7 +2,8 @@ import type { DemoBrowserStorageSnapshot } from "@hl7-data-mapper/contracts"
 
 import type { SnapshotLoadResult, SnapshotSaveResult } from "./demo-storage"
 
-export type ReviewPersistenceIssue = "conflict" | "invalid" | "unavailable"
+export type ReviewPersistenceIssue =
+  "cleanup_failed" | "conflict" | "invalid" | "unavailable"
 
 export type ReviewPersistenceSession =
   | {
@@ -65,6 +66,11 @@ export function applyReviewPersistenceResult({
         session: { status: "ready", baseSnapshot: savedSnapshot },
         issue: null,
       }
+    case "saved_with_cleanup_warning":
+      return {
+        session: { status: "ready", baseSnapshot: savedSnapshot },
+        issue: "cleanup_failed",
+      }
     case "conflict":
       return {
         session: { status: "blocked", issue: "conflict" },
@@ -87,6 +93,11 @@ export function applyReviewPersistenceResetResult({
       return {
         session: { status: "ready", baseSnapshot: resetSnapshot },
         issue: null,
+      }
+    case "saved_with_cleanup_warning":
+      return {
+        session: { status: "ready", baseSnapshot: resetSnapshot },
+        issue: "cleanup_failed",
       }
     case "conflict":
       return {
