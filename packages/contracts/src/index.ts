@@ -86,6 +86,12 @@ export {
 export type { NormalizedField, TransformStep } from "./normalized-field.js"
 
 export {
+  MAX_NORMALIZED_TARGET_ARRAY_INDEX,
+  NormalizedTargetPathSchema,
+} from "./normalized-target-path.js"
+export type { NormalizedTargetPath } from "./normalized-target-path.js"
+
+export {
   AuditActorTypeSchema,
   AuditEventRecordSchema,
   AuditEventSchema,

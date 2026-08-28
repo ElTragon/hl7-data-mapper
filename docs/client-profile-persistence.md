@@ -324,6 +324,10 @@ create index idx_hl7_items_target_path
 Notes:
 
 - JSON columns store mapping configuration, not patient data.
+- `target_path` uses lower-camel dot components rooted at `message`, `sender`,
+  `patient`, `coverages`, `guarantor`, or `labOrders`. Array indexes are
+  canonical nonnegative decimals no greater than `1023`; prototype-related
+  JavaScript property names are rejected.
 - `sources_json` stores source references such as `PID-5.1`.
 - `transform_json` stores transform configuration such as
   `normalize_timestamp` settings.

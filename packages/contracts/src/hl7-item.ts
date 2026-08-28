@@ -1,6 +1,7 @@
 import { z } from "zod"
 
 import { NormalizedOutputSectionSchema } from "./normalized-output.js"
+import { NormalizedTargetPathSchema } from "./normalized-target-path.js"
 import { SourceReferenceSchema } from "./source-reference.js"
 
 export const Hl7ItemActionSchema = z.enum([
@@ -60,7 +61,7 @@ export const Hl7ItemSchema = z
     clientId: z.string().min(1),
     sequence: z.number().int().positive(),
     section: NormalizedOutputSectionSchema,
-    targetPath: z.string().min(1),
+    targetPath: NormalizedTargetPathSchema,
     label: z.string().min(1),
     action: Hl7ItemActionSchema,
     valueType: Hl7ItemValueTypeSchema.default("string"),
