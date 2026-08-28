@@ -36,4 +36,63 @@ describe("setValueAtPath", () => {
       patient: { identifiers: [{ value: "MRN-1", type: "MR" }] },
     })
   })
+
+  it("does not traverse inherited values", () => {
+    const inheritedPatient = { name: { family: "Inherited" } }
+    let inheritedSetterCalled = false
+    const prototype = Object.create(null) as Record<string, unknown>
+    Object.defineProperty(prototype, "patient", {
+      configurable: true,
+      get: () => inheritedPatient,
+      set: () => {
+        inheritedSetterCalled = true
+      },
+    })
+    const target = Object.create(prototype) as Record<string, unknown>
+
+    setValueAtPath(target, "patient.name.given", "Elena")
+
+    expect(Object.hasOwn(target, "patient")).toBe(true)
+    expect(target["patient"]).toEqual({ name: { given: "Elena" } })
+    expect(inheritedPatient).toEqual({ name: { family: "Inherited" } })
+    expect(inheritedSetterCalled).toBe(false)
+  })
+
+  it.each([
+    "__proto__.securityRegressionPolluted",
+    "patient.__proto__.securityRegressionPolluted",
+    "patient.__proto__[0].securityRegressionPolluted",
+    "constructor.prototype.securityRegressionPolluted",
+    "patient.constructor.prototype.securityRegressionPolluted",
+    "patient.prototype.securityRegressionPolluted",
+    "patient.constructor[0].securityRegressionPolluted",
+    "",
+    ".patient.name",
+    "patient.name.",
+    "patient..name",
+    "Patient.name",
+    "patient.Name",
+    "patient.identifiers[]",
+    "patient.identifiers[01]",
+    "patient.identifiers[-1]",
+    "patient.identifiers[1.0]",
+    "patient.identifiers[1][2]",
+    "patient.identifiers[1024]",
+    "unknownRoot.value",
+  ])("rejects %s before changing any object", (path) => {
+    const target = { patient: { existing: "preserved" } }
+    const targetBefore = structuredClone(target)
+    const objectPrototypeBefore = Object.getOwnPropertyDescriptors(
+      Object.prototype,
+    )
+
+    expect(() => setValueAtPath(target, path, "unsafe")).toThrow()
+    expect(target).toEqual(targetBefore)
+    expect(Object.getOwnPropertyDescriptors(Object.prototype)).toEqual(
+      objectPrototypeBefore,
+    )
+    expect(Object.hasOwn(Object.prototype, "securityRegressionPolluted")).toBe(
+      false,
+    )
+  })
 })
