@@ -117,6 +117,10 @@ The executor follows these rules:
 - Sort `hl7Item`s by ascending `sequence`.
 - Read all declared sources through `source-lookup`.
 - Write values to `normalizedDraft` by target path.
+- Require target paths to use lower-camel dot components beneath `message`,
+  `sender`, `patient`, `coverages`, `guarantor`, or `labOrders`. Optional array
+  indexes must be canonical nonnegative decimals no greater than `1023`, and
+  prototype-related JavaScript property names are rejected.
 - Record a trace entry for every item.
 - Convert missing required values into validation errors.
 - Convert declared but unimplemented complex transforms into info issues.

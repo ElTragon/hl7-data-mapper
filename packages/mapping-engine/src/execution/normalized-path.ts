@@ -1,9 +1,12 @@
+import { NormalizedTargetPathSchema } from "@hl7-data-mapper/contracts"
+
 export function setValueAtPath(
   target: Record<string, unknown>,
   path: string,
   value: unknown,
 ): void {
-  const parts = path.split(".")
+  const parsedPath = NormalizedTargetPathSchema.parse(path)
+  const parts = parsedPath.split(".")
   let cursor: Record<string, unknown> = target
 
   for (const [index, part] of parts.entries()) {
@@ -11,36 +14,47 @@ export function setValueAtPath(
     const key = arrayMatch?.[1] ?? part
     const isLast = index === parts.length - 1
 
-    if (!key) {
-      return
-    }
-
     if (arrayMatch) {
       const arrayIndex = Number(arrayMatch[2])
-      const existing = cursor[key]
+      const existing = Object.hasOwn(cursor, key) ? cursor[key] : undefined
       const array = Array.isArray(existing) ? existing : []
-      cursor[key] = array
+      setOwnValue(cursor, key, array)
 
       if (isLast) {
-        array[arrayIndex] = value
+        setOwnValue(array, arrayIndex, value)
         return
       }
 
-      array[arrayIndex] =
-        typeof array[arrayIndex] === "object" && array[arrayIndex] !== null
-          ? array[arrayIndex]
+      const existingEntry = Object.hasOwn(array, arrayIndex)
+        ? array[arrayIndex]
+        : undefined
+      const nextEntry =
+        typeof existingEntry === "object" && existingEntry !== null
+          ? existingEntry
           : {}
-      cursor = array[arrayIndex] as Record<string, unknown>
+      setOwnValue(array, arrayIndex, nextEntry)
+      cursor = nextEntry as Record<string, unknown>
       continue
     }
 
     if (isLast) {
-      cursor[key] = value
+      setOwnValue(cursor, key, value)
       return
     }
 
-    cursor[key] =
-      typeof cursor[key] === "object" && cursor[key] !== null ? cursor[key] : {}
-    cursor = cursor[key] as Record<string, unknown>
+    const existing = Object.hasOwn(cursor, key) ? cursor[key] : undefined
+    const nextCursor =
+      typeof existing === "object" && existing !== null ? existing : {}
+    setOwnValue(cursor, key, nextCursor)
+    cursor = nextCursor as Record<string, unknown>
   }
+}
+
+function setOwnValue(target: object, key: PropertyKey, value: unknown): void {
+  Object.defineProperty(target, key, {
+    configurable: true,
+    enumerable: true,
+    value,
+    writable: true,
+  })
 }
