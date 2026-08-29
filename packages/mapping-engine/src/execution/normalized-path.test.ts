@@ -97,6 +97,23 @@ describe("setValueAtPath", () => {
     })
   })
 
+  it("does not mutate shared plain objects used as prototypes", () => {
+    const sharedPrototype = { preserved: "value" }
+    const victim = Object.create(sharedPrototype) as Record<string, unknown>
+    const target = {}
+
+    setValueAtPath(target, "patient.container", sharedPrototype)
+    setValueAtPath(target, "patient.container.polluted", "safe")
+
+    expect(Object.hasOwn(sharedPrototype, "polluted")).toBe(false)
+    expect(victim["polluted"]).toBeUndefined()
+    expect(target).toEqual({
+      patient: {
+        container: { preserved: "value", polluted: "safe" },
+      },
+    })
+  })
+
   it.each([
     "__proto__.securityRegressionPolluted",
     "patient.__proto__.securityRegressionPolluted",
