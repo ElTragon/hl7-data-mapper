@@ -58,6 +58,45 @@ describe("setValueAtPath", () => {
     expect(inheritedSetterCalled).toBe(false)
   })
 
+  it("does not invoke own accessors while traversing", () => {
+    const target = {}
+    const exoticValue = {}
+    let getterCalls = 0
+
+    Object.defineProperty(exoticValue, "bridge", {
+      configurable: true,
+      get: () => {
+        getterCalls += 1
+        return Object.prototype
+      },
+    })
+
+    setValueAtPath(target, "patient.container", exoticValue)
+    setValueAtPath(target, "patient.container.bridge.polluted", "safe")
+
+    expect(getterCalls).toBe(0)
+    expect(Object.hasOwn(Object.prototype, "polluted")).toBe(false)
+    expect(target).toEqual({
+      patient: {
+        container: {
+          bridge: { polluted: "safe" },
+        },
+      },
+    })
+  })
+
+  it("does not traverse prototype objects supplied as values", () => {
+    const target = {}
+
+    setValueAtPath(target, "patient.container", Object.prototype)
+    setValueAtPath(target, "patient.container.polluted", "safe")
+
+    expect(Object.hasOwn(Object.prototype, "polluted")).toBe(false)
+    expect(target).toEqual({
+      patient: { container: { polluted: "safe" } },
+    })
+  })
+
   it.each([
     "__proto__.securityRegressionPolluted",
     "patient.__proto__.securityRegressionPolluted",
