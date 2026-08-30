@@ -20,9 +20,12 @@ import {
   DemoStorageReviewDecisionSchema,
   GUIDED_REVIEW_STEPS,
   hasBlockingValidationErrors,
+  Hl7ItemSchema,
   Hl7ItemSetSchema,
+  MAX_NORMALIZED_TARGET_ARRAY_INDEX,
   NormalizedFieldSchema,
   NormalizedOutputSchema,
+  NormalizedTargetPathSchema,
   AuditEventSchema,
   ClientRecordSchema,
   DemoPersistencePolicySchema,
@@ -80,6 +83,59 @@ describe("source references", () => {
         field: 5,
       }),
     ).toThrow()
+  })
+})
+
+describe("normalized target paths", () => {
+  it.each([
+    "message.type",
+    "sender.application.customField",
+    "patient.identifiers[0].value",
+    "patient.identifiers[1]",
+    `labOrders[${MAX_NORMALIZED_TARGET_ARRAY_INDEX}].customField`,
+    "coverages",
+    "guarantor",
+  ])("accepts the legitimate target path %s", (targetPath) => {
+    expect(NormalizedTargetPathSchema.parse(targetPath)).toBe(targetPath)
+  })
+
+  it.each([
+    "__proto__.polluted",
+    "patient.__proto__.polluted",
+    "patient.__proto__[0].polluted",
+    "constructor.prototype.polluted",
+    "patient.constructor.prototype.polluted",
+    "patient.prototype.polluted",
+    "patient.constructor[0].value",
+    "",
+    ".patient.name",
+    "patient.name.",
+    "patient..name",
+    "Patient.name",
+    "patient.Name",
+    "patient.identifiers[]",
+    "patient.identifiers[01]",
+    "patient.identifiers[-1]",
+    "patient.identifiers[1.0]",
+    "patient.identifiers[1][2]",
+    "patient.identifiers[1024]",
+    "unknownRoot.value",
+  ])("rejects the unsafe or malformed target path %s", (targetPath) => {
+    expect(() => NormalizedTargetPathSchema.parse(targetPath)).toThrow()
+  })
+
+  it("applies the target path boundary to hl7Items", () => {
+    expect(() =>
+      Hl7ItemSchema.parse({
+        id: "unsafe-target",
+        clientId: "northstar-lab",
+        sequence: 1,
+        section: "patient",
+        targetPath: "patient.__proto__.polluted",
+        label: "Unsafe target",
+        action: "default_value",
+      }),
+    ).toThrow(/not allowed/)
   })
 })
 
@@ -603,6 +659,25 @@ describe("persistence contracts", () => {
       ],
     },
   })
+  const persistedHl7ItemInput = (targetPath: string) => ({
+    profileId: "northstar-oml-o21",
+    profileVersion: 2,
+    itemId: "patient-name",
+    clientId: "northstar-lab",
+    sequence: 10,
+    section: "patient",
+    targetPath,
+    label: "Patient name",
+    action: "extract",
+    valueType: "person_name",
+    sourcesJson: JSON.stringify([{ path: "PID-5.1" }]),
+    dependsOnJson: "[]",
+    transformJson: JSON.stringify({ name: "mapXpnName" }),
+    required: true,
+    reviewRequired: true,
+    createdAt: "2026-07-08T23:42:00-07:00",
+    updatedAt: "2026-07-08T23:42:00-07:00",
+  })
 
   it("validates D1 client, profile, and version records", () => {
     expect(
@@ -664,30 +739,24 @@ describe("persistence contracts", () => {
   })
 
   it("validates D1 hl7 item records without storing extracted values", () => {
-    const itemRecord = Hl7ItemRecordSchema.parse({
-      profileId: "northstar-oml-o21",
-      profileVersion: 2,
-      itemId: "patient-name",
-      clientId: "northstar-lab",
-      sequence: 10,
-      section: "patient",
-      targetPath: "patient.name",
-      label: "Patient name",
-      action: "extract",
-      valueType: "person_name",
-      sourcesJson: JSON.stringify([{ path: "PID-5.1" }]),
-      dependsOnJson: "[]",
-      transformJson: JSON.stringify({ name: "mapXpnName" }),
-      required: true,
-      reviewRequired: true,
-      createdAt: "2026-07-08T23:42:00-07:00",
-      updatedAt: "2026-07-08T23:42:00-07:00",
-    })
+    const itemRecord = Hl7ItemRecordSchema.parse(
+      persistedHl7ItemInput("patient.name"),
+    )
 
     expect(itemRecord).toMatchObject({
       itemId: "patient-name",
       targetPath: "patient.name",
     })
+  })
+
+  it.each([
+    "patient.__proto__.polluted",
+    "patient.constructor.prototype.polluted",
+    "patient.identifiers[1024]",
+  ])("rejects unsafe D1 target path %s", (targetPath) => {
+    expect(() =>
+      Hl7ItemRecordSchema.parse(persistedHl7ItemInput(targetPath)),
+    ).toThrow()
   })
 
   it("rejects D1 hl7 item records with unsafe default values", () => {

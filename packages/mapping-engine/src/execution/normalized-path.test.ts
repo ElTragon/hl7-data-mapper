@@ -36,4 +36,135 @@ describe("setValueAtPath", () => {
       patient: { identifiers: [{ value: "MRN-1", type: "MR" }] },
     })
   })
+
+  it("does not traverse inherited values", () => {
+    const inheritedPatient = { name: { family: "Inherited" } }
+    let inheritedSetterCalled = false
+    const prototype = Object.create(null) as Record<string, unknown>
+    Object.defineProperty(prototype, "patient", {
+      configurable: true,
+      get: () => inheritedPatient,
+      set: () => {
+        inheritedSetterCalled = true
+      },
+    })
+    const target = Object.create(prototype) as Record<string, unknown>
+
+    setValueAtPath(target, "patient.name.given", "Elena")
+
+    expect(Object.hasOwn(target, "patient")).toBe(true)
+    expect(target["patient"]).toEqual({ name: { given: "Elena" } })
+    expect(inheritedPatient).toEqual({ name: { family: "Inherited" } })
+    expect(inheritedSetterCalled).toBe(false)
+  })
+
+  it("does not invoke own accessors while traversing", () => {
+    const target = {}
+    const exoticValue = {}
+    let getterCalls = 0
+
+    Object.defineProperty(exoticValue, "bridge", {
+      configurable: true,
+      get: () => {
+        getterCalls += 1
+        return Object.prototype
+      },
+    })
+
+    setValueAtPath(target, "patient.container", exoticValue)
+    setValueAtPath(target, "patient.container.bridge.polluted", "safe")
+
+    expect(getterCalls).toBe(0)
+    expect(Object.hasOwn(Object.prototype, "polluted")).toBe(false)
+    expect(target).toEqual({
+      patient: {
+        container: {
+          bridge: { polluted: "safe" },
+        },
+      },
+    })
+  })
+
+  it("does not traverse prototype objects supplied as values", () => {
+    const target = {}
+
+    setValueAtPath(target, "patient.container", Object.prototype)
+    setValueAtPath(target, "patient.container.polluted", "safe")
+
+    expect(Object.hasOwn(Object.prototype, "polluted")).toBe(false)
+    expect(target).toEqual({
+      patient: { container: { polluted: "safe" } },
+    })
+  })
+
+  it("does not mutate shared plain objects used as prototypes", () => {
+    const sharedPrototype = { preserved: "value" }
+    const victim = Object.create(sharedPrototype) as Record<string, unknown>
+    const target = {}
+
+    setValueAtPath(target, "patient.container", sharedPrototype)
+    setValueAtPath(target, "patient.container.polluted", "safe")
+
+    expect(Object.hasOwn(sharedPrototype, "polluted")).toBe(false)
+    expect(victim["polluted"]).toBeUndefined()
+    expect(target).toEqual({
+      patient: {
+        container: { preserved: "value", polluted: "safe" },
+      },
+    })
+  })
+
+  it("preserves sparse array length while isolating nested writes", () => {
+    const sparseIdentifiers = new Array(3)
+    const target = {}
+
+    setValueAtPath(target, "patient.identifiers", sparseIdentifiers)
+    setValueAtPath(target, "patient.identifiers[0].value", "MRN-1")
+
+    const identifiers = (
+      target as { patient: { identifiers: Array<Record<string, unknown>> } }
+    ).patient.identifiers
+    expect(identifiers).toHaveLength(3)
+    expect(identifiers[0]).toEqual({ value: "MRN-1" })
+    expect(Object.hasOwn(identifiers, 1)).toBe(false)
+    expect(Object.hasOwn(identifiers, 2)).toBe(false)
+  })
+
+  it.each([
+    "__proto__.securityRegressionPolluted",
+    "patient.__proto__.securityRegressionPolluted",
+    "patient.__proto__[0].securityRegressionPolluted",
+    "constructor.prototype.securityRegressionPolluted",
+    "patient.constructor.prototype.securityRegressionPolluted",
+    "patient.prototype.securityRegressionPolluted",
+    "patient.constructor[0].securityRegressionPolluted",
+    "",
+    ".patient.name",
+    "patient.name.",
+    "patient..name",
+    "Patient.name",
+    "patient.Name",
+    "patient.identifiers[]",
+    "patient.identifiers[01]",
+    "patient.identifiers[-1]",
+    "patient.identifiers[1.0]",
+    "patient.identifiers[1][2]",
+    "patient.identifiers[1024]",
+    "unknownRoot.value",
+  ])("rejects %s before changing any object", (path) => {
+    const target = { patient: { existing: "preserved" } }
+    const targetBefore = structuredClone(target)
+    const objectPrototypeBefore = Object.getOwnPropertyDescriptors(
+      Object.prototype,
+    )
+
+    expect(() => setValueAtPath(target, path, "unsafe")).toThrow()
+    expect(target).toEqual(targetBefore)
+    expect(Object.getOwnPropertyDescriptors(Object.prototype)).toEqual(
+      objectPrototypeBefore,
+    )
+    expect(Object.hasOwn(Object.prototype, "securityRegressionPolluted")).toBe(
+      false,
+    )
+  })
 })

@@ -7,6 +7,7 @@ import {
   Hl7ItemValueTypeSchema,
 } from "./hl7-item.js"
 import { NormalizedOutputSectionSchema } from "./normalized-output.js"
+import { NormalizedTargetPathSchema } from "./normalized-target-path.js"
 import {
   ReviewDecisionReasonSchema,
   ReviewNoteSchema,
@@ -166,7 +167,7 @@ export const Hl7ItemRecordSchema = z
     clientId: z.string().min(1),
     sequence: z.number().int().positive(),
     section: NormalizedOutputSectionSchema,
-    targetPath: z.string().min(1),
+    targetPath: NormalizedTargetPathSchema,
     label: z.string().min(1),
     action: Hl7ItemActionSchema,
     valueType: Hl7ItemValueTypeSchema,
