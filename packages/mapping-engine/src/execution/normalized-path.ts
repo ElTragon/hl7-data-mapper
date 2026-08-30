@@ -55,6 +55,15 @@ function cloneOwnDataArray(value: unknown): unknown[] {
 
   if (Array.isArray(value)) {
     copyOwnEnumerableDataProperties(value, clone)
+
+    const lengthDescriptor = Object.getOwnPropertyDescriptor(value, "length")
+    if (
+      lengthDescriptor &&
+      "value" in lengthDescriptor &&
+      typeof lengthDescriptor.value === "number"
+    ) {
+      clone.length = lengthDescriptor.value
+    }
   }
 
   return clone

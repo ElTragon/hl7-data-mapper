@@ -114,6 +114,22 @@ describe("setValueAtPath", () => {
     })
   })
 
+  it("preserves sparse array length while isolating nested writes", () => {
+    const sparseIdentifiers = new Array(3)
+    const target = {}
+
+    setValueAtPath(target, "patient.identifiers", sparseIdentifiers)
+    setValueAtPath(target, "patient.identifiers[0].value", "MRN-1")
+
+    const identifiers = (
+      target as { patient: { identifiers: Array<Record<string, unknown>> } }
+    ).patient.identifiers
+    expect(identifiers).toHaveLength(3)
+    expect(identifiers[0]).toEqual({ value: "MRN-1" })
+    expect(Object.hasOwn(identifiers, 1)).toBe(false)
+    expect(Object.hasOwn(identifiers, 2)).toBe(false)
+  })
+
   it.each([
     "__proto__.securityRegressionPolluted",
     "patient.__proto__.securityRegressionPolluted",
