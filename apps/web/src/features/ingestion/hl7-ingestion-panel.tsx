@@ -1,4 +1,4 @@
-import { useMemo, useState, type ChangeEvent } from "react"
+import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react"
 import { AlertCircle, CheckCircle2, Download, FileText } from "lucide-react"
 
 import { type ReviewableField } from "@hl7-data-mapper/contracts"
@@ -45,7 +45,11 @@ import {
 } from "@/components/ui/table"
 import { Textarea } from "@/components/ui/textarea"
 
-const MAX_FILE_SIZE_BYTES = 1024 * 1024
+import {
+  exceedsMessageLimit,
+  INPUT_SIZE_ERROR,
+  MAX_MESSAGE_BYTES,
+} from "./input-limits"
 const REPORT_APP_VERSION = "0.1.0"
 function getSegmentCount(parsed: ParsedHl7Message, segmentName: string) {
   return parsed.segments.filter((segment) => segment.name === segmentName)
@@ -63,6 +67,16 @@ export function Hl7IngestionPanel() {
     "idle" | "generating" | "downloaded"
   >("idle")
   const [reportError, setReportError] = useState<string | null>(null)
+  const inputRevision = useRef(0)
+  const readingRef = useRef(false)
+  const [isReading, setIsReading] = useState(false)
+  const oversized = useMemo(() => exceedsMessageLimit(rawMessage), [rawMessage])
+  useEffect(
+    () => () => {
+      inputRevision.current += 1
+    },
+    [],
+  )
   const activeProfile = reviewWorkflow.state?.profile ?? null
   const mappingResult = reviewWorkflow.state?.mappingResult ?? null
   const reviewFields = reviewWorkflow.state?.reviewFields ?? []
@@ -80,37 +94,63 @@ export function Hl7IngestionPanel() {
     }
   }, [parsedMessage])
 
-  async function handleFileChange(event: ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0]
-
-    if (!file) {
-      return
-    }
-
-    if (file.size > MAX_FILE_SIZE_BYTES) {
-      setInputError("File is larger than the 1 MiB MVP ingestion limit.")
-      return
-    }
-
-    const text = await file.text()
-    setRawMessage(text)
+  function invalidateInput() {
+    inputRevision.current += 1
+    readingRef.current = false
+    setIsReading(false)
     setParsedMessage(null)
     setInputError(null)
     setReportStatus("idle")
     setReportError(null)
     reviewWorkflow.clear()
+  }
+
+  async function handleFileChange(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0]
+    event.target.value = ""
+    if (!file) return
+    invalidateInput()
+    const revision = inputRevision.current
+    if (file.size > MAX_MESSAGE_BYTES) {
+      setInputError(INPUT_SIZE_ERROR)
+      return
+    }
+    readingRef.current = true
+    setIsReading(true)
+    try {
+      const text = await file.text()
+      if (revision !== inputRevision.current) return
+      if (exceedsMessageLimit(text)) {
+        setInputError(INPUT_SIZE_ERROR)
+        return
+      }
+      setRawMessage(text)
+    } catch {
+      if (revision === inputRevision.current) {
+        setInputError(
+          "Could not read this file. Try selecting it again or paste the message.",
+        )
+      }
+    } finally {
+      if (revision === inputRevision.current) {
+        readingRef.current = false
+        setIsReading(false)
+      }
+    }
   }
 
   function handleLoadSample() {
+    invalidateInput()
     setRawMessage(sampleHl7Message.trim())
-    setParsedMessage(null)
-    setInputError(null)
-    setReportStatus("idle")
-    setReportError(null)
-    reviewWorkflow.clear()
   }
 
   function handleParse() {
+    if (readingRef.current) return
+    if (exceedsMessageLimit(rawMessage)) {
+      invalidateInput()
+      setInputError(INPUT_SIZE_ERROR)
+      return
+    }
     const parsed = parseHl7Message(rawMessage)
 
     setParsedMessage(parsed)
@@ -127,6 +167,8 @@ export function Hl7IngestionPanel() {
 
   async function handleDownloadReport() {
     if (
+      readingRef.current ||
+      exceedsMessageLimit(rawMessage) ||
       !parsedMessage ||
       parsedMessage.errors.length > 0 ||
       !activeProfile ||
@@ -136,6 +178,7 @@ export function Hl7IngestionPanel() {
       return
     }
 
+    const revision = inputRevision.current
     setReportStatus("generating")
     setReportError(null)
 
@@ -170,6 +213,7 @@ export function Hl7IngestionPanel() {
         rootFolderName: activeProfile.clientId,
       })
 
+      if (revision !== inputRevision.current) return
       downloadBytes({
         bytes: zipPackage.content,
         fileName: zipPackage.fileName,
@@ -177,6 +221,7 @@ export function Hl7IngestionPanel() {
       })
       setReportStatus("downloaded")
     } catch (error) {
+      if (revision !== inputRevision.current) return
       setReportStatus("idle")
       setReportError(
         error instanceof Error
@@ -251,27 +296,29 @@ export function Hl7IngestionPanel() {
                   className="min-h-80 font-mono text-xs leading-5"
                   value={rawMessage}
                   onChange={(event) => {
+                    invalidateInput()
                     setRawMessage(event.target.value)
-                    setParsedMessage(null)
-                    reviewWorkflow.clear()
-                    setInputError(null)
-                    setReportStatus("idle")
-                    setReportError(null)
                   }}
                   spellCheck={false}
                 />
               </div>
 
-              {inputError ? (
+              {inputError || oversized ? (
                 <Alert variant="destructive">
                   <AlertCircle />
                   <AlertTitle>Input issue</AlertTitle>
-                  <AlertDescription>{inputError}</AlertDescription>
+                  <AlertDescription>
+                    {oversized ? INPUT_SIZE_ERROR : inputError}
+                  </AlertDescription>
                 </Alert>
               ) : null}
 
+              {isReading ? <p role="status">Reading file...</p> : null}
               <div className="flex flex-wrap gap-3">
-                <Button onClick={handleParse} disabled={!rawMessage.trim()}>
+                <Button
+                  onClick={handleParse}
+                  disabled={isReading || oversized || !rawMessage.trim()}
+                >
                   <FileText data-icon="inline-start" />
                   Parse message
                 </Button>
@@ -556,6 +603,9 @@ function IssueList({ parsedMessage }: { parsedMessage: ParsedHl7Message }) {
             <AlertCircle />
             <AlertTitle>
               {issue.severity === "error" ? "Error" : "Warning"} · {issue.code}
+              {issue.segmentIndex !== undefined
+                ? ` · Segment ${issue.segmentIndex + 1}`
+                : ""}
             </AlertTitle>
             <AlertDescription>{issue.message}</AlertDescription>
           </Alert>

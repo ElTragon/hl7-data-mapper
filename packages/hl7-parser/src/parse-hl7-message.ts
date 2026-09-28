@@ -20,8 +20,21 @@ const SEGMENT_NAME_PATTERN = /^[A-Z0-9]{3}$/
 export function parseHl7Message(rawText: string): ParsedHl7Message {
   const normalizedText = normalizeSegmentEndings(rawText)
   const rawSegments = splitSegments(normalizedText)
-  const delimiters = detectDelimiters(rawSegments[0])
   const issues: Hl7Issue[] = []
+  const headers = rawSegments.flatMap((segment, index) =>
+    segment.slice(0, 3) === "MSH" ? [index] : [],
+  )
+  for (const segmentIndex of headers.slice(1)) {
+    issues.push({
+      code: "multiple_messages",
+      severity: "error",
+      message:
+        "Only one HL7 message is supported. Remove the additional MSH header.",
+      segmentIndex,
+      segmentName: "MSH",
+    })
+  }
+  const delimiters = detectDelimiters(rawSegments[0])
 
   if (rawSegments.length === 0) {
     issues.push({
@@ -135,34 +148,56 @@ function validateMvpProfile(
     })
   }
 
-  findOrcGroupsMissingSpm(segments).forEach((orcSegment) => {
-    issues.push({
-      code: "missing_spm",
-      severity: "warning",
-      message: "Order group has no SPM specimen segment.",
-      segmentIndex: orcSegment.index,
-      segmentName: orcSegment.name,
-    })
-  })
+  validateOrderGroups(segments, issues)
 }
 
-function findOrcGroupsMissingSpm(
+function validateOrderGroups(
   segments: readonly Hl7Segment[],
-): readonly Hl7Segment[] {
-  return segments.filter((segment, index) => {
-    if (segment.name !== "ORC") {
-      return false
+  issues: Hl7Issue[],
+): void {
+  let orc: Hl7Segment | undefined
+  let hasObr = false
+  let hasSpm = false
+  function finishGroup() {
+    if (!orc) return
+    if (!hasObr)
+      issues.push({
+        code: "missing_order_obr",
+        severity: "error",
+        message: "Order group requires an associated OBR segment.",
+        segmentIndex: orc.index,
+        segmentName: "ORC",
+      })
+    if (!hasSpm)
+      issues.push({
+        code: "missing_spm",
+        severity: "warning",
+        message: "Order group has no SPM specimen segment.",
+        segmentIndex: orc.index,
+        segmentName: "ORC",
+      })
+  }
+  for (const segment of segments) {
+    if (segment.name === "ORC") {
+      finishGroup()
+      orc = segment
+      hasObr = false
+      hasSpm = false
+    } else if (segment.name === "OBR") {
+      if (!orc)
+        issues.push({
+          code: "orphan_obr",
+          severity: "error",
+          message: "OBR must belong to an order group beginning with ORC.",
+          segmentIndex: segment.index,
+          segmentName: "OBR",
+        })
+      else hasObr = true
+    } else if (segment.name === "SPM" && orc) {
+      hasSpm = true
     }
-
-    const nextOrcIndex = segments.findIndex(
-      (candidate, candidateIndex) =>
-        candidateIndex > index && candidate.name === "ORC",
-    )
-    const groupEndIndex = nextOrcIndex === -1 ? segments.length : nextOrcIndex
-    const orderGroup = segments.slice(index, groupEndIndex)
-
-    return !orderGroup.some((candidate) => candidate.name === "SPM")
-  })
+  }
+  finishGroup()
 }
 
 function normalizeSegmentEndings(rawText: string): string {
