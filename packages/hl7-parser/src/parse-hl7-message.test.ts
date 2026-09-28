@@ -302,3 +302,79 @@ describe("parseHl7Message MVP profile validation", () => {
     })
   })
 })
+
+describe("message boundaries and independent order validation", () => {
+  const header = "MSH|^~\\&|S|F|R|F|20260101||OML^O21^OML_O21|1|P|2.5.1"
+  const patient = "PID|1||SYNTHETIC"
+  it.each(["\r", "\n", "\r\n"])(
+    "rejects additional headers with %j endings and different delimiters",
+    (ending) => {
+      const parsed = parseHl7Message(
+        [
+          header,
+          patient,
+          "ORC|NW",
+          "OBR|1",
+          header.replaceAll("|", "!"),
+          patient,
+        ].join(ending),
+      )
+      expect(parsed.errors).toContainEqual(
+        expect.objectContaining({ code: "multiple_messages", segmentIndex: 4 }),
+      )
+    },
+  )
+  it("rejects duplicate headers with the same delimiters", () => {
+    expect(
+      parseHl7Message([header, header, patient, "ORC|NW", "OBR|1"].join("\r"))
+        .errors,
+    ).toContainEqual(
+      expect.objectContaining({ code: "multiple_messages", segmentIndex: 1 }),
+    )
+  })
+  it.each([0, 1])(
+    "does not let an adjacent order supply OBR or SPM for group %i",
+    (missingGroup) => {
+      const groups = [0, 1].flatMap((i) =>
+        i === missingGroup ? ["ORC|NW"] : ["ORC|NW", "TQ1|1", "OBR|1", "SPM|1"],
+      )
+      const parsed = parseHl7Message([header, patient, ...groups].join("\r"))
+      const index = missingGroup === 0 ? 2 : 6
+      expect(parsed.errors).toEqual([
+        expect.objectContaining({
+          code: "missing_order_obr",
+          segmentIndex: index,
+        }),
+      ])
+      expect(parsed.warnings).toEqual([
+        expect.objectContaining({ code: "missing_spm", segmentIndex: index }),
+      ])
+    },
+  )
+  it("rejects an orphan OBR even when later orders are valid", () => {
+    const parsed = parseHl7Message(
+      [header, patient, "OBR|1", "ORC|NW", "OBR|2", "SPM|1"].join("\r"),
+    )
+    expect(parsed.errors).toEqual([
+      expect.objectContaining({ code: "orphan_obr", segmentIndex: 2 }),
+    ])
+  })
+  it("preserves repeated segments within valid groups", () => {
+    const parsed = parseHl7Message(
+      [
+        header,
+        patient,
+        "ORC|NW",
+        "OBR|1",
+        "OBR|2",
+        "SPM|1",
+        "SPM|2",
+        "ORC|NW",
+        "OBR|3",
+        "SPM|3",
+      ].join("\r"),
+    )
+    expect(parsed.errors).toEqual([])
+    expect(parsed.warnings).toEqual([])
+  })
+})

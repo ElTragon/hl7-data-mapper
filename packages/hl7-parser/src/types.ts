@@ -9,6 +9,9 @@ export type Hl7IssueCode =
   | "unsupported_message_type"
   | "unsupported_hl7_version"
   | "missing_pid"
+  | "multiple_messages"
+  | "missing_order_obr"
+  | "orphan_obr"
   | "missing_order"
   | "missing_spm"
 
