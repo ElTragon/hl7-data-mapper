@@ -66,7 +66,9 @@ The ingestion layer should report errors for:
 - unsupported `MSH-9`, meaning anything other than `OML^O21^OML_O21`;
 - unsupported `MSH-12`, meaning anything other than `2.5.1`;
 - missing `PID`, because this app profile requires one patient;
-- missing order content, meaning no usable `ORC` or `OBR`; and
+- multiple `MSH` headers, including messages using different delimiters;
+- missing order content, an `OBR` before any `ORC`, or an `ORC` group without
+  an associated `OBR`; and
 - malformed segment names.
 
 The ingestion layer should report warnings for:
@@ -121,3 +123,26 @@ The ingestion layer is complete when:
 - no uploaded message is stored outside local browser state; and
 - root checks pass with `pnpm typecheck`, `pnpm build`, `pnpm lint`,
   `pnpm test`, and `pnpm format:check`.
+
+## Input limits and upload lifecycle
+
+The web app accepts one message at a time. Multiple segment-start `MSH`
+headers produce a blocking `multiple_messages` error before field parsing.
+Order groups run from each `ORC` to the next `ORC` or message end, matching
+mapping execution. Each group requires at least one `OBR`; missing `SPM`
+remains a warning. Repeated OBR and SPM segments remain preserved. Issues
+identify their segment position in the UI (one-based; parser indexes are zero-based).
+
+The input limit is 1,048,576 bytes (1 MiB). Files are checked before reading;
+decoded upload text and editor text are measured as UTF-8 before parsing,
+trimming, or normalization. Oversized edits stay visible for correction and
+cannot be parsed. This byte policy does not define additional encoding support.
+
+Selecting a replacement file clears the previous parse and review immediately,
+while preserving editor text until a successful read. Parsing is disabled while
+reading. Failed or oversized uploads preserve the previous text, which can be
+parsed again. Selecting another file (even an oversized one), editing text,
+loading the sample, or unmounting invalidates pending reads. Older results and
+failures cannot replace newer input or change its loading/error state. A failed
+file can be selected again. An export already being generated is discarded if
+its input is replaced before the download begins.

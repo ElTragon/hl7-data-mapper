@@ -37,18 +37,25 @@ allowed, produces a warning, or blocks review.
       validation results and the report ZIP.
 - [ ] Never guess the business meaning of an unknown or custom segment.
 
+## Completed input safeguards
+
+- [x] Require an OBR per ORC group and reject OBR before any ORC.
+- [x] Scope missing-SPM warnings independently to each ORC group.
+- [x] Apply a 1 MiB byte limit to files and editor text before parsing.
+- [x] Handle failed and superseded file reads without overwriting newer input.
+- [x] Clear stale review/export state when replacing input.
+
 ## Remaining ingestion decisions
 
-- [ ] Decide whether files containing multiple HL7 messages are rejected or
-      explicitly split into separate messages for the MVP.
+- [x] Reject files containing multiple HL7 messages for the MVP.
 - [ ] Define accepted text encodings, byte-order-mark handling, and behavior for
       invalid text bytes.
 - [ ] Detect MLLP wrapper characters in uploaded files and decide whether to
       strip them with a warning or reject the input.
 - [ ] Define handling for blank lines, unexpected whitespace, and control
       characters without altering meaningful field content.
-- [ ] Detect duplicate `MSH` segments and distinguish malformed input from a
-      file containing multiple messages.
+- [x] Block additional segment-start `MSH` headers with a dedicated
+      `multiple_messages` error, including differing delimiters.
 - [ ] Add required field, repetition, component, value-set, and code
       constraints to client structure profiles.
 - [ ] Make each structural rule explicitly blocking or non-blocking.
