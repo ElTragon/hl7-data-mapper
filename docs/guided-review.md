@@ -149,6 +149,25 @@ be marked incorrect before the user selects a replacement source. Once the
 replacement source updates the linked `hl7Item`, the app can treat the mapping
 as changed.
 
+## Completion and stale decisions
+
+Progress and export use the same completion rules. A confirmed business field is
+resolved unless it has a validation error. An unavailable field is resolved only
+when its value is absent and its reason is `source_not_populated` or
+`not_applicable`. Incorrect, unreviewed, and mapping-changed fields remain
+unresolved. Corrected values must be confirmed again. Empty steps are complete.
+
+Warnings require acknowledgment; informational issues do not. Errors block
+completion. Parser, mapping, and source-read issues share stable identities based
+on their origin, code, and source/group occurrence, rather than list position.
+Acknowledgment never removes an issue from validation results or reports.
+
+When a correction reruns mapping, decisions survive only when the field's value,
+source identity, validation, transforms, and mapping/dependency configuration are
+unchanged. Unaffected decisions remain intact. Applied correction history survives
+later confirmation, incorrect, or unavailable decisions and is exported separately
+from the current review status. Review completion does not publish a profile.
+
 ## Source selection
 
 When a user selects another HL7 source, the UI should show candidate source

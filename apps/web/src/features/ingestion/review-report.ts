@@ -18,7 +18,7 @@ export function buildReportReviewDecisions(
     hl7ItemId: field.hl7ItemId,
     reviewStatus: field.reviewStatus,
     sourcePath: field.primarySource?.path ?? null,
-    correctionApplied: field.reviewStatus === "mapping_changed",
+    correctionApplied: Boolean(field.appliedCorrection),
     reasonCode: field.reasonCode ?? null,
     reviewNote: field.reviewNote ?? null,
     updatedAt,

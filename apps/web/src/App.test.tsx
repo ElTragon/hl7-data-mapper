@@ -42,7 +42,7 @@ describe("App", () => {
       screen.getByText(/message can continue to review/i),
     ).toBeInTheDocument()
     expect(
-      screen.getByRole("button", { name: /download report zip/i }),
+      screen.getByRole("button", { name: /download interim report zip/i }),
     ).toBeEnabled()
     expect(
       screen.getByRole("heading", {
@@ -132,7 +132,7 @@ describe("App", () => {
     ).toBeGreaterThan(0)
 
     const storedSnapshot = window.localStorage.getItem(
-      "hl7-data-mapper:demo-storage:v2",
+      "hl7-data-mapper:demo-storage:v3",
     )
 
     expect(storedSnapshot).not.toContain(
@@ -318,7 +318,7 @@ describe("App", () => {
     })
 
     const storedSnapshot = window.localStorage.getItem(
-      "hl7-data-mapper:demo-storage:v2",
+      "hl7-data-mapper:demo-storage:v3",
     )
 
     expect(storedSnapshot).toContain('"path":"PID-2"')
@@ -742,7 +742,7 @@ describe("App", () => {
 
     await waitFor(() => {
       const storedSnapshot = window.localStorage.getItem(
-        "hl7-data-mapper:demo-storage:v2",
+        "hl7-data-mapper:demo-storage:v3",
       )
 
       expect(storedSnapshot).toContain('"draftProfiles"')
@@ -773,7 +773,7 @@ describe("App", () => {
 
     expect(screen.queryByText(/browser storage issue/i)).not.toBeInTheDocument()
     expect(
-      window.localStorage.getItem("hl7-data-mapper:demo-storage:v2"),
+      window.localStorage.getItem("hl7-data-mapper:demo-storage:v3"),
     ).toContain('"reviewStatus":"confirmed"')
   })
 
@@ -814,7 +814,7 @@ describe("App", () => {
 
     await waitFor(() => {
       const storedSnapshot = window.localStorage.getItem(
-        "hl7-data-mapper:demo-storage:v2",
+        "hl7-data-mapper:demo-storage:v3",
       )
 
       expect(storedSnapshot).toContain('"draftProfiles":[]')

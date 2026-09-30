@@ -63,7 +63,13 @@ export function ReviewStepRail({
                 <CircleDot className="size-4 text-muted-foreground" />
               )}
             </div>
-            <Progress className="mt-3" value={getStepPercent(step.progress)} />
+            <Progress
+              className="mt-3"
+              value={getStepPercent({
+                total: step.progress.total,
+                resolvedCount: step.resolvedCount,
+              })}
+            />
             <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 text-xs text-muted-foreground">
               <span>{step.progress.confirmed} confirmed</span>
               <span>{step.progress.unreviewed} open</span>

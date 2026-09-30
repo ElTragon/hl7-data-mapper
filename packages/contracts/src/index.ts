@@ -234,3 +234,10 @@ export type {
   ValidationSeverity,
   ValidationSummary,
 } from "./validation.js"
+
+export {
+  assessReviewCompletion,
+  isReviewResolved,
+  hasReviewValue,
+  stableReviewJson,
+} from "./review-completion.js"

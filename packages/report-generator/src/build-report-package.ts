@@ -1,3 +1,4 @@
+import { assessReportReview } from "./review-completion.js"
 import {
   REPORT_CONTRACT_SCHEMA_VERSION,
   ReportManifestSchema,
@@ -37,6 +38,7 @@ export async function buildReportPackage(
     messageHash: reportInput.messageHash,
     sourcePolicy: reportInput.sourcePolicy ?? "raw_source_excluded",
     generatedBy: "browser",
+    review: assessReportReview(reportInput),
     includedFiles,
   })
   const manifestFile: ReportFile = {

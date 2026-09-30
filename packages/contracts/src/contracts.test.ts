@@ -938,7 +938,7 @@ describe("persistence contracts", () => {
 
   it("validates a browser-only public demo storage snapshot", () => {
     const snapshot = DemoBrowserStorageSnapshotSchema.parse({
-      storageVersion: 2,
+      storageVersion: 3,
       mode: "public_demo",
       draftProfiles: [demoDraftProfile],
       reviewDecisions: [
@@ -991,7 +991,7 @@ describe("persistence contracts", () => {
 
     expect(() =>
       DemoBrowserStorageSnapshotSchema.parse({
-        storageVersion: 2,
+        storageVersion: 3,
         mode: "public_demo",
         draftProfiles: [publishedProfile],
         reviewDecisions: [],
@@ -1005,7 +1005,7 @@ describe("persistence contracts", () => {
   it("rejects browser demo snapshots with raw HL7 in demo audit events", () => {
     expect(() =>
       DemoBrowserStorageSnapshotSchema.parse({
-        storageVersion: 2,
+        storageVersion: 3,
         mode: "public_demo",
         draftProfiles: [],
         reviewDecisions: [],
@@ -1047,7 +1047,7 @@ describe("persistence contracts", () => {
 
     expect(() =>
       DemoBrowserStorageSnapshotSchema.parse({
-        storageVersion: 2,
+        storageVersion: 3,
         mode: "public_demo",
         draftProfiles: [profileWithRawSource],
         reviewDecisions: [],
@@ -1166,7 +1166,7 @@ describe("persistence contracts", () => {
 
     expect(() =>
       DemoBrowserStorageSnapshotSchema.parse({
-        storageVersion: 2,
+        storageVersion: 3,
         mode: "public_demo",
         draftProfiles: [],
         reviewDecisions: [reviewDecision],
@@ -1198,7 +1198,7 @@ describe("persistence contracts", () => {
     )
 
     expect(emptySnapshot).toMatchObject({
-      storageVersion: 2,
+      storageVersion: 3,
       mode: "public_demo",
       draftProfiles: [],
       reviewDecisions: [],
@@ -1207,6 +1207,34 @@ describe("persistence contracts", () => {
     })
     expect(resetSnapshot.updatedAt).toBe("2026-07-08T23:59:00-07:00")
     expect(resetSnapshot.draftProfiles).toEqual([])
+  })
+
+  it("migrates version 2 drafts without restoring unbound decisions", () => {
+    const legacy = {
+      storageVersion: 2,
+      mode: "public_demo",
+      draftProfiles: [demoDraftProfile],
+      reviewDecisions: [
+        {
+          fieldId: "patient-name",
+          normalizedPath: "patient.name",
+          reviewStatus: "confirmed",
+          updatedAt: "2026-07-08T23:59:00-07:00",
+        },
+      ],
+      correctionIntents: [],
+      demoAuditEvents: [],
+      updatedAt: "2026-07-08T23:59:00-07:00",
+    }
+    const migrated = decodeAndMigrateDemoBrowserStorageSnapshot(legacy)
+    expect(migrated).toMatchObject({
+      storageVersion: 3,
+      draftProfiles: [demoDraftProfile],
+      reviewDecisions: [],
+      appliedCorrections: [],
+      reviewContext: null,
+    })
+    expect(legacy.reviewDecisions).toHaveLength(1)
   })
 
   it("migrates version 1 browser snapshots without mutating the input", () => {
@@ -1240,12 +1268,10 @@ describe("persistence contracts", () => {
     const migrated =
       decodeAndMigrateDemoBrowserStorageSnapshot(versionOneSnapshot)
 
-    expect(migrated.storageVersion).toBe(2)
-    expect(migrated.correctionIntents[0]).toMatchObject({
-      replacementSourcePath: "PID-5.1",
-    })
-    expect(migrated.reviewDecisions[0]).not.toHaveProperty("reviewNote")
-    expect(migrated.correctionIntents[0]).not.toHaveProperty("notes")
+    expect(migrated.storageVersion).toBe(3)
+    expect(migrated.correctionIntents).toEqual([])
+    expect(migrated.reviewDecisions).toEqual([])
+    expect(migrated.reviewContext).toBeNull()
     expect(versionOneSnapshot).toEqual(original)
   })
 })
@@ -1257,7 +1283,7 @@ describe("report contracts", () => {
     "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
 
   const manifestInput = {
-    schemaVersion: "1.1.0",
+    schemaVersion: "1.2.0",
     appName: "HL7 Data Mapper",
     appVersion: "0.1.0",
     generatedAt: "2026-07-09T00:10:00-07:00",
@@ -1271,6 +1297,15 @@ describe("report contracts", () => {
     messageHash,
     sourcePolicy: "raw_source_excluded",
     generatedBy: "browser",
+    review: {
+      status: "completed",
+      totalCount: 1,
+      resolvedCount: 1,
+      unresolvedCount: 0,
+      errorCount: 0,
+      warningCount: 0,
+      infoCount: 0,
+    },
     includedFiles: HASHED_REPORT_FILE_NAMES.map((fileName) => ({
       fileName,
       mediaType: fileName.endsWith(".json") ? "application/json" : "text/plain",

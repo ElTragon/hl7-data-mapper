@@ -60,6 +60,7 @@ type GuidedReviewWorkspaceProps = {
     source: SourceReference,
     sourceRole?: PersonNameSourceRole,
   ) => void
+  readonly exportLabel?: string
   readonly onDownloadReport: () => void
   readonly onResetDemo: () => void
 }
@@ -78,6 +79,7 @@ export function GuidedReviewWorkspace({
   onSaveReviewDecision,
   onApplySource,
   onDownloadReport,
+  exportLabel,
   onResetDemo,
 }: GuidedReviewWorkspaceProps) {
   const [decisionEditor, setDecisionEditor] =
@@ -101,6 +103,7 @@ export function GuidedReviewWorkspace({
     <div className="flex flex-col gap-5">
       <WorkspaceHeader
         profile={profile}
+        exportLabel={exportLabel}
         reportStatus={reportStatus}
         onDownloadReport={onDownloadReport}
         onResetDemo={() => {
@@ -180,10 +183,12 @@ function WorkspaceHeader({
   profile,
   reportStatus,
   onDownloadReport,
+  exportLabel,
   onResetDemo,
 }: {
   readonly profile: ClientProfile
   readonly reportStatus: GuidedReviewWorkspaceProps["reportStatus"]
+  readonly exportLabel?: string
   readonly onDownloadReport: () => void
   readonly onResetDemo: () => void
 }) {
@@ -213,7 +218,9 @@ function WorkspaceHeader({
           disabled={reportStatus === "generating"}
         >
           <Download data-icon="inline-start" />
-          {reportStatus === "generating" ? "Building..." : "Download report"}
+          {reportStatus === "generating"
+            ? "Building..."
+            : (exportLabel ?? "Download interim report")}
         </Button>
       </div>
     </div>

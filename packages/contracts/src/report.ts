@@ -9,7 +9,7 @@ import {
 import { ReviewStatusSchema } from "./review-status.js"
 import { ValidationSummarySchema } from "./validation.js"
 
-export const REPORT_CONTRACT_SCHEMA_VERSION = "1.1.0" as const
+export const REPORT_CONTRACT_SCHEMA_VERSION = "1.2.0" as const
 
 export const REQUIRED_REPORT_FILE_NAMES = [
   "REPORT.md",
@@ -105,6 +105,17 @@ export const ReportManifestSchema = z
     messageHash: MessageHashSchema,
     sourcePolicy: ReportSourcePolicySchema,
     generatedBy: z.literal("browser"),
+    review: z
+      .object({
+        status: z.enum(["interim", "completed"]),
+        totalCount: z.number().int().nonnegative(),
+        resolvedCount: z.number().int().nonnegative(),
+        unresolvedCount: z.number().int().nonnegative(),
+        errorCount: z.number().int().nonnegative(),
+        warningCount: z.number().int().nonnegative(),
+        infoCount: z.number().int().nonnegative(),
+      })
+      .strict(),
     includedFiles: z.array(ReportFileManifestEntrySchema).min(1),
   })
   .strict()

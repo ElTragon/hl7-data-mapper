@@ -1,3 +1,4 @@
+import { assessReportReview } from "./review-completion.js"
 import {
   REVIEW_DECISION_REASON_LABELS,
   type NormalizedOutput,
@@ -19,6 +20,7 @@ export function buildMarkdownReport(
   const extraction = buildExtractionSummary(input.normalizedData)
   const review = buildReviewSummary(input.reviewDecisions)
   const validation = input.validationResults
+  const completion = assessReportReview(input)
 
   return [
     "# HL7 Data Mapper Report",
@@ -45,6 +47,9 @@ export function buildMarkdownReport(
     `- Specimens found: ${extraction.specimenCount}`,
     "",
     "## Review summary",
+    "",
+    `- Review status: ${completion.status}`,
+    `- Unresolved decisions: ${completion.unresolvedCount}`,
     "",
     `- Total review decisions: ${review.total}`,
     `- Confirmed: ${review.confirmed}`,

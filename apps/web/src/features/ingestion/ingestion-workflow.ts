@@ -1,3 +1,5 @@
+import { stableReviewJson } from "@hl7-data-mapper/contracts"
+import { fieldEvidence, reviewContext } from "./review-evidence"
 import {
   type ClientProfile,
   type DemoBrowserStorageSnapshot,
@@ -141,8 +143,11 @@ export function applySourceCorrection({
     mappingResult: result.mappingResult,
     reviewFields: mergeReviewFields({
       previousFields: state.reviewFields,
+      previousProfile: state.profile,
+      nextProfile: result.profile,
       nextFields: result.reviewFields,
-      overrideFieldId: field.id,
+      overrideFieldId:
+        correctedField.correctionIntent?.targetHl7ItemId ?? field.id,
       overrideStatus: "mapping_changed",
       correctionIntent: correctedField.correctionIntent ?? null,
     }),
@@ -161,7 +166,13 @@ export function restoreStoredReviewDecisions({
   readonly storedSnapshot: DemoBrowserStorageSnapshot | null
   readonly profile?: ClientProfile
 }): readonly ReviewableField[] {
-  if (!storedSnapshot) return fields
+  if (
+    !storedSnapshot ||
+    !profile ||
+    stableReviewJson(storedSnapshot.reviewContext) !==
+      stableReviewJson(reviewContext(profile, messageFingerprint))
+  )
+    return fields
 
   const decisionByFieldId = new Map(
     storedSnapshot.reviewDecisions.map((decision) => [
@@ -172,6 +183,12 @@ export function restoreStoredReviewDecisions({
 
   return fields.map((field) => {
     const decision = decisionByFieldId.get(field.id)
+    const appliedCorrection = restoreCorrectionIntent({
+      field,
+      profile,
+      storedSnapshot,
+      applied: true,
+    })
 
     if (
       !decision ||
@@ -179,7 +196,7 @@ export function restoreStoredReviewDecisions({
       decision.normalizedPath !== field.normalizedPath ||
       (decision.reviewStatus === "unavailable" && hasCollectedFieldValue(field))
     ) {
-      return field
+      return { ...field, appliedCorrection }
     }
 
     return {
@@ -187,6 +204,7 @@ export function restoreStoredReviewDecisions({
       reviewStatus: decision.reviewStatus,
       reasonCode: decision.reasonCode ?? null,
       reviewNote: null,
+      appliedCorrection,
       correctionIntent: profile
         ? restoreCorrectionIntent({ field, profile, storedSnapshot })
         : field.correctionIntent,
@@ -198,14 +216,18 @@ function restoreCorrectionIntent({
   field,
   profile,
   storedSnapshot,
+  applied = false,
 }: {
+  readonly applied?: boolean
   readonly field: ReviewableField
   readonly profile: ClientProfile
   readonly storedSnapshot: DemoBrowserStorageSnapshot
 }): ReviewCorrectionIntent | null {
-  const storedIntent = storedSnapshot.correctionIntents.find(
-    (intent) => intent.fieldId === field.id,
-  )
+  const storedIntent = (
+    applied
+      ? storedSnapshot.appliedCorrections
+      : storedSnapshot.correctionIntents
+  ).find((intent) => intent.fieldId === field.id)
   if (!storedIntent) return null
 
   const targetItem = profile.itemSet.items.find(
@@ -238,10 +260,14 @@ function restoreCorrectionIntent({
 export function mergeReviewFields({
   previousFields,
   nextFields,
+  previousProfile,
+  nextProfile,
   overrideFieldId,
   overrideStatus,
   correctionIntent,
 }: {
+  readonly previousProfile?: ClientProfile
+  readonly nextProfile?: ClientProfile
   readonly previousFields: readonly ReviewableField[]
   readonly nextFields: readonly ReviewableField[]
   readonly overrideFieldId: string
@@ -262,6 +288,7 @@ export function mergeReviewFields({
         ...field,
         reviewStatus: overrideStatus,
         correctionIntent,
+        appliedCorrection: correctionIntent,
         reasonCode: previousFieldById.get(field.id)?.reasonCode ?? null,
         reviewNote: previousFieldById.get(field.id)?.reviewNote ?? null,
       }
@@ -271,14 +298,20 @@ export function mergeReviewFields({
     if (
       !previousField ||
       previousField.reviewStatus === "unreviewed" ||
+      fieldEvidence(previousField, previousProfile) !==
+        fieldEvidence(field, nextProfile) ||
       (previousField.reviewStatus === "unavailable" &&
         hasCollectedFieldValue(field))
     ) {
-      return field
+      return {
+        ...field,
+        appliedCorrection: previousField?.appliedCorrection ?? null,
+      }
     }
 
     return {
       ...field,
+      appliedCorrection: previousField.appliedCorrection,
       reviewStatus: previousField.reviewStatus,
       correctionIntent: previousField.correctionIntent,
       reasonCode: previousField.reasonCode ?? null,

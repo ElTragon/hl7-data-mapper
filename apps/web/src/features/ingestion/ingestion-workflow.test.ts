@@ -8,7 +8,9 @@ import { describe, expect, it } from "vitest"
 
 import sampleHl7Message from "../../../../../fixtures/valid/oml-o21-basic.hl7?raw"
 import { buildReviewWorkspaceSnapshot } from "./demo-storage"
+import { buildReportReviewDecisions } from "./review-report"
 import {
+  mergeReviewFields,
   changeReviewStep,
   createReviewWorkflow,
   applySourceCorrection,
@@ -81,6 +83,7 @@ describe("ingestion workflow", () => {
     expect(
       restoreStoredReviewDecisions({
         fields: state.reviewFields,
+        profile: state.profile,
         messageFingerprint: state.messageFingerprint,
         storedSnapshot: snapshot,
       })[0]?.reviewStatus,
@@ -88,6 +91,7 @@ describe("ingestion workflow", () => {
     expect(
       restoreStoredReviewDecisions({
         fields: state.reviewFields,
+        profile: state.profile,
         messageFingerprint: "ffffffffffffffff",
         storedSnapshot: snapshot,
       })[0]?.reviewStatus,
@@ -104,6 +108,7 @@ describe("ingestion workflow", () => {
     expect(
       restoreStoredReviewDecisions({
         fields: state.reviewFields,
+        profile: state.profile,
         messageFingerprint: state.messageFingerprint,
         storedSnapshot: mismatchedPathSnapshot,
       })[0]?.reviewStatus,
@@ -131,6 +136,7 @@ describe("ingestion workflow", () => {
 
     const restored = restoreStoredReviewDecisions({
       fields: state.reviewFields,
+      profile: state.profile,
       messageFingerprint: state.messageFingerprint,
       storedSnapshot: snapshot,
     })
@@ -217,5 +223,185 @@ describe("ingestion workflow", () => {
       defaultOmlO21ClientProfile.profileVersion,
     )
     expect(restored.profile.updatedAt).toBe(occurredAt)
+  })
+})
+
+it("invalidates changed evidence while preserving unaffected decisions", () => {
+  const state = createState()
+  const previousFields = state.reviewFields.map(confirmReviewableField)
+  const original = previousFields[0]!
+  const nextFields = state.reviewFields.map((field, index) =>
+    index === 0
+      ? {
+          ...field,
+          primarySource: createSourceReference({ segment: "PID", field: 99 }),
+        }
+      : field,
+  )
+  const merged = mergeReviewFields({
+    previousFields,
+    nextFields,
+    previousProfile: state.profile,
+    nextProfile: state.profile,
+    overrideFieldId: "none",
+    overrideStatus: "mapping_changed",
+    correctionIntent: null,
+  })
+  expect(merged[0]?.value).toEqual(original.value)
+  expect(merged[0]?.reviewStatus).toBe("unreviewed")
+  expect(merged[1]?.reviewStatus).toBe("confirmed")
+})
+
+it("does not restore decisions after mapping or review-engine revisions", () => {
+  const state = createState()
+  const snapshot = buildReviewWorkspaceSnapshot({
+    previousSnapshot: null,
+    profile: state.profile,
+    reviewFields: state.reviewFields.map(confirmReviewableField),
+    messageFingerprint: state.messageFingerprint,
+    updatedAt: OCCURRED_AT,
+  })
+  for (const context of [
+    { ...snapshot.reviewContext!, mappingRevision: "ffffffffffffffff" },
+    { ...snapshot.reviewContext!, engineRevision: "future" },
+  ]) {
+    expect(
+      restoreStoredReviewDecisions({
+        fields: state.reviewFields,
+        profile: state.profile,
+        messageFingerprint: state.messageFingerprint,
+        storedSnapshot: { ...snapshot, reviewContext: context },
+      }).every((field) => field.reviewStatus === "unreviewed"),
+    ).toBe(true)
+  }
+})
+
+it("preserves applied correction history after confirmation and reload", () => {
+  const state = createState()
+  const field = state.reviewFields.find(
+    (field) => field.hl7ItemId === "patient-name",
+  )!
+  const corrected = applySourceCorrection({
+    state,
+    field,
+    source: createSourceReference({ segment: "PID", field: 2, component: 1 }),
+    sourceRole: "middle",
+    occurredAt: OCCURRED_AT,
+  })
+  const confirmed = updateReviewedField(
+    corrected,
+    confirmReviewableField(
+      corrected.reviewFields.find((candidate) => candidate.id === field.id)!,
+    ),
+  )
+  const snapshot = buildReviewWorkspaceSnapshot({
+    previousSnapshot: null,
+    profile: confirmed.profile,
+    reviewFields: confirmed.reviewFields,
+    messageFingerprint: confirmed.messageFingerprint,
+    updatedAt: OCCURRED_AT,
+  })
+  for (const reviewStatus of [
+    "confirmed",
+    "incorrect",
+    "unavailable",
+  ] as const) {
+    const reviewed = confirmed.reviewFields.find(
+      (candidate) => candidate.id === field.id,
+    )!
+    expect(
+      buildReportReviewDecisions(
+        [{ ...reviewed, reviewStatus }],
+        OCCURRED_AT,
+      )[0]?.correctionApplied,
+    ).toBe(true)
+  }
+  expect(snapshot.appliedCorrections).toHaveLength(1)
+  expect(snapshot.correctionIntents).toHaveLength(0)
+  const restored = createReviewWorkflow({
+    parsedMessage: state.parsedMessage,
+    sourceProfile: defaultOmlO21ClientProfile,
+    storedSnapshot: snapshot,
+    occurredAt: OCCURRED_AT,
+  })
+  expect(
+    restored.reviewFields.find((candidate) => candidate.id === field.id),
+  ).toMatchObject({
+    reviewStatus: "confirmed",
+    appliedCorrection: { replacementSource: { path: "PID-2.1" } },
+  })
+})
+
+it("invalidates a dependent field when its mapping dependency changes even if its value does not", () => {
+  const state = createState()
+  const first = state.profile.itemSet.items[0]!,
+    second = state.profile.itemSet.items[1]!
+  const previousProfile = {
+    ...state.profile,
+    itemSet: {
+      ...state.profile.itemSet,
+      items: state.profile.itemSet.items.map((item) =>
+        item.id === second.id ? { ...item, dependsOn: [first.id] } : item,
+      ),
+    },
+  }
+  const nextProfile = {
+    ...previousProfile,
+    itemSet: {
+      ...previousProfile.itemSet,
+      items: previousProfile.itemSet.items.map((item) =>
+        item.id === first.id
+          ? {
+              ...item,
+              sources: [createSourceReference({ segment: "PID", field: 99 })],
+            }
+          : item,
+      ),
+    },
+  }
+  const result = mergeReviewFields({
+    previousFields: state.reviewFields.map(confirmReviewableField),
+    nextFields: state.reviewFields,
+    previousProfile,
+    nextProfile,
+    overrideFieldId: first.id,
+    overrideStatus: "mapping_changed",
+    correctionIntent: null,
+  })
+  expect(result.find((field) => field.id === second.id)?.reviewStatus).toBe(
+    "unreviewed",
+  )
+  expect(result.find((field) => field.id === first.id)?.reviewStatus).toBe(
+    "mapping_changed",
+  )
+  expect(
+    result.find((field) => field.id === state.profile.itemSet.items[2]!.id)
+      ?.reviewStatus,
+  ).toBe("confirmed")
+})
+
+it("attaches corrections initiated from a warning to the mapped field", () => {
+  const state = createState()
+  const businessField = state.reviewFields.find(
+    (field) => field.hl7ItemId === "patient-name",
+  )!
+  const warningField = {
+    ...businessField,
+    id: "issue:missing-source",
+    section: "exceptions" as const,
+    stepId: "warnings" as const,
+  }
+  const corrected = applySourceCorrection({
+    state,
+    field: warningField,
+    source: createSourceReference({ segment: "PID", field: 2, component: 1 }),
+    sourceRole: "middle",
+    occurredAt: OCCURRED_AT,
+  })
+  expect(
+    corrected.reviewFields.find((field) => field.id === businessField.id),
+  ).toMatchObject({
+    reviewStatus: "mapping_changed",
+    appliedCorrection: { targetHl7ItemId: "patient-name" },
   })
 })

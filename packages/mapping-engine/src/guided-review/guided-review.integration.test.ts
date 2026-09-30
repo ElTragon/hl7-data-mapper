@@ -480,10 +480,10 @@ describe("review fields", () => {
     })
   })
 
-  it("keeps empty guided-review steps incomplete without selecting a next step", () => {
+  it("considers empty guided-review steps complete without selecting a next step", () => {
     const navigation = buildGuidedReviewNavigation({ fields: [] })
 
-    expect(navigation.steps.every((step) => !step.isComplete)).toBe(true)
+    expect(navigation.steps.every((step) => step.isComplete)).toBe(true)
     expect(navigation.nextStepId).toBeNull()
   })
 
