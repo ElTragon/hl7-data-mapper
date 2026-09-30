@@ -70,7 +70,7 @@ describe("ingestion input", () => {
     expect(editor()).toHaveValue(text)
     expect(parse()).toBeDisabled()
     expect(
-      screen.queryByRole("button", { name: "Download report ZIP" }),
+      screen.queryByRole("button", { name: "Download interim report ZIP" }),
     ).not.toBeInTheDocument()
     fireEvent.change(editor(), { target: { value: sample } })
     expect(parse()).toBeEnabled()
@@ -83,7 +83,7 @@ describe("ingestion input", () => {
     upload(() => a.promise)
     expect(parse()).toBeDisabled()
     expect(
-      screen.queryByRole("button", { name: "Download report ZIP" }),
+      screen.queryByRole("button", { name: "Download interim report ZIP" }),
     ).not.toBeInTheDocument()
     upload(() => b.promise)
     await act(async () => b.resolve("new message"))
@@ -167,7 +167,7 @@ describe("ingestion input", () => {
     fireEvent.click(parse())
     await act(async () => {
       fireEvent.click(
-        screen.getByRole("button", { name: "Download report ZIP" }),
+        screen.getByRole("button", { name: "Download interim report ZIP" }),
       )
     })
     expect(createObjectURL).toHaveBeenCalledExactlyOnceWith(expect.any(Blob))
@@ -196,7 +196,9 @@ describe("ingestion input", () => {
     vi.spyOn(crypto.subtle, "digest")
       .mockResolvedValue(new ArrayBuffer(32))
       .mockReturnValueOnce(digest.promise)
-    fireEvent.click(screen.getByRole("button", { name: "Download report ZIP" }))
+    fireEvent.click(
+      screen.getByRole("button", { name: "Download interim report ZIP" }),
+    )
     fireEvent.change(editor(), { target: { value: "replacement" } })
     await act(async () => {
       digest.resolve(new ArrayBuffer(32))
@@ -229,7 +231,7 @@ describe("ingestion input", () => {
     fireEvent.click(parse())
     expect(screen.getByText("Review blocked")).toBeInTheDocument()
     expect(
-      screen.getByRole("button", { name: "Download report ZIP" }),
+      screen.getByRole("button", { name: "Download interim report ZIP" }),
     ).toBeDisabled()
     fireEvent.change(editor(), { target: { value: sample } })
     fireEvent.click(parse())
@@ -237,4 +239,66 @@ describe("ingestion input", () => {
       screen.getByText("Message can continue to review"),
     ).toBeInTheDocument()
   })
+})
+
+it.each(["confirmation", "reset"])(
+  "cancels a pending export after %s",
+  async (action) => {
+    const { createObjectURL, click } = mockDownloadApis()
+    render(<Hl7IngestionPanel />)
+    fireEvent.click(parse())
+    const digest = deferred<ArrayBuffer>()
+    vi.spyOn(crypto.subtle, "digest")
+      .mockResolvedValue(new ArrayBuffer(32))
+      .mockReturnValueOnce(digest.promise)
+    fireEvent.click(
+      screen.getByRole("button", { name: "Download interim report ZIP" }),
+    )
+    if (action === "reset")
+      fireEvent.click(screen.getByRole("button", { name: "Reset demo draft" }))
+    else
+      fireEvent.click(
+        screen
+          .getAllByText("Confirm")
+          .map((element) => element.closest("button"))
+          .find(Boolean)!,
+      )
+    await act(async () => digest.resolve(new ArrayBuffer(32)))
+    expect(createObjectURL).not.toHaveBeenCalled()
+    expect(click).not.toHaveBeenCalled()
+    expect(
+      screen.queryByText("Report ZIP generated successfully."),
+    ).not.toBeInTheDocument()
+  },
+)
+
+it("does not let an older export failure clear a newer export", async () => {
+  const { click } = mockDownloadApis()
+  render(<Hl7IngestionPanel />)
+  fireEvent.click(parse())
+  const older = deferred<ArrayBuffer>(),
+    newer = deferred<ArrayBuffer>()
+  vi.spyOn(crypto.subtle, "digest")
+    .mockResolvedValue(new ArrayBuffer(32))
+    .mockReturnValueOnce(older.promise)
+    .mockReturnValueOnce(newer.promise)
+  fireEvent.click(
+    screen.getByRole("button", { name: "Download interim report ZIP" }),
+  )
+  fireEvent.click(screen.getByRole("button", { name: "Reset demo draft" }))
+  fireEvent.click(
+    screen.getByRole("button", { name: "Download interim report ZIP" }),
+  )
+  await act(async () => older.reject(new Error("old export failed")))
+  expect(screen.queryByText(/old export failed/)).not.toBeInTheDocument()
+  expect(
+    screen
+      .getAllByRole("button", { name: /Building/ })
+      .every((button) => button.hasAttribute("disabled")),
+  ).toBe(true)
+  await act(async () => newer.resolve(new ArrayBuffer(32)))
+  expect(click).toHaveBeenCalledTimes(1)
+  expect(
+    screen.getByText("Report ZIP generated successfully."),
+  ).toBeInTheDocument()
 })

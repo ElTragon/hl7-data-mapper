@@ -1283,7 +1283,7 @@ describe("report contracts", () => {
     "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
 
   const manifestInput = {
-    schemaVersion: "1.1.0",
+    schemaVersion: "1.2.0",
     appName: "HL7 Data Mapper",
     appVersion: "0.1.0",
     generatedAt: "2026-07-09T00:10:00-07:00",
@@ -1297,6 +1297,15 @@ describe("report contracts", () => {
     messageHash,
     sourcePolicy: "raw_source_excluded",
     generatedBy: "browser",
+    review: {
+      status: "completed",
+      totalCount: 1,
+      resolvedCount: 1,
+      unresolvedCount: 0,
+      errorCount: 0,
+      warningCount: 0,
+      infoCount: 0,
+    },
     includedFiles: HASHED_REPORT_FILE_NAMES.map((fileName) => ({
       fileName,
       mediaType: fileName.endsWith(".json") ? "application/json" : "text/plain",

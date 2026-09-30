@@ -52,6 +52,7 @@ export type ReportReviewSummary = {
   readonly unavailable: number
 }
 export type BuildReportPackageInput = {
+  readonly requestedReviewStatus?: "interim" | "completed"
   readonly appVersion: string
   readonly generatedAt: string
   readonly clientId: string

@@ -1,3 +1,4 @@
+import { assessReportReview } from "./review-completion.js"
 import {
   Hl7ItemSchema,
   NormalizedOutputSchema,
@@ -26,7 +27,7 @@ export function validateReportInput(
       "syntheticSourceText can only be included with the synthetic_source_included policy.",
     )
   }
-  return {
+  const parsed = {
     ...input,
     normalizedData: NormalizedOutputSchema.parse(input.normalizedData),
     hl7Items: input.hl7Items.map((item) => Hl7ItemSchema.parse(item)),
@@ -35,4 +36,21 @@ export function validateReportInput(
     ),
     validationResults: ValidationSummarySchema.parse(input.validationResults),
   }
+  if (
+    parsed.validationResults.errors.some((issue) => issue.origin === "parser")
+  )
+    throw new Error("Parser errors must be resolved before export.")
+  if (
+    new Set(parsed.reviewDecisions.map((d) => d.fieldId)).size !==
+    parsed.reviewDecisions.length
+  )
+    throw new Error("Report decisions must have unique field IDs.")
+  if (
+    input.requestedReviewStatus === "completed" &&
+    assessReportReview(parsed).status !== "completed"
+  )
+    throw new Error(
+      "Complete all required review decisions and resolve blocking errors before exporting a completed report.",
+    )
+  return parsed
 }

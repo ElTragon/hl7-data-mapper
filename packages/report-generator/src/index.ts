@@ -14,3 +14,5 @@ export type {
   ReportZipOptions,
   ReportZipPackage,
 } from "./types.js"
+
+export { assessReportReview } from "./review-completion.js"

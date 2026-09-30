@@ -42,7 +42,7 @@ describe("App", () => {
       screen.getByText(/message can continue to review/i),
     ).toBeInTheDocument()
     expect(
-      screen.getByRole("button", { name: /download report zip/i }),
+      screen.getByRole("button", { name: /download interim report zip/i }),
     ).toBeEnabled()
     expect(
       screen.getByRole("heading", {

@@ -1,7 +1,10 @@
 import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react"
 import { AlertCircle, CheckCircle2, Download, FileText } from "lucide-react"
 
-import { type ReviewableField } from "@hl7-data-mapper/contracts"
+import {
+  assessReviewCompletion,
+  type ReviewableField,
+} from "@hl7-data-mapper/contracts"
 import {
   parseHl7Message,
   type ParsedHl7Message,
@@ -57,7 +60,6 @@ function getSegmentCount(parsed: ParsedHl7Message, segmentName: string) {
 }
 
 export function Hl7IngestionPanel() {
-  const reviewWorkflow = useIngestionWorkflow()
   const [rawMessage, setRawMessage] = useState(sampleHl7Message.trim())
   const [parsedMessage, setParsedMessage] = useState<ParsedHl7Message | null>(
     null,
@@ -67,6 +69,8 @@ export function Hl7IngestionPanel() {
     "idle" | "generating" | "downloaded"
   >("idle")
   const [reportError, setReportError] = useState<string | null>(null)
+  const exportAttempt = useRef(0)
+  const reviewWorkflow = useIngestionWorkflow({ onChange: cancelReport })
   const inputRevision = useRef(0)
   const readingRef = useRef(false)
   const [isReading, setIsReading] = useState(false)
@@ -74,12 +78,28 @@ export function Hl7IngestionPanel() {
   useEffect(
     () => () => {
       inputRevision.current += 1
+      exportAttempt.current += 1
     },
     [],
   )
   const activeProfile = reviewWorkflow.state?.profile ?? null
   const mappingResult = reviewWorkflow.state?.mappingResult ?? null
   const reviewFields = reviewWorkflow.state?.reviewFields ?? []
+
+  const completion = assessReviewCompletion(
+    reviewFields,
+    mappingResult?.validation,
+  )
+  const exportLabel =
+    activeProfile && mappingResult && completion.status === "completed"
+      ? "Download completed report"
+      : "Download interim report"
+
+  function cancelReport() {
+    exportAttempt.current += 1
+    setReportStatus("idle")
+    setReportError(null)
+  }
 
   const summary = useMemo(() => {
     if (!parsedMessage) {
@@ -178,7 +198,14 @@ export function Hl7IngestionPanel() {
       return
     }
 
-    const revision = inputRevision.current
+    const revision = ++exportAttempt.current
+    const snapshot = structuredClone({
+      rawMessage,
+      parsedMessage,
+      activeProfile,
+      mappingResult,
+      reviewFields,
+    })
     setReportStatus("generating")
     setReportError(null)
 
@@ -186,34 +213,35 @@ export function Hl7IngestionPanel() {
       const generatedAt = new Date().toISOString()
       const reportPackage = await buildReportPackage(
         {
+          requestedReviewStatus: completion.status,
           appVersion: REPORT_APP_VERSION,
           generatedAt,
-          clientId: activeProfile.clientId,
-          profileId: activeProfile.profileId,
-          profileVersion: activeProfile.profileVersion,
-          messageHash: await sha256Hex(rawMessage),
-          messageControlId: parsedMessage.segments
+          clientId: snapshot.activeProfile.clientId,
+          profileId: snapshot.activeProfile.profileId,
+          profileVersion: snapshot.activeProfile.profileVersion,
+          messageHash: await sha256Hex(snapshot.rawMessage),
+          messageControlId: snapshot.parsedMessage.segments
             .find((segment) => segment.name === "MSH")
             ?.fields.find((field) => field.index === 10)?.raw,
           sourcePolicy: "raw_source_excluded",
           normalizedData: composeCurrentNormalizedOutput({
-            parsedMessage,
-            mappingResult,
+            parsedMessage: snapshot.parsedMessage,
+            mappingResult: snapshot.mappingResult,
           }),
-          hl7Items: activeProfile.itemSet.items,
+          hl7Items: snapshot.activeProfile.itemSet.items,
           reviewDecisions: buildReportReviewDecisions(
-            reviewFields,
+            snapshot.reviewFields,
             generatedAt,
           ),
-          validationResults: mappingResult.validation,
+          validationResults: snapshot.mappingResult.validation,
         },
         async ({ content }) => sha256Hex(content),
       )
       const zipPackage = buildReportZip(reportPackage, {
-        rootFolderName: activeProfile.clientId,
+        rootFolderName: snapshot.activeProfile.clientId,
       })
 
-      if (revision !== inputRevision.current) return
+      if (revision !== exportAttempt.current) return
       downloadBytes({
         bytes: zipPackage.content,
         fileName: zipPackage.fileName,
@@ -221,12 +249,12 @@ export function Hl7IngestionPanel() {
       })
       setReportStatus("downloaded")
     } catch (error) {
-      if (revision !== inputRevision.current) return
+      if (revision !== exportAttempt.current) return
       setReportStatus("idle")
       setReportError(
         error instanceof Error
-          ? error.message
-          : "Could not generate the report ZIP.",
+          ? `Cannot export yet: ${error.message}. Even interim reports require valid normalized output.`
+          : "Could not generate the report ZIP. The normalized output must be valid even for an interim report.",
       )
     }
   }
@@ -396,6 +424,11 @@ export function Hl7IngestionPanel() {
                     </CardDescription>
                   </CardHeader>
                   <CardContent className="flex flex-col items-start gap-4">
+                    <p>
+                      {completion.status === "completed"
+                        ? "Review complete"
+                        : `${completion.unresolvedCount} unresolved decisions — interim export`}
+                    </p>
                     <div className="max-w-prose text-sm text-muted-foreground">
                       {reportStatus === "downloaded"
                         ? "Report ZIP generated successfully."
@@ -413,7 +446,7 @@ export function Hl7IngestionPanel() {
                       <Download data-icon="inline-start" />
                       {reportStatus === "generating"
                         ? "Building report..."
-                        : "Download report ZIP"}
+                        : `${exportLabel} ZIP`}
                     </Button>
                   </CardContent>
                 </Card>
@@ -501,6 +534,7 @@ export function Hl7IngestionPanel() {
             reviewFields={reviewFields}
             activeStepId={reviewWorkflow.state.activeStepId}
             selectedFieldId={reviewWorkflow.state.selectedFieldId}
+            exportLabel={exportLabel}
             reportStatus={reportStatus}
             onActiveStepChange={reviewWorkflow.changeStep}
             onSelectedFieldChange={reviewWorkflow.selectField}

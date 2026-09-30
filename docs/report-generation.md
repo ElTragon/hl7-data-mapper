@@ -36,8 +36,25 @@ flow.
 
 ## Web download flow
 
-The React app exposes a `Download report ZIP` button after a message has been
-successfully parsed.
+After parsing, the React app labels the download as an **interim report** until
+all required review decisions are resolved and no validation errors remain. It
+then offers a **completed report**. Both require valid normalized output; interim
+exports do not bypass `NormalizedOutputSchema`. Parser errors prevent export.
+
+Manifest version `1.2.0` includes a `review` summary with status, total, resolved,
+unresolved, error, warning, and informational counts. `REPORT.md` shows the same
+status and unresolved count. The generator derives completion from mapping items,
+current normalized values, validation issues, and matching decisions. Decisions
+must match the field ID, target path, and current primary source path; warning
+acknowledgments must match the issue path and source path. The generator rejects a
+requested completed export if those inputs do not support completion.
+
+Each export uses one cloned workspace snapshot. Input changes, review decisions,
+source corrections, reset, and reload cancel pending downloads. An older export's
+completion or failure cannot change the status of a newer attempt. Parser and
+source-read warnings remain in the report even after acknowledgment. The
+`correctionApplied` flag records applied correction history, including fields
+confirmed after correction.
 
 For the public demo, the button:
 

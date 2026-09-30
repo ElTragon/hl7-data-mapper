@@ -5,6 +5,7 @@ import {
   executeMapping,
 } from "@hl7-data-mapper/mapping-engine"
 import { describe, expect, it } from "vitest"
+import { buildReportPackage } from "@hl7-data-mapper/report-generator"
 
 import sampleHl7Message from "../../../../../fixtures/valid/oml-o21-basic.hl7?raw"
 import {
@@ -67,5 +68,40 @@ describe("review report", () => {
       family: "Rivera",
       given: "Sofia",
     })
+  })
+})
+
+it("exports a completed report from current browser review decisions", async () => {
+  const parsedMessage = parseHl7Message(sampleHl7Message)
+  const profile = defaultOmlO21ClientProfile
+  const mappingResult = executeMapping({ parsedMessage, profile })
+  const fields = buildReviewableFields({ mappingResult, profile }).map(
+    (field) => ({ ...field, reviewStatus: "confirmed" as const }),
+  )
+  const generatedAt = "2026-08-19T12:00:00.000Z"
+  const hash = "a".repeat(64)
+  const report = await buildReportPackage(
+    {
+      requestedReviewStatus: "completed",
+      appVersion: "0.1.0",
+      generatedAt,
+      clientId: profile.clientId,
+      profileId: profile.profileId,
+      profileVersion: profile.profileVersion,
+      messageHash: hash,
+      normalizedData: composeCurrentNormalizedOutput({
+        parsedMessage,
+        mappingResult,
+      }),
+      hl7Items: profile.itemSet.items,
+      reviewDecisions: buildReportReviewDecisions(fields, generatedAt),
+      validationResults: mappingResult.validation,
+    },
+    () => hash,
+  )
+  expect(report.manifest.review).toMatchObject({
+    status: "completed",
+    unresolvedCount: 0,
+    totalCount: fields.length,
   })
 })

@@ -44,9 +44,11 @@ const STORAGE_CLEANUP_MESSAGE =
 export function useIngestionWorkflow({
   store = browserDemoSnapshotStore,
   now = () => new Date().toISOString(),
+  onChange,
 }: {
   readonly store?: DemoSnapshotStore
   readonly now?: () => string
+  readonly onChange?: () => void
 } = {}) {
   const [state, setState] = useState<ReviewWorkflowState | null>(null)
   const [storageIssue, setStorageIssueState] =
@@ -56,6 +58,7 @@ export function useIngestionWorkflow({
 
   function replaceState(nextState: ReviewWorkflowState | null) {
     stateRef.current = nextState
+    onChange?.()
     setState(nextState)
   }
 
@@ -172,7 +175,11 @@ export function useIngestionWorkflow({
     update: (current: ReviewWorkflowState) => ReviewWorkflowState,
   ) {
     const current = stateRef.current
-    if (current) replaceState(update(current))
+    if (current) {
+      const next = update(current)
+      stateRef.current = next
+      setState(next)
+    }
   }
 
   return {
