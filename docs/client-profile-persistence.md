@@ -454,12 +454,18 @@ database.
 The shared contract is `DemoBrowserStorageSnapshotSchema` in
 `packages/contracts/src/persistence.ts`.
 
-The current browser format is version 2. Version 1 snapshots are decoded through
-a pure migration, while new writes use a separate version 2 key. Once version 2
-exists, later writes from an older version 1 tab are ignored by the current app.
-After a successful version 2 write, the storage adapter removes the legacy key.
-If that cleanup fails, the version 2 save remains valid and the UI reports that
-older browser data could not be cleared.
+The current browser format is version 3 (`hl7-data-mapper:demo-storage:v3`).
+Versions 1 and 2 migrate without changing the input: draft mappings and safe audit
+history are retained, but decisions and correction history are reset because the
+older formats cannot prove which mapping was reviewed. New writes remove both
+older keys. A cleanup failure preserves the new save and reports a warning.
+
+Decisions restore only when message fingerprint, client/profile identity and
+version, mapping revision, and review-engine revision match. The mapping revision
+covers mapping configuration, excluding incidental profile timestamps. Snapshots
+do not persist per-field values or value hashes. Applied corrections are stored
+separately from pending correction intents, so confirming a corrected field does
+not erase its correction history.
 
 The browser snapshot may store:
 

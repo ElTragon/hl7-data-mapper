@@ -338,7 +338,7 @@ export const DemoBrowserStorageSnapshotV1Schema = z
   .strict()
   .superRefine(addDemoSnapshotIssues)
 
-export const DemoBrowserStorageSnapshotSchema = z
+export const DemoBrowserStorageSnapshotV2Schema = z
   .object({
     storageVersion: z.literal(2),
     mode: z.literal("public_demo"),
@@ -351,8 +351,37 @@ export const DemoBrowserStorageSnapshotSchema = z
   .strict()
   .superRefine(addDemoSnapshotIssues)
 
+export const ReviewContextSchema = z
+  .object({
+    clientId: z.string().min(1),
+    profileId: z.string().min(1),
+    profileVersion: z.number().int().positive(),
+    messageFingerprint: z.string().regex(/^[a-f0-9]{16}$/i),
+    mappingRevision: z.string().regex(/^[a-f0-9]{16}$/i),
+    engineRevision: z.string().min(1),
+  })
+  .strict()
+
+export const DemoBrowserStorageSnapshotSchema = z
+  .object({
+    ...DemoBrowserStorageSnapshotV2Schema.shape,
+    storageVersion: z.literal(3),
+    reviewContext: ReviewContextSchema.nullable().default(null),
+    appliedCorrections: z.array(DemoStorageCorrectionIntentSchema).default([]),
+  })
+  .strict()
+  .superRefine(addDemoSnapshotIssues)
+  .superRefine((snapshot, context) => {
+    for (const issue of findForbiddenPersistenceIssues(
+      snapshot.appliedCorrections,
+    )) {
+      context.addIssue({ code: "custom", message: issue })
+    }
+  })
+
 export const StoredDemoBrowserStorageSnapshotSchema = z.union([
   DemoBrowserStorageSnapshotSchema,
+  DemoBrowserStorageSnapshotV2Schema,
   DemoBrowserStorageSnapshotV1Schema,
 ])
 
@@ -372,7 +401,7 @@ export function createEmptyDemoBrowserStorageSnapshot(
   updatedAt: string,
 ): DemoBrowserStorageSnapshot {
   return DemoBrowserStorageSnapshotSchema.parse({
-    storageVersion: 2,
+    storageVersion: 3,
     mode: "public_demo",
     draftProfiles: [],
     reviewDecisions: [],
@@ -397,26 +426,15 @@ export function decodeAndMigrateDemoBrowserStorageSnapshot(
 ): DemoBrowserStorageSnapshot {
   const storedSnapshot = StoredDemoBrowserStorageSnapshotSchema.parse(value)
 
-  if (storedSnapshot.storageVersion === 2) return storedSnapshot
-
-  const reviewDecisions = storedSnapshot.reviewDecisions.map(
-    ({ reviewNote, ...decision }) => {
-      void reviewNote
-      return decision
-    },
-  )
-  const correctionIntents = storedSnapshot.correctionIntents.map(
-    ({ notes, ...intent }) => {
-      void notes
-      return intent
-    },
-  )
-
+  if (storedSnapshot.storageVersion === 3) return storedSnapshot
+  // Legacy decisions have no mapping/engine binding. Preserve safe drafts only.
   return DemoBrowserStorageSnapshotSchema.parse({
     ...storedSnapshot,
-    storageVersion: 2,
-    reviewDecisions,
-    correctionIntents,
+    storageVersion: 3,
+    reviewDecisions: [],
+    correctionIntents: [],
+    appliedCorrections: [],
+    reviewContext: null,
   })
 }
 

@@ -1,3 +1,4 @@
+import { reviewContext } from "./review-evidence"
 import {
   createDraftClientProfileVersion,
   decodeAndMigrateDemoBrowserStorageSnapshot,
@@ -8,7 +9,8 @@ import {
   type ReviewableField,
 } from "@hl7-data-mapper/contracts"
 
-export const DEMO_STORAGE_KEY = "hl7-data-mapper:demo-storage:v2"
+export const DEMO_STORAGE_KEY = "hl7-data-mapper:demo-storage:v3"
+export const V2_DEMO_STORAGE_KEY = "hl7-data-mapper:demo-storage:v2"
 export const LEGACY_DEMO_STORAGE_KEY = "hl7-data-mapper:demo-storage:v1"
 export const MAX_DEMO_AUDIT_EVENTS = 250
 
@@ -50,6 +52,8 @@ export const browserDemoSnapshotStore: DemoSnapshotStore = {
 
     try {
       rawSnapshot = window.localStorage.getItem(DEMO_STORAGE_KEY)
+      if (rawSnapshot === null)
+        rawSnapshot = window.localStorage.getItem(V2_DEMO_STORAGE_KEY)
       if (rawSnapshot === null) {
         rawSnapshot = window.localStorage.getItem(LEGACY_DEMO_STORAGE_KEY)
       }
@@ -105,6 +109,7 @@ export const browserDemoSnapshotStore: DemoSnapshotStore = {
 
       try {
         window.localStorage.removeItem(LEGACY_DEMO_STORAGE_KEY)
+        window.localStorage.removeItem(V2_DEMO_STORAGE_KEY)
       } catch (error) {
         return { status: "saved_with_cleanup_warning", error }
       }
@@ -158,59 +163,22 @@ export function buildReviewWorkspaceSnapshot({
   readonly messageFingerprint: string
   readonly updatedAt: string
 }): DemoBrowserStorageSnapshot {
-  const safeProfile = {
-    ...profile,
-    itemSet: {
-      ...profile.itemSet,
-      items: profile.itemSet.items.map((item) => ({
-        ...item,
-        sources: item.sources.map(withoutRawSourceValue),
-      })),
-    },
-  }
-  const previousDecisionByFieldId = new Map(
-    previousSnapshot?.reviewDecisions.map((decision) => [
-      decision.fieldId,
-      decision,
-    ]) ?? [],
-  )
-  const previousIntentByFieldId = new Map(
-    previousSnapshot?.correctionIntents.map((intent) => [
-      intent.fieldId,
-      intent,
-    ]) ?? [],
-  )
-  const nextReviewDecisions = reviewFields.map((field) => {
-    const previous = previousDecisionByFieldId.get(field.id)
-    const reasonCode = field.reasonCode ?? null
-    const didChange =
-      !previous ||
-      previous.normalizedPath !== field.normalizedPath ||
-      previous.messageFingerprint !== messageFingerprint ||
-      previous.reviewStatus !== field.reviewStatus ||
-      (previous.reasonCode ?? null) !== reasonCode
-
-    return {
-      fieldId: field.id,
-      normalizedPath: field.normalizedPath,
-      messageFingerprint,
-      reviewStatus: field.reviewStatus,
-      reasonCode,
-      updatedAt: didChange ? updatedAt : previous.updatedAt,
-    }
-  })
-
-  return DemoBrowserStorageSnapshotSchema.parse({
-    storageVersion: 2,
-    mode: "public_demo",
-    draftProfiles: [safeProfile],
-    reviewDecisions: nextReviewDecisions,
-    correctionIntents: reviewFields.flatMap((field) => {
-      const intent = field.correctionIntent
+  function serializeCorrections(
+    kind: "correctionIntents" | "appliedCorrections",
+  ) {
+    return reviewFields.flatMap((field) => {
+      const intent =
+        field[
+          kind === "correctionIntents"
+            ? "correctionIntent"
+            : "appliedCorrection"
+        ]
 
       if (!intent) return []
 
-      const previous = previousIntentByFieldId.get(field.id)
+      const previous = previousSnapshot?.[kind].find(
+        (intent) => intent.fieldId === field.id,
+      )
       const replacementSourcePath = intent.replacementSource?.path ?? null
       const replacementSource = intent.replacementSource
         ? withoutRawSourceValue(intent.replacementSource)
@@ -242,7 +210,52 @@ export function buildReviewWorkspaceSnapshot({
           updatedAt: didChange ? updatedAt : previous.updatedAt,
         },
       ]
-    }),
+    })
+  }
+  const safeProfile = {
+    ...profile,
+    itemSet: {
+      ...profile.itemSet,
+      items: profile.itemSet.items.map((item) => ({
+        ...item,
+        sources: item.sources.map(withoutRawSourceValue),
+      })),
+    },
+  }
+  const previousDecisionByFieldId = new Map(
+    previousSnapshot?.reviewDecisions.map((decision) => [
+      decision.fieldId,
+      decision,
+    ]) ?? [],
+  )
+  const nextReviewDecisions = reviewFields.map((field) => {
+    const previous = previousDecisionByFieldId.get(field.id)
+    const reasonCode = field.reasonCode ?? null
+    const didChange =
+      !previous ||
+      previous.normalizedPath !== field.normalizedPath ||
+      previous.messageFingerprint !== messageFingerprint ||
+      previous.reviewStatus !== field.reviewStatus ||
+      (previous.reasonCode ?? null) !== reasonCode
+
+    return {
+      fieldId: field.id,
+      normalizedPath: field.normalizedPath,
+      messageFingerprint,
+      reviewStatus: field.reviewStatus,
+      reasonCode,
+      updatedAt: didChange ? updatedAt : previous.updatedAt,
+    }
+  })
+
+  return DemoBrowserStorageSnapshotSchema.parse({
+    storageVersion: 3,
+    reviewContext: reviewContext(profile, messageFingerprint),
+    mode: "public_demo",
+    draftProfiles: [safeProfile],
+    reviewDecisions: nextReviewDecisions,
+    correctionIntents: serializeCorrections("correctionIntents"),
+    appliedCorrections: serializeCorrections("appliedCorrections"),
     demoAuditEvents: [
       ...(previousSnapshot?.demoAuditEvents ?? []),
       ...buildReviewDecisionAuditEvents({

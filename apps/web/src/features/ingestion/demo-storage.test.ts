@@ -86,7 +86,7 @@ describe("demo storage", () => {
     expect(browserDemoSnapshotStore.load()).toEqual({ status: "invalid" })
   })
 
-  it("loads version 1 snapshots and writes subsequent changes as version 2", () => {
+  it("loads version 1 snapshots and writes subsequent changes as version 3", () => {
     const { profile, reviewFields } = createWorkspace()
     const currentSnapshot = buildReviewWorkspaceSnapshot({
       previousSnapshot: null,
@@ -97,13 +97,18 @@ describe("demo storage", () => {
     })
     window.localStorage.setItem(
       LEGACY_DEMO_STORAGE_KEY,
-      JSON.stringify({ ...currentSnapshot, storageVersion: 1 }),
+      JSON.stringify({
+        ...currentSnapshot,
+        storageVersion: 1,
+        reviewContext: undefined,
+        appliedCorrections: undefined,
+      }),
     )
 
     const loadResult = browserDemoSnapshotStore.load()
     expect(loadResult).toMatchObject({
       status: "loaded",
-      snapshot: { storageVersion: 2 },
+      snapshot: { storageVersion: 3 },
     })
     if (loadResult.status !== "loaded") {
       throw new Error("Expected migrated snapshot")
@@ -115,7 +120,7 @@ describe("demo storage", () => {
       }),
     ).toEqual({ status: "saved" })
     expect(window.localStorage.getItem(DEMO_STORAGE_KEY)).toContain(
-      '"storageVersion":2',
+      '"storageVersion":3',
     )
     expect(window.localStorage.getItem(LEGACY_DEMO_STORAGE_KEY)).toBeNull()
   })
@@ -138,7 +143,7 @@ describe("demo storage", () => {
     })
   })
 
-  it("reports legacy cleanup failure after preserving the version 2 save", () => {
+  it("reports legacy cleanup failure after preserving the version 3 save", () => {
     const { profile, reviewFields } = createWorkspace()
     const snapshot = buildReviewWorkspaceSnapshot({
       previousSnapshot: null,
@@ -158,7 +163,7 @@ describe("demo storage", () => {
       status: "saved_with_cleanup_warning",
     })
     expect(window.localStorage.getItem(DEMO_STORAGE_KEY)).toContain(
-      '"storageVersion":2',
+      '"storageVersion":3',
     )
     expect(window.localStorage.getItem(LEGACY_DEMO_STORAGE_KEY)).toBe(
       "legacy data",
@@ -166,7 +171,7 @@ describe("demo storage", () => {
     removeItem.mockRestore()
   })
 
-  it("prefers version 2 storage when an older tab writes version 1", () => {
+  it("prefers version 3 storage when an older tab writes version 1", () => {
     const { profile, reviewFields } = createWorkspace()
     const currentSnapshot = buildReviewWorkspaceSnapshot({
       previousSnapshot: null,
