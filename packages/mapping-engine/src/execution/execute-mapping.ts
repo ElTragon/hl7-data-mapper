@@ -1,3 +1,4 @@
+import { collectReviewValidation } from "../guided-review/warning-review-fields.js"
 import {
   canExecuteClientProfile,
   ClientProfileSchema,
@@ -63,7 +64,7 @@ export function executeMapping({
     })
   }
 
-  return {
+  const result: MappingExecutionResult = {
     profile: {
       clientId: parsedProfile.clientId,
       profileId: parsedProfile.profileId,
@@ -74,5 +75,9 @@ export function executeMapping({
     normalizedFields: fields,
     validation: createValidationSummary(issues),
     executionTrace: trace,
+  }
+  return {
+    ...result,
+    validation: collectReviewValidation(result, parsedMessage),
   }
 }

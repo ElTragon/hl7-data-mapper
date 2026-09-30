@@ -1,3 +1,4 @@
+import { assessReviewCompletion } from "@hl7-data-mapper/contracts"
 import type {
   GuidedReviewStepId,
   ReviewableField,
@@ -45,52 +46,23 @@ export function buildReviewWorkspaceSummary(
     }
   }
 
-  let completeCount = 0
-  let mappingChangeCount = 0
-  let unresolvedCount = 0
-
-  for (const field of fields) {
-    const status = getEffectiveReviewStatus(field)
-
-    if (
-      status === "confirmed" ||
-      status === "mapping_changed" ||
-      status === "unavailable"
-    ) {
-      completeCount += 1
-    }
-
-    if (status === "mapping_changed") {
-      mappingChangeCount += 1
-    }
-
-    if (status === "unreviewed" || status === "incorrect") {
-      unresolvedCount += 1
-    }
-  }
-
+  const completion = assessReviewCompletion(fields)
   return {
-    reviewPercent: Math.round((completeCount / fields.length) * 100),
-    mappingChangeCount,
-    unresolvedCount,
+    reviewPercent: Math.round((completion.resolvedCount / fields.length) * 100),
+    mappingChangeCount: fields.filter((field) =>
+      Boolean(field.appliedCorrection),
+    ).length,
+    unresolvedCount: completion.unresolvedCount,
   }
 }
 
 export function getStepPercent(progress: {
   readonly total: number
-  readonly confirmed: number
-  readonly mappingChanged: number
-  readonly unavailable: number
+  readonly resolvedCount: number
 }): number {
-  if (progress.total === 0) {
-    return 0
-  }
-
-  return Math.round(
-    ((progress.confirmed + progress.mappingChanged + progress.unavailable) /
-      progress.total) *
-      100,
-  )
+  return progress.total === 0
+    ? 100
+    : Math.round((progress.resolvedCount / progress.total) * 100)
 }
 
 export function getEffectiveReviewStatus(

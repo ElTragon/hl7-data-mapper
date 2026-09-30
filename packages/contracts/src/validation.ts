@@ -5,6 +5,9 @@ import { SourceReferenceSchema } from "./source-reference.js"
 export const ValidationSeveritySchema = z.enum(["error", "warning", "info"])
 
 export const ValidationIssueSchema = z.object({
+  id: z.string().min(1).optional(),
+  origin: z.enum(["parser", "mapping", "source_read"]).optional(),
+  segmentIndex: z.number().int().nonnegative().optional(),
   code: z.string().min(1),
   severity: ValidationSeveritySchema,
   message: z.string().min(1),

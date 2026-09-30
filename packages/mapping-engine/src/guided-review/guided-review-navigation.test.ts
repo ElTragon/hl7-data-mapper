@@ -49,9 +49,9 @@ describe("guided review navigation", () => {
     })
   })
 
-  it("does not complete empty steps", () => {
+  it("completes empty steps", () => {
     const navigation = buildGuidedReviewNavigation({ fields: [] })
-    expect(navigation.steps.every((step) => !step.isComplete)).toBe(true)
+    expect(navigation.steps.every((step) => step.isComplete)).toBe(true)
     expect(navigation.nextStepId).toBeNull()
   })
 })

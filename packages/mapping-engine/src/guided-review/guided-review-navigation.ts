@@ -1,5 +1,6 @@
 import {
   GUIDED_REVIEW_STEPS,
+  assessReviewCompletion,
   type GuidedReviewProgress,
   type GuidedReviewStepId,
   type ReviewableField,
@@ -9,6 +10,7 @@ export type GuidedReviewStepSummary = {
   readonly id: GuidedReviewStepId
   readonly title: string
   readonly progress: GuidedReviewProgress
+  readonly resolvedCount: number
   readonly isComplete: boolean
   readonly hasBlockingIssues: boolean
 }
@@ -54,15 +56,13 @@ export function buildGuidedReviewNavigation({
       field.validation.some((issue) => issue.severity === "error"),
     )
 
+    const completion = assessReviewCompletion(stepFields)
     return {
+      resolvedCount: completion.resolvedCount,
       id: step.id,
       title: step.title,
       progress,
-      isComplete:
-        progress.total > 0 &&
-        progress.unreviewed === 0 &&
-        progress.incorrect === 0 &&
-        !hasBlockingIssues,
+      isComplete: completion.status === "completed",
       hasBlockingIssues,
     }
   })

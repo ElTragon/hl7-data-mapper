@@ -85,6 +85,7 @@ export const ReviewableFieldSchema = z.object({
   reasonCode: ReviewDecisionReasonSchema.nullable().optional(),
   reviewNote: ReviewNoteSchema.nullable().optional(),
   sourceCandidates: z.array(ReviewSourceCandidateSchema).default([]),
+  appliedCorrection: ReviewCorrectionIntentSchema.nullable().optional(),
   correctionIntent: ReviewCorrectionIntentSchema.nullable().optional(),
 })
 
