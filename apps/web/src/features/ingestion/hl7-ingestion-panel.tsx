@@ -271,8 +271,8 @@ export function Hl7IngestionPanel() {
 
   return (
     <section id="ingestion" className="scroll-mt-8 border-b py-20">
-      <div className="mx-auto grid max-w-6xl gap-8 px-5 lg:px-8 xl:grid-cols-[minmax(0,0.95fr)_minmax(26rem,1.05fr)]">
-        <div className="flex flex-col gap-5">
+      <div className="mx-auto grid max-w-6xl grid-cols-[minmax(0,1fr)] gap-8 px-5 lg:px-8 xl:grid-cols-[minmax(0,0.95fr)_minmax(26rem,1.05fr)]">
+        <div className="flex min-w-0 flex-col gap-5">
           <div>
             <Badge variant="secondary">Message intake</Badge>
             <h2 className="mt-3 text-3xl font-semibold tracking-tight">
@@ -358,7 +358,7 @@ export function Hl7IngestionPanel() {
           </Card>
         </div>
 
-        <Card>
+        <Card className="min-w-0">
           <CardHeader>
             <CardTitle>Parse result</CardTitle>
             <CardDescription>
