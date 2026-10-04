@@ -25,6 +25,7 @@ displayed value.
 - Tailwind CSS and shadcn/ui
 - TanStack Router and TanStack Query
 - Vitest and React Testing Library
+- Playwright for browser workflow checks
 - pnpm workspaces
 - Cloudflare Pages and Workers for hosted features
 - D1-compatible contracts for future profile metadata persistence
@@ -65,6 +66,26 @@ pnpm lint
 pnpm test
 pnpm format:check
 ```
+
+Run the browser journeys against a production build:
+
+```bash
+pnpm --filter web exec playwright install chromium
+pnpm test:e2e
+```
+
+These tests use synthetic fixtures and cover upload, correction, reload, ZIP
+export, competing tabs, reset, and phone-width layout. CI runs them in a
+separate Chromium job and uploads failure traces and screenshots.
+
+Run the shadcn component CLI on demand from the monorepo root:
+
+```bash
+pnpm dlx shadcn@latest add -c apps/web <component>
+```
+
+The app keeps its current component state variants in `apps/web/src/index.css`.
+Review that file when adding components that need more variants or utilities.
 
 ## Workspace
 
