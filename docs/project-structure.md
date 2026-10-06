@@ -1,164 +1,91 @@
-# Project Structure
+# Project structure
 
-This project is organized as a small TypeScript monorepo. Each folder has one job, so the code stays easier to understand as the HL7 workflow grows.
+This TypeScript workspace separates the browser workflow, the Cloudflare Worker,
+and reusable packages.
 
 ## Workspace map
 
 ```text
 apps/
-  web/                         React app and user workflow
-  api/                         Cloudflare Worker API
+  web/                         React app: local ingestion, review, and ZIP download
+  api/                         Cloudflare Worker: /health endpoint
 
 packages/
-  contracts/                   Shared schemas and TypeScript types
-  hl7-parser/                  Raw HL7 text parser
-  mapping-engine/              Client-specific extraction and mapping logic
-  report-generator/            Report file generation
+  contracts/                   Shared schemas, types, and lifecycle helpers
+  hl7-parser/                  HL7 v2 message parsing and structural validation
+  mapping-engine/              Profile execution, default composers, and guided review
+  report-generator/            Report files and ZIP creation in memory
 
-docs/                          Product, architecture, and security notes
-fixtures/                      Synthetic HL7 examples and expected output
+docs/                          Product and architecture documentation
+fixtures/                      Synthetic HL7 messages and expected output
 ```
 
-## Dependency direction
+## Package dependencies
+
+An arrow means the package on the left declares a dependency on the package on
+the right:
 
 ```text
-contracts
-  ↑
-mapping-engine ← hl7-parser
-  ↑
-web → report-generator
-  ↑
-api
+web              → contracts, hl7-parser, mapping-engine, report-generator
+mapping-engine   → contracts, hl7-parser
+report-generator → contracts
+api              → contracts
 ```
 
-In plain English:
+`contracts` and `hl7-parser` have no workspace package dependencies. The API
+and report generator do not depend on the mapping engine.
 
-- `contracts` defines the shapes everyone agrees on.
-- `hl7-parser` reads HL7 text and turns it into structured HL7 data.
-- `mapping-engine` uses parsed HL7 data, default composers, and later
-  `hl7Item` rules to produce normalized output.
-- `mapping-engine` also creates guided-review fields, progress summaries, and
-  rule-driven correction updates for draft client profiles.
-- `report-generator` turns normalized data, `hl7Item`s, review decisions, and
-  validation results into report files in memory.
-- `api` hosts Cloudflare Worker endpoints for health checks and later report
-  generation, profile metadata, rate limiting, and planned D1-backed audit
-  metadata.
-- `contracts` defines safe persistence records for mapping-run metadata and
-  audit events so storage code does not accept raw HL7 or patient payloads.
-- `contracts` also defines the public-demo persistence policy so demo storage
-  stays local, temporary, and resettable.
-- `contracts` defines the browser demo snapshot shape so temporary profile
-  edits, review decisions, and correction intents stay separated from raw HL7
-  and patient data.
-- `contracts` defines report package contracts so the manifest, file list,
-  review decisions, and mapping summary stay predictable.
-- `web` is the user interface that guides upload, edit, review, and report export.
+In the current browser workflow, `web` parses a synthetic HL7 message with
+`hl7-parser`, runs the selected profile with `mapping-engine`, and builds guided
+review fields from the mapping result. For export, it combines the default
+normalized composer output with the profile's mapped values, then calls
+`report-generator` to validate and create report files and a ZIP. The browser
+downloads those bytes locally. The Worker currently serves `/health`; profile
+storage and server-side report processing are planned.
 
-Data-model details: [normalized-data-model.md](normalized-data-model.md)
+`contracts` defines the normalized data, profile, review, report, and safe
+persistence shapes shared by these packages. Its D1 record schemas are
+contracts for future storage work; they do not create a database or persist
+messages. The browser demo uses the snapshot contract for temporary profile
+edits and review decisions without storing raw HL7 text.
 
-Client profile persistence requirements:
-[client-profile-persistence.md](client-profile-persistence.md)
+For details, see [normalized data](normalized-data-model.md),
+[client profiles](client-profiles.md),
+[profile persistence](client-profile-persistence.md),
+[mapping execution](mapping-execution.md), and
+[report generation](report-generation.md).
 
-Client profile rules: [client-profiles.md](client-profiles.md)
-
-Mapping execution rules: [mapping-execution.md](mapping-execution.md)
-
-Report generation rules: [report-generation.md](report-generation.md)
-
-## Package rules
+## Package boundaries
 
 ### `@hl7-data-mapper/contracts`
 
-Allowed:
-
-- normalized output schemas
-- `hl7Item` mapping schemas
-- guided review field schemas
-- source-reference schemas
-- review-status schemas
-- shared TypeScript types
-- validation helpers
-- report package schemas
-
-Avoid:
-
-- React components
-- raw file upload logic
-- HL7 parsing logic
+Owns schemas, shared types, validation helpers, profile lifecycle helpers,
+review-completion helpers, and browser/D1 persistence record shapes. It does
+not parse HL7, upload files, or render the UI.
 
 ### `@hl7-data-mapper/hl7-parser`
 
-Allowed:
-
-- HL7 segment parsing
-- field, repetition, component, and subcomponent parsing
-- source-location tracking
-
-Avoid:
-
-- patient-specific output decisions
-- client-specific mappings
-- report ZIP generation
+Parses raw HL7 text into ordered segments, fields, repetitions, components, and
+subcomponents with source positions and structural issues. It does not decide
+how those values map to a client profile or normalized output.
 
 ### `@hl7-data-mapper/mapping-engine`
 
-Allowed:
-
-- default mapping rules
-- normalized output composers
-- HL7 datatype value helpers
-- client-specific `hl7Item` steps
-- evidence showing how a normalized field was collected
-
-Avoid:
-
-- React UI
-- direct DOM or browser APIs
-- parsing raw HL7 text without going through `hl7-parser`
+Executes ordered `hl7Item` rules against parsed messages, applies the supported
+named transforms, and returns a normalized draft, validation issues, and source
+evidence. It also supplies default normalized composers and guided-review
+helpers. It does not parse raw text or render React components.
 
 ### `@hl7-data-mapper/report-generator`
 
-Allowed:
-
-- building report files in memory
-- creating `REPORT.md`
-- creating report JSON files
-- creating mapping-summary CSV content
-- validating report manifests through `contracts`
-
-Avoid:
-
-- ZIP compression
-- browser download APIs
-- parsing raw HL7 text
-- changing mapping results
+Validates report inputs, creates the report files and manifest, and compresses
+them into a ZIP in memory with `buildReportZip`. The web app owns the browser
+download; the package does not use DOM APIs or change mapping results.
 
 ### `api`
 
-Allowed:
+Handles Cloudflare Worker requests. Its implemented route is `/health`, with
+security and no-store response headers. Profile metadata, D1 persistence,
+rate limiting, and report processing remain planned.
 
-- Cloudflare Worker request handling
-- health and metadata endpoints
-- report generation endpoints in later phases
-- planned D1-backed profile metadata in later phases
-- security headers, request IDs, rate limiting, and logging controls
-
-Avoid:
-
-- storing raw HL7 messages
-- storing extracted patient data
-- browser-only APIs
-- claiming HIPAA compliance
-
-## Root commands
-
-Run these from the project root:
-
-```bash
-pnpm typecheck
-pnpm build
-pnpm lint
-pnpm test
-pnpm format:check
-```
+See the [root README](../README.md) for setup and validation commands.

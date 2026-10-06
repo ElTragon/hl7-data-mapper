@@ -68,6 +68,11 @@ For the public demo, the button:
 The browser download is intentionally local. It does not upload the message,
 store raw HL7 text, or write report data to a public database.
 
+The current Playwright journey verifies an interim ZIP after upload, correction,
+reload, and re-parsing the same message. Completed-report assembly is covered by
+web and report-generator tests; the completed download journey has not yet been
+verified in a browser test.
+
 ### `REPORT.md`
 
 Human-readable summary of the mapping run.
@@ -145,8 +150,9 @@ Each decision can include:
 - an optional operational review note.
 
 Review notes explain client mapping or source-data decisions. They must not be
-used to store patient information. The public demo persists them only in the
-browser alongside the draft review state.
+used to store patient information. In the public demo, free-text review notes
+remain in memory for the active review and generated report. They are not saved
+to browser storage.
 
 The report-friendly decision shape is `ReportReviewDecisionSchema`.
 

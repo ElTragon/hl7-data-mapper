@@ -4,9 +4,10 @@ Guided review walks a user through the values extracted from a synthetic
 OML/O21 message and asks them to confirm whether each mapping is correct for
 the client.
 
-The goal is not just to edit displayed text. When the user finds a bad mapping,
-the application should update the client-specific `hl7Item` instructions so the
-same source message maps correctly the next time.
+When the user finds a bad mapping, the web app updates `hl7Item` instructions in
+a browser draft of the bundled client profile. Re-parsing the same message with
+that draft reproduces the corrected mapping. Browser flows for client creation
+and publishing are planned; completing review does not publish the draft.
 
 ## Review steps
 
@@ -59,8 +60,8 @@ For each field, the user can:
 - mark the value as unavailable in the source message; or
 - select another HL7 source.
 
-Selecting another source should create or update an `hl7Item` correction. The
-normalized value should then be regenerated from mapping rules instead of being
+Selecting another source creates or updates an `hl7Item` correction. The
+normalized value is then regenerated from mapping rules instead of being
 manually overwritten in UI state.
 
 The correction flow is intentionally two-step:
@@ -70,7 +71,7 @@ The correction flow is intentionally two-step:
 2. `applyReviewFieldCorrectionToProfile` updates the linked `hl7Item` source in
    the draft client profile.
 
-The UI should then re-run mapping with the updated profile so the displayed
+The UI then re-runs mapping with the updated profile so the displayed
 value comes from mapping execution, not from a one-off manual override.
 
 `applyReviewCorrectionAndRerunMapping` handles that full loop for the app:
@@ -110,7 +111,7 @@ progress counts for each section:
 - mapping-changed fields; and
 - unavailable fields.
 
-The UI can use this to show progress such as “Patient information complete” or
+The web UI uses this to show progress such as “Patient information complete” or
 “Lab orders still need review.”
 
 ## Warnings and missing fields
@@ -167,6 +168,15 @@ source identity, validation, transforms, and mapping/dependency configuration ar
 unchanged. Unaffected decisions remain intact. Applied correction history survives
 later confirmation, incorrect, or unavailable decisions and is exported separately
 from the current review status. Review completion does not publish a profile.
+
+The browser stores safe draft rules, structured decisions, and correction
+metadata across a refresh. It does not store the message text or extracted
+values. To resume an uploaded or pasted message after reloading, the user must
+provide the same message and parse it again; decisions restore only when its
+fingerprint, client/profile identity and version, mapping revision, and review
+engine revision match. Free-text review and correction notes remain in memory
+for the active review and report, but are not saved to browser storage. **Reset
+demo draft** clears the stored draft and decisions; refreshing alone does not.
 
 ## Source selection
 

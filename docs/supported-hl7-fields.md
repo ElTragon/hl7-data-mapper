@@ -6,8 +6,12 @@ This matrix defines the HL7 Data Mapper MVP application profile for
 `OML^O21^OML_O21`.
 
 “MVP required” describes this product profile, not the base HL7 standard.
-Fields not listed here may be parsed structurally in future work but are not
-part of the default normalized output.
+The parser can preserve structurally valid fields beyond this mapping matrix.
+The matrix describes intended field-level mapping, not a guarantee that every
+repetition is present in the current browser report: default composers can
+enumerate repeated coverage, address, telecom, and order groups, but the current
+profile's mapped arrays can replace them with one entry. See
+[mapping execution](mapping-execution.md) for that limit.
 
 ## Message and sender
 
@@ -52,7 +56,8 @@ part of the default normalized output.
 
 ## Coverage
 
-Every IN1 in the patient group creates one `coverages[]` entry.
+The target profile creates one `coverages[]` entry per IN1 in the patient group.
+The current browser export has the repetition limit noted above.
 
 | Target                                        | HL7 source | Type | MVP required        | Default behavior     |
 | --------------------------------------------- | ---------- | ---- | ------------------- | -------------------- |
@@ -100,8 +105,10 @@ OML_O21 permits one optional GT1 in the patient group. If GT1 is absent,
 
 ## Laboratory orders
 
-Each ORC starts one `labOrders[]` entry. TQ1, OBR, and SPM segments are bound to
-the current ORC group until the next ORC.
+In the target profile, each ORC starts one `labOrders[]` entry. TQ1, OBR, and
+SPM segments belong to the current ORC group until the next ORC. The parser
+and default composer preserve these groups; the current browser export has the
+repetition limit noted above.
 
 | Target                                      | HL7 source              | Type | MVP required | Default behavior      |
 | ------------------------------------------- | ----------------------- | ---- | ------------ | --------------------- |
@@ -129,7 +136,9 @@ schedule.
 
 ## Specimens
 
-Every SPM inside an order creates one `labOrders[].specimens[]` entry.
+The target/default-composer behavior is one `labOrders[].specimens[]` entry per
+SPM inside an order. The current browser export profile can retain only one
+mapped order and specimen entry; repeated-entry export still needs work.
 
 | Target                              | HL7 source | Type   | MVP required        | Default behavior       |
 | ----------------------------------- | ---------- | ------ | ------------------- | ---------------------- |

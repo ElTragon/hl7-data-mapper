@@ -1,13 +1,12 @@
 # HL7 Ingestion
 
 HL7 ingestion gets synthetic HL7 text into the application and turns it into a
-structured, inspectable message. This layer proves we can read the file
-correctly before we try to extract patient, coverage, guarantor, or lab-order
-business data.
+structured, inspectable message. The browser runs this layer before extracting
+patient, coverage, guarantor, or lab-order business data.
 
-## Goal
+## Current behavior
 
-Build a safe ingestion path for the MVP-supported message profile:
+The implemented ingestion path supports this MVP message profile:
 
 - HL7 version: `2.5.1`
 - Message type: `OML`
@@ -55,11 +54,14 @@ The ingestion layer does not include:
 - accepting real PHI; or
 - claiming complete HL7 conformance validation.
 
-Those belong to later application capabilities.
+The current web app runs mapping, guided review, and report generation after a
+valid parse; those capabilities sit outside the ingestion layer. Browser flows
+for client creation and profile publishing, and server-side processing, remain
+planned.
 
 ## Basic validation rules
 
-The ingestion layer should report errors for:
+The parser reports errors for:
 
 - missing `MSH`;
 - `MSH` not being the first segment;
@@ -71,19 +73,20 @@ The ingestion layer should report errors for:
   an associated `OBR`; and
 - malformed segment names.
 
-The ingestion layer should report warnings for:
+The parser currently reports a warning for:
 
-- order groups missing `SPM`;
-- empty optional fields;
-- repeated fields that will need mapping confirmation later; and
-- fields that exist but cannot be cleanly addressed by a source path.
+- each order group missing `SPM`.
+
+Missing or empty source values encountered during mapping appear in guided
+review as source-read issues. The parser does not currently warn just because
+an optional field is empty or a field repeats.
 
 Errors block review. Warnings allow review but must be visible to the user.
 
 ## Expected parser output shape
 
-The exact TypeScript types will live in `packages/hl7-parser`, but the parser
-should return this kind of information:
+The exact TypeScript types live in `packages/hl7-parser/src/types.ts`. The
+parser returns this information:
 
 ```ts
 {
@@ -110,7 +113,7 @@ should return this kind of information:
 
 ## Acceptance criteria
 
-The ingestion layer is complete when:
+The current ingestion path provides:
 
 - a synthetic HL7 message can be pasted or loaded into the web app;
 - the message can be edited before parsing;
@@ -119,10 +122,11 @@ The ingestion layer is complete when:
 - the parser can identify fields, repetitions, components, and subcomponents;
 - the app shows message type, HL7 version, segment count, order count, errors,
   and warnings;
-- invalid fixtures produce understandable validation errors;
-- no uploaded message is stored outside local browser state; and
-- root checks pass with `pnpm typecheck`, `pnpm build`, `pnpm lint`,
-  `pnpm test`, and `pnpm format:check`.
+- invalid fixtures produce understandable validation errors; and
+- uploaded source text remains in browser memory rather than browser storage.
+
+Repository checks for this path are `pnpm typecheck`, `pnpm build`, `pnpm lint`,
+`pnpm test`, and `pnpm format:check`.
 
 ## Input limits and upload lifecycle
 

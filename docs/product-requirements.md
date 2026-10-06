@@ -10,6 +10,17 @@ business field, and export a reproducible handoff package.
 The MVP supports one declared profile well instead of presenting itself as a
 general HL7 conformance engine.
 
+The current public demo parses synthetic messages in the browser, runs the
+bundled OML/O21 profile, supports guided review and source corrections in a
+browser draft, and downloads an interim or completed report ZIP according to
+review status. Safe draft and review metadata survive a refresh in browser
+storage; the user must parse the same message again to resume that review. The
+app does not retain raw HL7 text or extracted patient values in browser storage
+or on a server; normalized values are included in the user-downloaded ZIP.
+Browser flows for client creation and profile publishing, Cloudflare D1 storage,
+and server-side message processing remain planned. Shared contracts and profile
+lifecycle helpers exist for parts of that future workflow.
+
 ## 2. Primary user and problem
 
 ### Primary user
@@ -72,10 +83,15 @@ The MVP does not:
 - persist uploaded source messages or extracted patient data; or
 - claim that the repository or public deployment is HIPAA compliant.
 
-## 5. Product workflow
+## 5. Target product workflow
+
+The public demo currently starts with a bundled client profile. Steps 2–7 and
+10 run in the browser, and step 8 saves changes to a browser draft copy. Client
+creation in step 1 and publishing in step 9 are planned.
 
 1. The user identifies the client with a non-PHI client ID.
-2. The user uploads, pastes, or generates a synthetic OML^O21 message.
+2. The user uploads or pastes a synthetic OML^O21 message, or loads the bundled
+   synthetic sample.
 3. The user edits the raw message if necessary.
 4. The application parses the message and applies the default mapping profile.
 5. The user reviews patient, sender, coverage, guarantor, and order sections.
@@ -91,10 +107,11 @@ The MVP does not:
 
 - Accept `.hl7` and `.txt` uploads up to 1 MiB.
 - Accept pasted text.
-- Generate a built-in synthetic OML^O21 example.
+- Load the bundled synthetic OML^O21 sample.
 - Preserve the submitted text while allowing edits before parsing.
 - Normalize CRLF and LF segment endings to HL7 carriage returns internally.
-- Never upload or persist a message until the user explicitly parses it.
+- Parse only after the user explicitly clicks **Parse message**. Keep the source
+  text in browser memory; never upload or persist it.
 
 ### FR-2: Profile checks
 
@@ -113,6 +130,12 @@ The MVP validator must:
 These checks validate the application profile, not the entire HL7 standard.
 
 ### FR-3: Default extraction
+
+These are target requirements for the exported output. The default composer
+preserves repeated IN1, ORC, and SPM groups, but the current browser report can
+replace those arrays with single-entry arrays from the built-in mapping profile.
+Preserving every repeated entry in browser exports remains to be implemented;
+see [mapping execution](mapping-execution.md).
 
 - Apply the defaults in `docs/supported-hl7-fields.md`.
 - Preserve repeating IN1 coverage records.
@@ -187,7 +210,13 @@ An `hl7Item` represents one atomic mapping operation:
 }
 ```
 
-Supported MVP operations:
+The MVP contract names these operations. The executor implements `extract`,
+`join`, `normalize_date`, `normalize_timestamp`, `default_value`, and
+`validate`; `compose` is available through named transforms rather than as a
+general-purpose operation. General `split` and `map_code` execution are still
+planned. See [mapping execution](mapping-execution.md) for the current behavior.
+
+MVP contract operations:
 
 - `extract`
 - `split`
@@ -224,14 +253,17 @@ IDs and must form an acyclic graph. Item execution must be deterministic.
 - New draft versions must record which published version they were based on.
 - Version numbers must only move forward.
 - Archived versions can be read for history but cannot run new mappings.
-- The public demo stores user-created drafts in browser storage only.
+- The public demo creates a draft copy of its bundled profile and stores that
+  draft in browser storage only.
 - Built-in sample profiles are read-only.
 - Public demo reset clears browser-stored drafts, review decisions, selected
   alternate sources, correction intents, and temporary demo events.
-- A mapping run records the profile version and SHA-256 source-message hash,
-  but not the source message or extracted PHI.
-- Mapping run metadata may include validation counts, result status, message
-  type, HL7 version, and message structure.
+- The local report manifest records the profile version and SHA-256
+  source-message hash, but not the source message. The shared mapping-run
+  metadata contract describes a planned audit record; the demo does not write
+  one to D1.
+- Planned mapping-run metadata may include validation counts, result status,
+  message type, HL7 version, and message structure.
 - Audit events may include safe configuration metadata but must reject raw HL7
   text and patient-like payload keys.
 - The planned D1 persistence layer may store clients, mapping profiles, mapping
@@ -290,18 +322,21 @@ The normalized output contains:
 
 ```text
 schemaVersion
-clientId
-generatedAt
+clientId?
+generatedAt?
 message
 sender
 patient
 coverages[]
 guarantor
 labOrders[]
+validation?
 ```
 
 The canonical example is
 `fixtures/expected/oml-o21-basic.normalized.json`.
+The browser export may omit `clientId` and `generatedAt`; the report manifest
+records client identity and its generation timestamp separately.
 
 Rules:
 
@@ -344,8 +379,11 @@ The MVP requirements are accepted when:
 - scope and non-goals are visible in the repository; and
 - formatting, tests, lint, and build checks pass.
 
-The implemented MVP is accepted later when a user can complete the documented
-workflow without changing source code.
+The current browser journey verifies source correction, re-parsing the same
+message after a reload, and an interim report ZIP. Completed-report assembly is
+covered by web and report-generator tests. The full target workflow remains
+open until client creation, profile publishing, and persistence are implemented
+and the complete browser journey is verified.
 
 ## 10. Reference material
 

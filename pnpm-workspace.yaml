@@ -2,8 +2,10 @@ packages:
   - "apps/*"
   - "packages/*"
 overrides:
-  # Miniflare pins an older sharp; retain this until it includes the libheif fixes.
-  sharp: 0.35.4
+  # Router allows this patched release, but a normal transitive refresh retains 1.5.4.
+  seroval: 1.6.3
+  # Miniflare pins an older sharp; use a patched release until it updates.
+  sharp: 0.35.5
   undici: 7.29.1
 allowBuilds:
   esbuild: true

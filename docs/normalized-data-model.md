@@ -18,8 +18,9 @@ The contracts currently target one profile:
 
 ## Normalized output
 
-`NormalizedOutputSchema` is the clean business object produced by a successful
-mapping run.
+`NormalizedOutputSchema` validates the clean business object used for export.
+The browser merges the default composer's output with the profile's mapping
+draft before validating it against this schema.
 
 It contains:
 
@@ -39,7 +40,8 @@ validation?
 Important rules:
 
 - JSON keys use camelCase.
-- Missing optional scalar values use `null`.
+- Optional properties may be omitted; present nullable scalar values use `null`
+  when absent from the source.
 - Repeating concepts use arrays, even when only one value is present.
 - Dates use `YYYY-MM-DD`.
 - Timestamps use ISO 8601 and preserve the source UTC offset when supplied.
@@ -140,8 +142,10 @@ It defines:
 - optional transform details; and
 - whether the field is required or reviewable.
 
-Multiple `hl7Item`s may contribute to one final field. For example, a mapping
-can first extract `PID-5`, then split it into family and given names.
+Multiple `hl7Item`s may contribute to one final field. The current profile
+uses named patient-name transforms to read XPN components from `PID-5`; a
+general-purpose `split` action is defined by the contract but is not yet
+implemented by the executor.
 
 ## Validation
 
@@ -153,8 +157,9 @@ warning
 info
 ```
 
-Errors block review. Warnings and info messages can be shown to the user while
-still allowing the review workflow to continue.
+Parser errors block review. Mapping validation errors prevent a completed
+export, but the user can continue reviewing and download an interim report.
+Warnings and info messages can be shown while the review workflow continues.
 
 Validation issues may point to:
 

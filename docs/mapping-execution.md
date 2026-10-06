@@ -1,179 +1,97 @@
 # Mapping execution
 
-Mapping execution turns the normalized contracts into repeatable behavior.
+`executeMapping()` applies a client profile's ordered `hl7Item` rules to a
+parsed HL7 message. For the same parsed message and profile contents, it returns
+the same draft values, field evidence, validation results, and execution trace.
 
-The goal is deterministic execution: the same parsed HL7 message plus the same
-client profile version should produce the same draft output, review evidence,
-validation summary, and execution trace.
+## Inputs and outputs
 
-## Inputs
+The function accepts a `parsedMessage` from `@hl7-data-mapper/hl7-parser` and a
+`ClientProfile`, which it validates. Draft and published profiles can run; archived
+profiles are rejected. The browser creates an editable draft from the built-in
+published profile when a reviewer starts a session.
 
-`executeMapping()` accepts:
+The result contains:
 
-```text
-parsedMessage
-profile
-```
+| Property           | Meaning                                                                |
+| ------------------ | ---------------------------------------------------------------------- |
+| `profile`          | Client, profile, version, and status used for the run                  |
+| `normalizedDraft`  | Values written by the profile's rules at normalized target paths       |
+| `normalizedFields` | Review wrappers with values, source references, transforms, and issues |
+| `validation`       | Grouped errors, warnings, and informational issues                     |
+| `executionTrace`   | In-memory evidence for each executed `hl7Item`                         |
 
-- `parsedMessage` comes from `@hl7-data-mapper/hl7-parser`.
-- `profile` is a validated `ClientProfile`.
+`normalizedDraft` is a partial object. The web report flow combines it with
+`composeDefaultNormalizedOutput(parsedMessage)` and validates the merged object
+against `NormalizedOutputSchema` before generating a report. The default
+composer maps the supported MSH, PID, IN1, GT1, ORC, TQ1, OBR, and SPM data
+into the normalized model; the profile's current mapped values take precedence
+in the web export.
 
-Archived profiles cannot be executed. Draft and published profiles can be
-executed, but published profiles are treated as immutable by the workflow.
+Each normalized field includes its target key, label, value, source references,
+primary source, transform history, validation issues, review status, and
+warnings. The mapping result also includes review validation issues built from
+the parsed message and mapping evidence. In the browser, parser errors prevent
+entry to guided review; unresolved blocking validation errors prevent a
+completed report.
 
-## Outputs
+## Source evidence
 
-`executeMapping()` returns:
+Each execution trace entry records the item ID and sequence, target path,
+status, source reads, input and output values, and validation issues. A source
+read includes the HL7 path (for example, `PID-5.1`), resolved value, lookup
+status, segment index, raw segment, and raw field. This trace is held in memory
+for review; it is not a persistence record.
 
-```text
-profile
-normalizedDraft
-normalizedFields
-validation
-executionTrace
-```
+The mapping engine exports `readSource()`, `readSourceValue()`,
+`getSegmentsByName()`, and `getOrderGroups()`. Source lookup supports field,
+repetition, component, and subcomponent positions. It returns statuses such as
+`missing_segment`, `missing_field`, `missing_repetition`, and
+`missing_component` instead of throwing for an absent value.
 
-### `normalizedDraft`
+## Execution rules
 
-A partial normalized object created by generic `hl7Item` execution.
+- Validate the profile and reject archived profiles.
+- Sort `hl7Item`s by ascending `sequence` and enforce dependency order through
+  the profile contract.
+- Read declared sources, or prior item outputs when an item has dependencies and
+  no direct sources.
+- Write each result to its normalized target path and record a trace entry.
+- Restrict target paths to lower-camel dot components under `message`, `sender`,
+  `patient`, `coverages`, `guarantor`, or `labOrders`. Array indexes must be
+  canonical nonnegative decimals no greater than `1023`; prototype-related
+  JavaScript property names are rejected.
+- Add an error when a required item produces no value. Report unknown named
+  transforms with an informational `pending-transform` issue.
 
-It is called a draft because complex object composers are not complete yet.
-For example, lab-order grouping requires ORC, TQ1, OBR, and SPM-specific logic.
+## Implemented actions and transforms
 
-### `normalizedFields`
+The executor handles `extract`, `validate`, `default_value`, `normalize_date`,
+`normalize_timestamp`, and `join`. `validate` can apply the named `mustEqual`
+check. The built-in profile also uses these implemented named transforms:
 
-Review-ready field wrappers. Each field includes:
+| Transform                  | Result                                        |
+| -------------------------- | --------------------------------------------- |
+| `preferIdentifierType`     | Preferred patient identifier                  |
+| `mapXpnName`               | Patient name from configured source roles     |
+| `mapRepeatingXadAddresses` | Address array from configured source values   |
+| `mapRepeatingXtnTelecom`   | Telecom array from configured source values   |
+| `mapRepeatingIn1Coverage`  | Coverage array from configured source values  |
+| `mapOptionalGt1Guarantor`  | Optional guarantor object                     |
+| `mapOrcOrderGroups`        | Lab-order array from configured source values |
 
-- normalized key;
-- label;
-- value;
-- source references;
-- primary source;
-- transform history;
-- validation issues;
-- review status; and
-- warnings.
+The `compose` action works for those named object transforms. `split` and
+`map_code` exist in the `hl7Item` contract but have no dedicated general
+execution behavior yet. A custom named transform outside the supported set is
+marked pending. Do not rely on a contract action name alone as proof that its
+generic behavior has been implemented.
 
-### `validation`
+The default composers can enumerate repeating IN1 segments, PID address and
+telecom repetitions, and ORC order groups with SPM specimens. The current
+profile's named address, telecom, coverage, and order transforms each produce
+at most one entry from their configured source reads. Because the web export overlays
+those mapped arrays onto the default composer output, support for multiple
+entries in those sections still needs end-to-end validation and expansion.
 
-Grouped validation issues:
-
-```text
-errors
-warnings
-info
-```
-
-Errors block review. Warnings and info messages can be shown while allowing
-the user to continue.
-
-### `executionTrace`
-
-The audit trail for every executed `hl7Item`.
-
-Each trace entry records:
-
-- item ID;
-- sequence;
-- target path;
-- execution status;
-- source references;
-- source-read evidence;
-- input values;
-- output value; and
-- validation issues.
-
-Source-read evidence includes:
-
-- source path, such as `PID-5.1`;
-- resolved value;
-- lookup status;
-- segment index;
-- raw segment; and
-- raw field.
-
-## Source lookup helpers
-
-The mapping engine exposes helper functions so HL7 traversal stays in one
-place:
-
-```text
-readSource()
-readSourceValue()
-getSegmentsByName()
-getOrderGroups()
-```
-
-These helpers support field, component, and subcomponent reads. They also
-return non-throwing missing statuses such as `missing_segment`,
-`missing_field`, and `missing_component`.
-
-## Deterministic rules
-
-The executor follows these rules:
-
-- Validate the profile before execution.
-- Reject archived profiles.
-- Sort `hl7Item`s by ascending `sequence`.
-- Read all declared sources through `source-lookup`.
-- Write values to `normalizedDraft` by target path.
-- Require target paths to use lower-camel dot components beneath `message`,
-  `sender`, `patient`, `coverages`, `guarantor`, or `labOrders`. Optional array
-  indexes must be canonical nonnegative decimals no greater than `1023`, and
-  prototype-related JavaScript property names are rejected.
-- Record a trace entry for every item.
-- Convert missing required values into validation errors.
-- Convert declared but unimplemented complex transforms into info issues.
-
-## Current implemented actions
-
-The generic executor currently supports:
-
-- `extract`
-- `validate`
-- `default_value`
-- `normalize_date`
-- `normalize_timestamp`
-- `join`
-
-These names deliberately differ slightly from the original planning shorthand:
-`copy` maps to `extract`, `constant` maps to `default_value`, `combine` maps to
-`join` or `compose`, `lookup` is handled through source references and
-`source-lookup`, `format` maps to normalization actions or named transforms,
-and `map-code` is represented as `map_code`. `coalesce` is still planned as
-transform-pipeline behavior rather than a standalone action.
-
-The default profile also declares future complex transforms, such as:
-
-- `preferIdentifierType`
-- `mapXpnName`
-- `mapRepeatingXadAddresses`
-- `mapRepeatingXtnTelecom`
-- `mapRepeatingIn1Coverage`
-- `mapOptionalGt1Guarantor`
-- `mapOrcOrderGroups`
-
-These are intentionally reported as pending transforms until specialized
-mapping helpers are implemented.
-
-## Current scope
-
-Currently implemented:
-
-- versioned client profile contract;
-- draft, published, and archived profile rules;
-- deterministic `hl7Item` ordering and dependency validation;
-- built-in default OML^O21 profile;
-- generic mapping executor;
-- source lookup helpers;
-- source-read execution evidence;
-- deterministic execution tests; and
-- documentation for profile and execution behavior.
-
-Known next work:
-
-- implement specialized patient mapping helpers;
-- implement coverage and guarantor object composers;
-- implement ORC/TQ1/OBR/SPM lab-order grouping;
-- compare full normalized output against the expected fixture; and
-- connect mapping results to the guided review UI.
+See [guided review](guided-review.md) for source corrections and
+[normalized data](normalized-data-model.md) for the output schema.

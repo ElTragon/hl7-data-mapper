@@ -1,43 +1,31 @@
 # Mapping Engine
 
-Client-specific mapping package for the HL7 Data Mapper workspace.
+`@hl7-data-mapper/mapping-engine` maps parsed HL7 data into the shared
+normalized contracts. It exports the built-in OML^O21 profile,
+`executeMapping()`, default normalized composers, source lookup helpers, and
+guided-review helpers.
 
-This package will sit between the raw HL7 parser and the normalized contracts:
+`executeMapping()` validates a draft or published profile, runs its `hl7Item`s
+in sequence, and returns a normalized draft, review-ready fields, validation
+issues, and an execution trace. The trace keeps the source path, resolved value,
+lookup status, segment index, raw segment, and raw field in memory so a
+reviewer can inspect where a value came from. Archived profiles cannot run.
 
-1. receive parsed HL7 data from `@hl7-data-mapper/hl7-parser`
-2. apply default and client-specific `hl7Item` mapping steps
-3. produce validated output shaped by `@hl7-data-mapper/contracts`
-4. preserve evidence about how each field was collected for review and reporting
+The executor supports extraction, validation, defaults, date and timestamp
+normalization, joining values, and the default profile's named transforms for
+identifiers, names, addresses, telecom, coverage, guarantor, and lab-order
+objects. A different, unknown named transform is reported as pending. The
+default composers can build a complete normalized object from a parsed message;
+the web report flow combines that object with the current profile's mapped
+values.
 
-It should not parse raw HL7 text directly and should not render UI. Its main job is to make the extraction workflow explainable, repeatable, and client-aware.
+Guided-review helpers create fields, section progress, warning cards, and
+source-selection corrections. Applying a source correction changes the linked
+`hl7Item` on an editable draft profile, reruns mapping, and rebuilds the review
+fields. The package does not parse raw HL7 text or render the UI.
 
-## Current contents
-
-- `profiles/default-oml-o21-profile.ts`: built-in published profile for the
-  MVP HL7 v2.5.1 `OML^O21` laboratory-order workflow.
-- `execute-mapping.ts`: deterministic executor that runs profile `hl7Item`s in
-  sequence and returns a normalized draft, field-level evidence, validation,
-  and execution trace.
-- `review-fields.ts`: guided-review helpers that turn mapping results into
-  review fields, section progress, warning cards, and profile corrections.
-- `source-lookup.ts`: source lookup helpers for reading HL7 fields,
-  components, subcomponents, segments, and ORC order groups.
-
-The current executor supports source reads, simple extraction, validation,
-date/timestamp normalization, and execution tracing. Complex object composers
-such as order-group assembly are declared by the default profile and reported
-as pending transforms until the specialized mapping helpers are implemented.
-
-The execution trace records source-read evidence, including source path,
-resolved value, lookup status, segment index, raw segment, and raw field. This
-is the data the guided review UI and report export can use to explain how each
-field was collected.
-
-The guided-review helpers keep correction behavior rule-driven. When a user
-selects another HL7 source, the helper records a correction intent, updates the
-linked `hl7Item` on an editable draft profile, reruns mapping, and rebuilds the
-review fields from the new execution result. This avoids one-off UI overrides.
-
-More detail: [../../docs/mapping-execution.md](../../docs/mapping-execution.md)
-
-Guided review details: [../../docs/guided-review.md](../../docs/guided-review.md)
+The current named address, telecom, coverage, and order transforms each produce
+at most one entry from their configured source reads. See
+[mapping execution](../../docs/mapping-execution.md) for this limit and the
+supported actions, and [guided review](../../docs/guided-review.md) for the
+review workflow.

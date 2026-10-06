@@ -4,9 +4,12 @@ Client profile persistence stores reusable mapping configuration and audit
 metadata. It must not store source HL7 messages, extracted patient data, or real
 PHI.
 
-The production-style storage target is Cloudflare D1. The public portfolio demo
-uses built-in read-only profiles and browser storage for temporary recruiter
-changes.
+Cloudflare D1 is the planned production-style storage target. D1 tables and
+database writes, plus browser flows for client creation and profile publishing,
+are not implemented. The repository has shared record contracts and profile
+lifecycle helpers for that design. The public portfolio demo uses a bundled
+read-only profile and browser storage for a draft copy, structured review
+decisions, corrections, and safe demo events.
 
 ## Allowed D1 data
 
@@ -131,7 +134,8 @@ message values.
 
 ## Mapping run metadata
 
-Each mapping run should record enough safe metadata to prove which rules ran:
+A future persisted mapping run should record enough safe metadata to prove
+which rules ran:
 
 - run ID;
 - client ID;
@@ -147,8 +151,9 @@ Each mapping run should record enough safe metadata to prove which rules ran:
 - validation warning count; and
 - validation info count.
 
-The message hash should be calculated from the source message, but the source
-message itself must not be stored.
+The browser currently computes a source-message hash for the downloaded report
+manifest. It does not create a D1 mapping-run record. A future run record should
+contain the hash, never the source message itself.
 
 The shared contract is `MappingRunMetadataSchema` in
 `packages/contracts/src/persistence.ts`.
@@ -156,12 +161,12 @@ The shared contract is `MappingRunMetadataSchema` in
 Think of this like a library checkout receipt: it says which rulebook was used
 and when, but it does not copy the whole book into the receipt.
 
-## D1 schema design
+## Planned D1 schema design
 
 The schema below is the planned production-style D1 shape. It is intentionally
 limited to configuration and safe metadata.
 
-## TypeScript record contracts
+### Implemented TypeScript record contracts
 
 The D1 row shapes are represented in `packages/contracts/src/persistence.ts`.
 
@@ -420,12 +425,11 @@ The public demo has stricter rules than the production-style design:
 - recruiter changes remain in browser storage;
 - no publicly accessible database writes are allowed;
 - no raw HL7 messages are persisted;
-- no extracted patient data is persisted;
-- demo changes can be cleared by refreshing/resetting the session; and
-- everything must reset safely.
+- no extracted patient data is persisted by the app;
+- safe demo changes survive a refresh and are cleared by **Reset demo draft**.
 
-The public demo may simulate profile edits so reviewers can see the workflow,
-but those edits should not write to D1.
+Source corrections in the public demo edit a browser draft copy of the bundled
+profile. They do not write to D1.
 
 The shared contract is `DemoPersistencePolicySchema` in
 `packages/contracts/src/persistence.ts`.
@@ -447,9 +451,11 @@ write to a public database. Demo edits are temporary, local, and safe to reset.
 
 ## Browser storage strategy
 
-The public demo uses browser storage like a temporary whiteboard. It can remember
-what a recruiter changed during the session, but it must not become a patient
-database.
+The public demo uses browser storage like a temporary whiteboard. It remembers
+safe draft and review changes across page refreshes, but it must not become a
+patient database. Raw HL7 text remains in memory. After a reload, the reviewer
+must supply and parse the same uploaded or pasted message again to resume its
+stored decisions. The bundled sample can be parsed again directly.
 
 The shared contract is `DemoBrowserStorageSnapshotSchema` in
 `packages/contracts/src/persistence.ts`.
@@ -489,9 +495,8 @@ The browser snapshot must not store:
 - real PHI; or
 - published built-in profiles as editable browser records.
 
-Built-in profiles stay in application code as read-only examples. If a reviewer
-changes a built-in profile, the app should create a draft browser copy instead
-of editing the built-in profile directly.
+Built-in profiles stay in application code as read-only examples. The web app
+creates a draft browser copy for review and source corrections.
 
 Each review session retains the complete snapshot on which it was created and
 uses that snapshot as a best-effort optimistic revision for every write. The
@@ -511,7 +516,7 @@ remain unique when multiple actions share the same millisecond timestamp.
 
 ## Public demo reset behavior
 
-Reset should clear:
+**Reset demo draft** clears:
 
 - draft profile edits created during the demo;
 - guided-review decisions;
@@ -519,8 +524,7 @@ Reset should clear:
 - correction intents; and
 - temporary audit-like browser events.
 
-Reset should not need a server call because the public demo does not depend on
-public database writes.
+Reset uses browser storage and does not need a server call.
 
 The shared helpers are:
 
