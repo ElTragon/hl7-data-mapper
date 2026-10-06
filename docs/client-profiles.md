@@ -7,6 +7,12 @@ The profile is versioned so an implementation engineer can safely change a
 draft without rewriting history for a mapping that was already reviewed or
 published.
 
+The contracts and mapping engine implement profile validation, version
+lifecycle helpers, and execution. The current web demo uses one bundled profile
+and creates a browser draft for source corrections. It does not offer client
+creation, profile selection, or publishing controls; persistent profile storage
+is planned.
+
 ## Profile contract
 
 `ClientProfileSchema` contains:
@@ -46,16 +52,18 @@ The mapping engine includes a published default profile:
 packages/mapping-engine/src/profiles/default-oml-o21-profile.ts
 ```
 
-This profile is the starting point for every OML^O21 client. It covers:
+This profile is the current demo's starting point. It declares mappings for:
 
 - message and sender metadata from `MSH`;
 - patient identifiers, demographics, addresses, and telecom from `PID`;
-- coverage records from repeating `IN1`;
+- coverage fields from `IN1`;
 - optional guarantor data from `GT1`; and
-- laboratory order groups from `ORC`, `TQ1`, `OBR`, and `SPM`.
+- laboratory-order fields from `ORC`, `TQ1`, `OBR`, and `SPM`.
 
-Client-specific profiles should begin as a draft copy of this default profile.
-The default profile itself is published and read-only.
+The web app makes a draft copy before a reviewer changes a source. The default
+profile itself is published and read-only. Supporting other clients and complete
+repeating coverage/order output in the browser is future work; see
+[mapping execution](mapping-execution.md) for the current array limit.
 
 ## Profile statuses
 
@@ -113,12 +121,13 @@ version 2 draft based on version 1
 version 2 published
 ```
 
-This lets reports and audit events point to the exact profile version that ran.
+Reports record the profile version used. Persisted audit events are planned.
 
 ## Deterministic mapping execution
 
-The same HL7 input plus the same profile version must produce the same output
-and mapping evidence.
+The same HL7 input plus the same profile contents must produce the same output
+and mapping evidence. Draft profiles can be edited without changing their
+version number; a published profile version is immutable.
 
 Execution rules:
 
@@ -141,8 +150,10 @@ The mapping engine also exposes source lookup helpers for deterministic reads:
 - `getSegmentsByName()`
 - `getOrderGroups()`
 
-These helpers keep raw HL7 traversal out of the item executor and make future
-coverage, guarantor, and lab-order composers easier to test.
+These helpers keep raw HL7 traversal out of the item executor. Coverage,
+guarantor, and lab-order composers and named transforms are implemented, with
+the current browser repetition limit described in
+[mapping execution](mapping-execution.md).
 
 ## Mapping execution result
 
@@ -165,10 +176,10 @@ validation
 executionTrace
 ```
 
-`normalizedDraft` is intentionally named as a draft because the generic
-executor can run simple source reads and validations before the specialized
-object composers are complete. `normalizedFields` and `executionTrace` are the
-review/report evidence that show what each `hl7Item` read and produced.
+`normalizedDraft` is partial output from ordered `hl7Item` execution. The web
+export merges it with default-composer output and validates the result.
+`normalizedFields` and `executionTrace` show what each `hl7Item` read and
+produced for review and reporting.
 
 Each execution trace entry records:
 
