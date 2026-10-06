@@ -1,73 +1,44 @@
-# React + TypeScript + Vite
+# Web app
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+This React, TypeScript, and Vite app runs the synthetic HL7 Data Mapper demo in
+the browser. It accepts one OML^O21 message at a time, parses it locally, runs
+the built-in mapping profile, guides field review and source corrections, and
+downloads report ZIPs without sending the message to the Worker.
 
-Currently, two official plugins are available:
+## Current browser workflow
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+1. Paste or upload synthetic `.hl7`/`.txt` text, or use the bundled sample. The
+   editor and upload path enforce a 1 MiB UTF-8 byte limit.
+2. Parse the message. Blocking profile errors stop review; warnings remain
+   visible and are included in reports.
+3. Review extracted fields, confirm or explain decisions, and choose alternate
+   HL7 sources where needed. Corrections update a draft profile and rerun mapping.
+4. Download an interim report while review remains open. The app offers a
+   completed report when the completion rules pass. Both are ZIPs built locally.
 
-## React Compiler
+Browser storage saves safe draft rules, decisions, correction history, and demo
+events. It does not save the source message or extracted patient values. After
+refresh, provide and parse the same message to resume its decisions. Reset
+clears the saved demo draft. Use only synthetic data; do not upload PHI.
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+The UI currently uses one built-in client profile. Client creation, profile
+publishing, D1 persistence, and server-side ingestion/export are planned.
 
-## Expanding the ESLint configuration
+## Work in this app
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+- `src/features/ingestion/hl7-ingestion-panel.tsx` owns input, parse results,
+  review entry, and browser download.
+- `src/features/ingestion/use-ingestion-workflow.ts` coordinates review state;
+  `demo-storage.ts` handles its safe browser snapshot and write conflicts.
+- `src/features/ingestion/guided-review/` renders the field and source-selection
+  workflow. Parsing, mapping, contracts, and ZIP construction live in workspace
+  packages rather than React components.
+- `tests/e2e/review-workflow.spec.ts` exercises upload, correction, re-parsing
+  after refresh, interim ZIP export, competing tabs, reset, and phone-width UI.
 
-```js
-export default defineConfig([
-  globalIgnores(["dist"]),
-  {
-    files: ["**/*.{ts,tsx}"],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ["./tsconfig.node.json", "./tsconfig.app.json"],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
-
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
-
-```js
-// eslint.config.js
-import reactX from "eslint-plugin-react-x"
-import reactDom from "eslint-plugin-react-dom"
-
-export default defineConfig([
-  globalIgnores(["dist"]),
-  {
-    files: ["**/*.{ts,tsx}"],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs["recommended-typescript"],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ["./tsconfig.node.json", "./tsconfig.app.json"],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
+Start with the [repository README](../../README.md) for pinned Node/pnpm setup,
+the required workspace build (`pnpm typecheck`), local commands, and the full CI
+check list. After that setup, `pnpm dev` starts this app from the repository
+root. Install Chromium with
+`pnpm --filter web exec playwright install chromium`, then run `pnpm test:e2e`
+to build and check the browser journeys.
