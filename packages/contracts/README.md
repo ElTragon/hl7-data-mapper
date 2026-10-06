@@ -40,7 +40,8 @@ It should stay free of UI, file-upload, and parser implementation details. That 
 - Demo browser storage helpers: create or reset an empty safe browser snapshot.
 - D1 record schemas: `ClientRecordSchema`, `MappingProfileRecordSchema`,
   `MappingVersionRecordSchema`, `Hl7ItemRecordSchema`, and
-  `AuditEventRecordSchema`.
+  `AuditEventRecordSchema`. These define future storage records; the Worker does
+  not currently create or query D1 tables.
 - `ReportManifestSchema`: report table of contents with app version, profile
   version, message hash, source policy, and per-payload-file hashes.
 - `ReportPackagePlanSchema`: report-generation handoff shape for manifest,

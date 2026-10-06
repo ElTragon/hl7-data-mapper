@@ -1,41 +1,36 @@
 # Report Generator
 
-Builds the downloadable report package files for the HL7 Data Mapper workflow.
+`@hl7-data-mapper/report-generator` builds a report package and its ZIP archive
+in memory. The caller supplies normalized output, `hl7Item` rules, review
+decisions, validation results, profile metadata, a message hash, and a content
+hasher. `buildReportPackage()` validates the structured inputs and returns the
+report files and manifest. `buildReportZip()` compresses those files with
+`fflate` and returns ZIP bytes; the web app handles the browser download.
 
-This package creates report files in memory. It does not know about React,
-browser buttons, or ZIP compression.
+The standard report contains:
 
-Inputs:
+```text
+REPORT.md
+manifest.json
+normalized-data.json
+hl7-items.json
+review-decisions.json
+validation-results.json
+mapping-summary.csv
+```
 
-- normalized output
-- `hl7Item` rules
-- guided-review decisions
-- validation results
-- client/profile metadata
-- message hash
-
-Outputs:
-
-- `REPORT.md`
-- `manifest.json`
-- `normalized-data.json`
-- `hl7-items.json`
-- `review-decisions.json`
-- `validation-results.json`
-- `mapping-summary.csv`
-
-The JSON outputs are validated against the shared contracts before they are
-serialized. The CSV output uses the shared mapping-summary column order and
+`REPORT.md` summarizes the extraction and review state. `manifest.json` records
+the profile and app versions, source-message hash, source policy, and hashes of
+the payload files. The CSV uses the shared mapping-summary column order and
 escapes spreadsheet-sensitive values.
 
-`REPORT.md` is the human-readable cover sheet. It summarizes the client/profile
-version, app version, extraction counts, review counts, validation results, and
-privacy note.
+The generated review status is `interim` until all required decisions are
+resolved and blocking validation errors are cleared. The generator rejects a
+requested `completed` report when those conditions are unmet. Raw `source.hl7`
+is excluded by default; including it requires the explicit
+`synthetic_source_included` policy and nonempty source text. The caller is
+responsible for supplying synthetic text under that policy.
 
-`manifest.json` is the machine-readable table of contents. It records the app
-version, profile version, message hash, source policy, and SHA-256 hashes for
-each payload file.
-
-`buildReportZip(reportPackage)` uses `fflate` to package the generated files
-into a browser-safe ZIP archive in memory. The web app download button hands
-those bytes to the browser.
+This package does not parse HL7, change mapping results, or use browser DOM
+APIs. See [report generation](../../docs/report-generation.md) for file and
+export details.
