@@ -6,18 +6,19 @@
     "node": ">=22.13.1 <23"
   },
   "scripts": {
-    "dev": "pnpm --filter web dev",
+    "dev": "pnpm build:packages && node scripts/dev.mjs",
     "dev:api": "pnpm --filter api dev",
     "build": "pnpm -r --if-present build",
     "build:packages": "pnpm --filter \"./packages/*\" -r build",
     "typecheck": "pnpm build:packages && pnpm --filter \"./packages/*\" -r typecheck && pnpm --filter api typecheck && pnpm --filter web typecheck",
     "lint": "pnpm -r --if-present lint",
-    "test": "pnpm -r --if-present test",
+    "test": "pnpm test:tooling && pnpm -r --if-present test",
     "test:e2e": "pnpm build && pnpm --filter web test:e2e",
     "test:coverage": "pnpm --filter web test:coverage",
     "deploy:api": "pnpm --filter api deploy",
     "format": "prettier --write .",
-    "format:check": "prettier --check ."
+    "format:check": "prettier --check .",
+    "test:tooling": "node --test scripts/dev.test.mjs"
   },
   "devDependencies": {
     "prettier": "^3.9.4"
