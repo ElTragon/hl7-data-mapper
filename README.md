@@ -40,14 +40,33 @@ nvm use
 corepack enable pnpm
 pnpm --version
 pnpm install --frozen-lockfile
-pnpm typecheck
 pnpm dev
 ```
 
 If you do not use nvm, install Node.js 22.13.1 before the Corepack step.
-`pnpm typecheck` builds the workspace packages required by the web app.
-`pnpm dev` starts the web app; Vite prints its local URL. The Worker has a
-separate local command and setup notes in [apps/api/README.md](apps/api/README.md).
+`pnpm dev` first builds the shared packages in dependency order, then starts
+their TypeScript watchers alongside the web app. Vite prints its local URL.
+Changes to contracts, parsing, mapping, and report code rebuild automatically;
+check the terminal for compiler errors before testing a change in the browser.
+Click **Parse message** again after a mapping change to run the updated logic.
+If you change the bundled profile defaults, use **Reset demo draft** to replace
+the previously saved rules with those defaults.
+Press **Ctrl+C** in the terminal to stop Vite and all package watchers.
+
+Development-server options are forwarded only to Vite. For example:
+
+```bash
+pnpm dev --host 127.0.0.1 --port 5174 --strictPort
+```
+
+If the web server or a watcher process exits, the launcher stops the remaining
+processes. `pnpm test:tooling` checks argument forwarding and process cleanup;
+the root `pnpm test` command includes these checks.
+
+For web-only work, `pnpm --filter web dev` starts Vite alone. Run
+`pnpm build:packages` first; shared-package edits require another build when
+using that command. The Worker has a separate local command and setup notes in
+[apps/api/README.md](apps/api/README.md).
 
 The web page starts with the bundled synthetic message. Click **Parse message**
 to review it, or replace it with another synthetic OML^O21 message. Review
@@ -57,7 +76,10 @@ again. **Reset demo draft** clears the saved browser review state.
 ## Check the workspace
 
 Run the same checks as the CI `checks` job from the repository root, in this
-order. `pnpm typecheck` builds the workspace packages that later tests import:
+order. `pnpm typecheck` builds the workspace packages that later tests import,
+then checks package source, tests, and test helpers as well as the API and web
+app. Package tests use separate `tsconfig.test.json` configurations with no
+emission; production builds exclude tests and test helpers:
 
 ```bash
 pnpm audit --audit-level moderate
