@@ -16,9 +16,10 @@ function item(overrides: Partial<Hl7Item>): Hl7Item {
     sourceExpectations: [],
     dependsOn: [],
     required: false,
+    reviewRequired: true,
+    valueType: "unknown",
     defaultValue: null,
     transform: null,
-    review: null,
     ...overrides,
   }
 }
