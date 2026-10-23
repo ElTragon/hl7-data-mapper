@@ -1,7 +1,7 @@
 import assert from "node:assert/strict"
 import { spawn } from "node:child_process"
 import { once } from "node:events"
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
+import { mkdtemp, readFile, rename, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import path from "node:path"
 import { setTimeout as delay } from "node:timers/promises"
@@ -9,9 +9,11 @@ import { fileURLToPath } from "node:url"
 import test from "node:test"
 
 const launcher = fileURLToPath(new URL("./dev.mjs", import.meta.url))
-const options = {
-  timeout: 15_000,
-  skip: process.platform === "win32" ? "POSIX process-group checks" : false,
+const windows = process.platform === "win32"
+const options = { timeout: 30_000 }
+const posixOptions = {
+  ...options,
+  skip: windows ? "POSIX signals" : false,
 }
 
 // Exercise real process trees without starting compilers or opening a port.
@@ -22,6 +24,13 @@ import path from "node:path"
 const args = process.argv.slice(2)
 const role = args.includes("web") ? "web" : "packages"
 const dir = process.env.TOOLING_TEST_DIR
+if (process.env.TOOLING_EARLY_FAILURE === role) {
+  const peer = role === "web" ? "packages" : "web"
+  while (!existsSync(path.join(dir, "ready-" + peer))) {
+    await new Promise((resolve) => setTimeout(resolve, 25))
+  }
+  process.exit(17)
+}
 const child = spawn(process.execPath, ["-e", \`
   const fs = require("node:fs")
   const path = require("node:path")
@@ -70,16 +79,38 @@ function alive(pid) {
   }
 }
 
-async function start(t, args, { stubborn = false } = {}) {
+async function start(t, args, { stubborn = false, earlyFailure } = {}) {
   const dir = await mkdtemp(path.join(tmpdir(), "hl7-dev-test-"))
   const cli = path.join(dir, "pnpm.mjs")
   await writeFile(cli, fakePnpm)
-  const child = spawn(process.execPath, [launcher, ...args], {
+  // Windows child.kill() force-terminates Node instead of delivering SIGINT.
+  // Emit the signal in-process there; POSIX tests deliver real OS signals.
+  const driver = `
+    import { existsSync, readFileSync, unlinkSync } from "node:fs"
+    import { pathToFileURL } from "node:url"
+    const signalFile = process.env.TOOLING_SIGNAL_FILE
+    setInterval(() => {
+      if (!existsSync(signalFile)) return
+      const signal = readFileSync(signalFile, "utf8")
+      unlinkSync(signalFile)
+      process.emit(signal)
+    }, 25).unref()
+    const launcher = process.argv[1]
+    process.argv = [process.execPath, ...process.argv.slice(1)]
+    await import(pathToFileURL(launcher))
+  `
+  const signalFile = path.join(dir, "signal")
+  const launchArgs = windows
+    ? ["--input-type=module", "-e", driver, launcher, ...args]
+    : [launcher, ...args]
+  const child = spawn(process.execPath, launchArgs, {
     env: {
       ...process.env,
       npm_execpath: cli,
       TOOLING_TEST_DIR: dir,
+      TOOLING_SIGNAL_FILE: signalFile,
       TOOLING_STUBBORN: stubborn ? "1" : "0",
+      TOOLING_EARLY_FAILURE: earlyFailure ?? "",
     },
     stdio: ["ignore", "pipe", "pipe"],
   })
@@ -87,9 +118,15 @@ async function start(t, args, { stubborn = false } = {}) {
   child.stdout.on("data", (chunk) => (output += chunk))
   child.stderr.on("data", (chunk) => (output += chunk))
   const exit = once(child, "exit")
+  async function signal(name) {
+    if (windows) {
+      await writeFile(`${signalFile}.tmp`, name)
+      await rename(`${signalFile}.tmp`, signalFile)
+    } else child.kill(name)
+  }
   t.after(async () => {
     if (child.exitCode === null && child.signalCode === null) {
-      child.kill("SIGTERM")
+      await signal("SIGTERM")
     }
     await exit
     // Clean up even when a regression makes a descendant outlive the launcher.
@@ -103,15 +140,21 @@ async function start(t, args, { stubborn = false } = {}) {
     }
     await rm(dir, { recursive: true, force: true })
   })
+  const roles = ["packages", "web"].filter((role) => role !== earlyFailure)
   await waitFor(async () => {
-    assert.equal(child.exitCode, null, output)
+    if (!earlyFailure) assert.equal(child.exitCode, null, output)
     return (
-      (await exists(path.join(dir, "ready-web"))) &&
-      (await exists(path.join(dir, "ready-packages")))
-    )
+      await Promise.all(
+        roles.map(
+          async (role) =>
+            (await exists(path.join(dir, `ready-${role}`))) &&
+            (await exists(path.join(dir, `${role}.json`))),
+        ),
+      )
+    ).every(Boolean)
   })
   const records = await Promise.all(
-    ["packages", "web"].map(async (role) =>
+    roles.map(async (role) =>
       JSON.parse(await readFile(path.join(dir, `${role}.json`), "utf8")),
     ),
   )
@@ -119,6 +162,7 @@ async function start(t, args, { stubborn = false } = {}) {
     child,
     dir,
     records,
+    signal,
     async expectExit(code) {
       const [actual, signal] = await exit
       assert.equal(actual, code, output)
@@ -143,6 +187,10 @@ for (const separator of [false, true]) {
         "--strictPort",
         "--base",
         "/space path/",
+        "--config",
+        'C:\\space path\\quoted"name\\',
+        "",
+        "Unicode-ä-雪",
       ]
       const run = await start(t, separator ? ["--", ...args] : args)
       assert.deepEqual(run.records[0].args, [
@@ -153,7 +201,7 @@ for (const separator of [false, true]) {
       ])
       assert.deepEqual(run.records[1].args, ["--filter", "web", "dev", ...args])
       assert.equal(run.records[0].cwd, path.dirname(path.dirname(launcher)))
-      run.child.kill("SIGINT")
+      await run.signal("SIGINT")
       await run.expectExit(130)
     },
   )
@@ -169,20 +217,31 @@ for (const role of ["web", "packages"]) {
 
 test("SIGTERM stops both process trees", options, async (t) => {
   const run = await start(t, [])
-  run.child.kill("SIGTERM")
+  await run.signal("SIGTERM")
   await run.expectExit(143)
 })
 
+for (const role of ["web", "packages"]) {
+  test(
+    `cleans up peer when ${role} fails during startup`,
+    options,
+    async (t) => {
+      const run = await start(t, [], { earlyFailure: role })
+      await run.expectExit(17)
+    },
+  )
+}
+
 test(
   "repeated SIGINT still kills SIGTERM-resistant descendants",
-  options,
+  posixOptions,
   async (t) => {
     const run = await start(t, [], { stubborn: true })
-    run.child.kill("SIGINT")
+    await run.signal("SIGINT")
     for (const role of ["packages", "web"]) {
       await waitFor(() => exists(path.join(run.dir, `stopped-${role}`)))
     }
-    run.child.kill("SIGINT")
+    await run.signal("SIGINT")
     await run.expectExit(130)
   },
 )

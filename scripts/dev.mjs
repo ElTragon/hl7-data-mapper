@@ -8,6 +8,9 @@ if (!pnpmPath) {
 
 const cwd = fileURLToPath(new URL("../", import.meta.url))
 const windows = process.platform === "win32"
+const windowsSupervisor = fileURLToPath(
+  new URL("./dev-windows.ps1", import.meta.url),
+)
 const viteArgs = process.argv.slice(2)
 if (viteArgs[0] === "--") viteArgs.shift()
 
@@ -17,13 +20,9 @@ let stopping = false
 function stopTree(child, signal) {
   if (!child.pid) return
   if (windows) {
-    // pnpm launches further processes, so terminating its PID alone is not enough.
-    spawn("taskkill", ["/pid", String(child.pid), "/t", "/f"], {
-      stdio: "ignore",
-    }).on("error", (error) => {
-      console.error(error.message)
-      process.exitCode = 1
-    })
+    // The supervisor owns a kill-on-close Job Object. Killing it also stops
+    // descendants whose immediate parent has already exited.
+    child.kill()
     return
   }
   try {
@@ -55,7 +54,25 @@ for (const args of [
   ["--parallel", "--filter", "./packages/*", "dev"],
   ["--filter", "web", "dev", ...viteArgs],
 ]) {
-  const child = spawn(process.execPath, [pnpmPath, ...args], {
+  const command = windows ? "powershell.exe" : process.execPath
+  const commandArgs = windows
+    ? [
+        "-NoProfile",
+        "-NonInteractive",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        windowsSupervisor,
+        "-Payload",
+        Buffer.from(
+          JSON.stringify({
+            executable: process.execPath,
+            args: [pnpmPath, ...args],
+          }),
+        ).toString("base64"),
+      ]
+    : [pnpmPath, ...args]
+  const child = spawn(command, commandArgs, {
     cwd,
     stdio: "inherit",
     detached: !windows,
