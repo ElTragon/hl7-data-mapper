@@ -61,7 +61,10 @@ pnpm dev --host 127.0.0.1 --port 5174 --strictPort
 
 If the web server or a watcher process exits, the launcher stops the remaining
 processes. `pnpm test:tooling` checks argument forwarding and process cleanup;
-the root `pnpm test` command includes these checks.
+the root `pnpm test` command includes these checks. On Windows, the launcher
+uses the built-in Windows PowerShell to own each process tree in a Job Object,
+so descendants are stopped even if pnpm exits first. CI runs the cleanup tests
+on both Ubuntu and Windows.
 
 For web-only work, `pnpm --filter web dev` starts Vite alone. Run
 `pnpm build:packages` first; shared-package edits require another build when

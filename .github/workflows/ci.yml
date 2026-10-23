@@ -10,6 +10,22 @@ permissions:
   contents: read
 
 jobs:
+  tooling-windows:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+
+      - name: Test development process cleanup
+        run: node --test scripts/dev.test.mjs
+
   checks:
     runs-on: ubuntu-latest
     steps:
