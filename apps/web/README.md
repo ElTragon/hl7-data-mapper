@@ -37,8 +37,16 @@ publishing, D1 persistence, and server-side ingestion/export are planned.
   after refresh, interim ZIP export, competing tabs, reset, and phone-width UI.
 
 Start with the [repository README](../../README.md) for pinned Node/pnpm setup,
-the required workspace build (`pnpm typecheck`), local commands, and the full CI
-check list. After that setup, `pnpm dev` starts this app from the repository
-root. Install Chromium with
+local commands, and the full CI check list. From the repository root,
+`pnpm dev` builds and watches all shared packages alongside Vite. Shared-package
+edits rebuild automatically; re-parse the message to exercise updated mapping
+logic. Press **Ctrl+C** to stop the app and its package watchers.
+Options such as `pnpm dev --host 127.0.0.1 --port 5174 --strictPort` are
+forwarded only to Vite, so the TypeScript watchers keep their own arguments.
+
+`pnpm --filter web dev` runs Vite alone. Run `pnpm build:packages` first and
+again after any shared-package edits when using this web-only command.
+Root `pnpm typecheck` checks shared-package tests as well as application code.
+Install Chromium with
 `pnpm --filter web exec playwright install chromium`, then run `pnpm test:e2e`
 to build and check the browser journeys.

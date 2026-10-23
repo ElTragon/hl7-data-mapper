@@ -58,10 +58,10 @@ describe("parser validation propagation", () => {
         errors: [],
         warnings: [
           {
-            code: "parser-warning",
+            code: "missing_spm",
             severity: "warning",
-            message: "Check header",
-            segmentName: "MSH",
+            message: "Order group has no SPM specimen segment.",
+            segmentName: "ORC",
             segmentIndex: 0,
           },
         ],
@@ -71,13 +71,13 @@ describe("parser validation propagation", () => {
     expect(result.validation.warnings).toContainEqual(
       expect.objectContaining({
         origin: "parser",
-        code: "parser-warning",
+        code: "missing_spm",
         id: expect.any(String),
       }),
     )
     expect(buildWarningReviewFields(result)).toContainEqual(
       expect.objectContaining({
-        validation: [expect.objectContaining({ code: "parser-warning" })],
+        validation: [expect.objectContaining({ code: "missing_spm" })],
       }),
     )
   })
