@@ -47,8 +47,9 @@ function stop(exitCode) {
   }
 }
 
-process.once("SIGINT", () => stop(130))
-process.once("SIGTERM", () => stop(143))
+// Repeated signals must not bypass the pending SIGKILL fallback.
+process.on("SIGINT", () => stop(130))
+process.on("SIGTERM", () => stop(143))
 
 for (const args of [
   ["--parallel", "--filter", "./packages/*", "dev"],

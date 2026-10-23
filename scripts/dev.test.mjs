@@ -28,7 +28,7 @@ const child = spawn(process.execPath, ["-e", \`
   const dir = process.env.TOOLING_TEST_DIR
   process.on("SIGTERM", () => {
     fs.writeFileSync(path.join(dir, "stopped-\${role}"), "stopped")
-    process.exit(0)
+    if (process.env.TOOLING_STUBBORN !== "1") process.exit(0)
   })
   fs.writeFileSync(path.join(dir, "ready-\${role}"), "ready")
   setInterval(() => {}, 1000)
@@ -60,12 +60,27 @@ async function exists(file) {
   }
 }
 
-async function start(t, args) {
+function alive(pid) {
+  try {
+    process.kill(pid, 0)
+    return true
+  } catch (error) {
+    if (error.code === "ESRCH") return false
+    throw error
+  }
+}
+
+async function start(t, args, { stubborn = false } = {}) {
   const dir = await mkdtemp(path.join(tmpdir(), "hl7-dev-test-"))
   const cli = path.join(dir, "pnpm.mjs")
   await writeFile(cli, fakePnpm)
   const child = spawn(process.execPath, [launcher, ...args], {
-    env: { ...process.env, npm_execpath: cli, TOOLING_TEST_DIR: dir },
+    env: {
+      ...process.env,
+      npm_execpath: cli,
+      TOOLING_TEST_DIR: dir,
+      TOOLING_STUBBORN: stubborn ? "1" : "0",
+    },
     stdio: ["ignore", "pipe", "pipe"],
   })
   let output = ""
@@ -77,6 +92,15 @@ async function start(t, args) {
       child.kill("SIGTERM")
     }
     await exit
+    // Clean up even when a regression makes a descendant outlive the launcher.
+    for (const role of ["packages", "web"]) {
+      const record = path.join(dir, `${role}.json`)
+      if (!(await exists(record))) continue
+      const { pid, descendant } = JSON.parse(await readFile(record, "utf8"))
+      for (const id of [descendant, pid]) {
+        if (alive(id)) process.kill(id, "SIGKILL")
+      }
+    }
     await rm(dir, { recursive: true, force: true })
   })
   await waitFor(async () => {
@@ -99,8 +123,8 @@ async function start(t, args) {
       const [actual, signal] = await exit
       assert.equal(actual, code, output)
       assert.equal(signal, null, output)
-      for (const role of ["packages", "web"]) {
-        await waitFor(() => exists(path.join(dir, `stopped-${role}`)))
+      for (const { pid, descendant } of records) {
+        await waitFor(() => !alive(pid) && !alive(descendant))
       }
     },
   }
@@ -148,3 +172,27 @@ test("SIGTERM stops both process trees", options, async (t) => {
   run.child.kill("SIGTERM")
   await run.expectExit(143)
 })
+
+test(
+  "repeated SIGINT still kills SIGTERM-resistant descendants",
+  options,
+  async (t) => {
+    const run = await start(t, [], { stubborn: true })
+    run.child.kill("SIGINT")
+    for (const role of ["packages", "web"]) {
+      await waitFor(() => exists(path.join(run.dir, `stopped-${role}`)))
+    }
+    run.child.kill("SIGINT")
+    await run.expectExit(130)
+  },
+)
+
+test(
+  "kills SIGTERM-resistant descendants after a parent exits",
+  options,
+  async (t) => {
+    const run = await start(t, [], { stubborn: true })
+    await writeFile(path.join(run.dir, "fail-packages"), "fail")
+    await run.expectExit(17)
+  },
+)
