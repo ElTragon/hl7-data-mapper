@@ -20,7 +20,14 @@ export function mapPreferredIdentifierFromSourceReads(
 ): Identifier | null {
   const preferredType = stringOrNull(item.transform?.params["preferredType"])
   const identifierFields = sourceReads
-    .map((sourceRead) => sourceRead.rawField ?? sourceRead.value)
+    .filter((read) => read.status === "found" || read.status === "empty")
+    .map((read) =>
+      read.source.repetition ||
+      read.source.component ||
+      read.source.subComponent
+        ? read.value
+        : (read.rawField ?? read.value),
+    )
     .filter((value): value is string => stringOrNull(value) !== null)
 
   const identifiers = identifierFields.flatMap((fieldValue) =>

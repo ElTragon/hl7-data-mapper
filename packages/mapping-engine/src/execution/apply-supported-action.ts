@@ -70,5 +70,5 @@ export function applySupportedAction(
     return inputValues.length <= 1 ? (firstValue ?? null) : inputValues
   }
 
-  return firstValue ?? null
+  throw new Error(`Unsupported mapping action: ${item.action}`)
 }
