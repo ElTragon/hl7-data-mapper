@@ -3,6 +3,7 @@ import type { ParsedHl7Message } from "@hl7-data-mapper/hl7-parser"
 
 import { applySupportedAction } from "./apply-supported-action.js"
 import { getTraceStatus } from "./execution-status.js"
+import { repeatedItems } from "./repeated-inputs.js"
 import { readItemInput } from "./read-item-input.js"
 import {
   hasSupportedAction,
@@ -22,14 +23,33 @@ export function executeItem({
   parsedMessage,
   itemOutputs,
 }: ExecuteItemInput): MappingExecutionTraceEntry {
-  const input = readItemInput(item, parsedMessage, itemOutputs)
+  const items = repeatedItems(item, parsedMessage)
+  const inputs = items.map((entry) =>
+    readItemInput(entry, parsedMessage, itemOutputs),
+  )
+  const input = {
+    values: inputs.flatMap((entry) => entry.values),
+    sourceReads: inputs.flatMap((entry) => entry.sourceReads),
+  }
   const issues: ValidationIssue[] = []
   const pendingTransform = isPendingTransform(item)
   const unsupportedAction = !pendingTransform && !hasSupportedAction(item)
   const outputValue =
     pendingTransform || unsupportedAction
       ? null
-      : applySupportedAction(item, input.values, input.sourceReads)
+      : items.length === 1
+        ? applySupportedAction(
+            items[0]!,
+            inputs[0]!.values,
+            inputs[0]!.sourceReads,
+          )
+        : items.flatMap((entry, index) =>
+            applySupportedAction(
+              entry,
+              inputs[index]!.values,
+              inputs[index]!.sourceReads,
+            ),
+          )
 
   if (unsupportedAction) {
     issues.push({

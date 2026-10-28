@@ -38,6 +38,51 @@ export function applyReviewFieldCorrectionToProfile({
     )
   }
 
+  const parent = parsedProfile.itemSet.items.find(
+    (item) => item.id === targetId,
+  )
+  if (
+    parent &&
+    field.normalizedPath !== parent.targetPath &&
+    field.normalizedPath.startsWith(`${parent.targetPath}[`)
+  ) {
+    if (!replacementSource)
+      throw new Error("A record field correction needs a source.")
+    const id = `${parent.id}:${field.normalizedPath}`
+    const existing = parsedProfile.itemSet.items.find((item) => item.id === id)
+    const correction = {
+      ...parent,
+      id,
+      targetPath: field.normalizedPath,
+      label: field.label,
+      sequence:
+        existing?.sequence ??
+        Math.max(...parsedProfile.itemSet.items.map((item) => item.sequence)) +
+          1,
+      dependsOn: [parent.id],
+      sources: [replacementSource],
+      sourceExpectations: [],
+      action: field.normalizedPath.endsWith("At")
+        ? "normalize_timestamp"
+        : "extract",
+      valueType: field.normalizedPath.endsWith("At") ? "timestamp" : "string",
+      transform: null,
+      required: false,
+      notes: field.correctionIntent?.notes,
+    }
+    return ClientProfileSchema.parse({
+      ...parsedProfile,
+      updatedAt,
+      itemSet: {
+        ...parsedProfile.itemSet,
+        items: [
+          ...parsedProfile.itemSet.items.filter((item) => item.id !== id),
+          correction,
+        ],
+      },
+    })
+  }
+
   let didUpdateItem = false
   const updatedItems = parsedProfile.itemSet.items.map((item) => {
     if (item.id !== targetId) return item

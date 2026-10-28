@@ -604,7 +604,7 @@ describe("App", () => {
     await user.click(screen.getByRole("button", { name: /parse message/i }))
     await user.click(screen.getByRole("button", { name: /^lab orders/i }))
     await user.click(
-      screen.getByRole("button", { name: /select laboratory orders/i }),
+      screen.getByRole("button", { name: /^select laboratory orders$/i }),
     )
     fireEvent.change(screen.getByRole("textbox", { name: /find a source/i }), {
       target: { value: "OBR-4.1" },
@@ -628,7 +628,7 @@ describe("App", () => {
     fireEvent.change(messageInput, { target: { value: customMessage } })
     await user.click(screen.getByRole("button", { name: /parse message/i }))
     await user.click(
-      screen.getByRole("button", { name: /select patient addresses/i }),
+      screen.getByRole("button", { name: /^select patient addresses$/i }),
     )
 
     expect(screen.getAllByText("Street").length).toBeGreaterThan(0)

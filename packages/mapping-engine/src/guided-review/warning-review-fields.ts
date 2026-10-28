@@ -222,7 +222,9 @@ function findSourceExpectation(
 ): SourceExpectation | null {
   return (
     trace.sourceExpectations?.find(
-      (expectation) => expectation.path === sourcePath,
+      (expectation) =>
+        expectation.path === sourcePath ||
+        expectation.path === sourcePath.replace(/\[\d+\]/g, ""),
     ) ?? null
   )
 }

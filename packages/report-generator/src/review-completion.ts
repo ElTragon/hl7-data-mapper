@@ -38,8 +38,41 @@ export function assessReportReview(input: BuildReportPackageInput) {
       validation: [issue],
     }
   })
+  const recordFields = input.hl7Items.flatMap((item) => {
+    const value = valueAt(input.normalizedData, item.targetPath)
+    if (!Array.isArray(value)) return []
+    const result: typeof fields = []
+    function visit(value: unknown, path: string) {
+      if (Array.isArray(value))
+        value.forEach((entry, index) => visit(entry, `${path}[${index}]`))
+      else if (value !== null && typeof value === "object")
+        Object.entries(value).forEach(([key, entry]) =>
+          visit(entry, `${path}.${key}`),
+        )
+      else if (
+        !input.hl7Items.some((candidate) => candidate.targetPath === path)
+      ) {
+        const decision = decisions.get(`${item.id}:${path}`)
+        const valid =
+          decision?.normalizedPath === path &&
+          decision.hl7ItemId === (typeof value === "number" ? null : item.id) &&
+          decision.sourcePath == null
+        result.push({
+          section: item.section,
+          value,
+          reviewStatus: valid ? decision.reviewStatus : "unreviewed",
+          reasonCode: valid ? decision.reasonCode : null,
+          validation: issues.filter(
+            (issue) => issue.fieldKey === item.targetPath,
+          ),
+        })
+      }
+    }
+    visit(value, item.targetPath)
+    return result
+  })
   const result = assessReviewCompletion(
-    [...fields, ...warningFields],
+    [...fields, ...recordFields, ...warningFields],
     input.validationResults,
   )
   return {
