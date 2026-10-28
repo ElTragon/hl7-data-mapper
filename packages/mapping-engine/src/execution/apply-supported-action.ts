@@ -1,3 +1,5 @@
+import type { Hl7Delimiters } from "@hl7-data-mapper/hl7-parser"
+import { STANDARD_DELIMITERS } from "./transforms/hl7-datatypes.js"
 import type { Hl7Item } from "@hl7-data-mapper/contracts"
 
 import type { Hl7SourceRead } from "../source-lookup.js"
@@ -19,11 +21,12 @@ export function applySupportedAction(
   item: Hl7Item,
   inputValues: readonly unknown[],
   sourceReads: readonly Hl7SourceRead[],
+  delimiters: Hl7Delimiters = STANDARD_DELIMITERS,
 ): unknown {
   const firstValue = inputValues[0]
 
   if (item.transform?.name === "preferIdentifierType") {
-    return mapPreferredIdentifierFromSourceReads(item, sourceReads)
+    return mapPreferredIdentifierFromSourceReads(item, sourceReads, delimiters)
   }
 
   if (item.transform?.name === "mapXpnName") {
@@ -39,15 +42,15 @@ export function applySupportedAction(
   }
 
   if (item.transform?.name === "mapRepeatingIn1Coverage") {
-    return mapCoverageArrayFromSourceValues(inputValues)
+    return mapCoverageArrayFromSourceValues(inputValues, delimiters)
   }
 
   if (item.transform?.name === "mapOptionalGt1Guarantor") {
-    return mapGuarantorFromSourceValues(inputValues)
+    return mapGuarantorFromSourceValues(inputValues, delimiters)
   }
 
   if (item.transform?.name === "mapOrcOrderGroups") {
-    return mapLabOrderArrayFromSourceValues(inputValues)
+    return mapLabOrderArrayFromSourceValues(inputValues, delimiters)
   }
 
   if (item.action === "default_value") {
@@ -70,5 +73,5 @@ export function applySupportedAction(
     return inputValues.length <= 1 ? (firstValue ?? null) : inputValues
   }
 
-  return firstValue ?? null
+  throw new Error(`Unsupported mapping action: ${item.action}`)
 }

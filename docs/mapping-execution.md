@@ -95,3 +95,24 @@ entries in those sections still needs end-to-end validation and expansion.
 
 See [guided review](guided-review.md) for source corrections and
 [normalized data](normalized-data-model.md) for the output schema.
+
+## Execution validation
+
+An explicit identifier repetition or component is authoritative. Preferred-type
+selection searches repetitions only when the source is an unqualified field;
+a missing explicit source never falls back to another identifier.
+
+Required outputs must contain at least one meaningful value. Whitespace-only
+strings, empty arrays, and recursively empty objects are missing; `false` and `0`
+remain present. This presence check does not replace component-specific rules.
+Unsupported actions produce an `unsupported-action` error with null output.
+Implemented named transforms remain supported; unknown transforms retain their
+existing pending-transform status.
+
+## Delimiter context
+
+Mapping execution passes the message's detected MSH delimiters into datatype
+transforms. Repetition, component, and subcomponent separators are never inferred
+from literal `~`, `^`, or `&` characters in mapped values. Standalone helper calls
+retain standard-delimiter defaults for compatibility. Escape tokens remain raw
+source data; this change does not decode escapes or alter source evidence.

@@ -26,7 +26,10 @@ export function selectAlternateSourceForReviewableField({
 
   const parsedSource = SourceReferenceSchema.parse(replacementSource)
   const candidateAlreadyExists = field.sourceCandidates.some(
-    (candidate) => candidate.source.path === parsedSource.path,
+    (candidate) =>
+      candidate.source.path === parsedSource.path &&
+      (candidate.source.segmentIndex ?? null) ===
+        (parsedSource.segmentIndex ?? null),
   )
 
   return {

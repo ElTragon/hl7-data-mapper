@@ -1,3 +1,4 @@
+import type { Hl7Delimiters } from "@hl7-data-mapper/hl7-parser"
 import type {
   Address,
   Hl7Item,
@@ -10,22 +11,32 @@ import type {
 import type { Hl7SourceRead } from "../../source-lookup.js"
 import {
   hasAnyObjectValue,
-  mapIdentifier,
+  createDatatypeMappers,
+  STANDARD_DELIMITERS,
   stringOrNull,
 } from "./hl7-datatypes.js"
 
 export function mapPreferredIdentifierFromSourceReads(
   item: Hl7Item,
   sourceReads: readonly Hl7SourceRead[],
+  delimiters: Hl7Delimiters = STANDARD_DELIMITERS,
 ): Identifier | null {
+  const { mapIdentifier } = createDatatypeMappers(delimiters)
   const preferredType = stringOrNull(item.transform?.params["preferredType"])
   const identifierFields = sourceReads
-    .map((sourceRead) => sourceRead.rawField ?? sourceRead.value)
+    .filter((read) => read.status === "found" || read.status === "empty")
+    .map((read) =>
+      read.source.repetition ||
+      read.source.component ||
+      read.source.subComponent
+        ? read.value
+        : (read.rawField ?? read.value),
+    )
     .filter((value): value is string => stringOrNull(value) !== null)
 
   const identifiers = identifierFields.flatMap((fieldValue) =>
     fieldValue
-      .split("~")
+      .split(delimiters.repetition)
       .map((repetition) => mapIdentifier(stringOrNull(repetition)))
       .filter((identifier): identifier is Identifier => identifier !== null),
   )

@@ -5,7 +5,7 @@ import {
 } from "@hl7-data-mapper/contracts"
 import { fingerprintMessage } from "./message-fingerprint"
 
-export const REVIEW_ENGINE_REVISION = "review-v1"
+export const REVIEW_ENGINE_REVISION = "review-v4"
 
 export function reviewContext(
   profile: ClientProfile,

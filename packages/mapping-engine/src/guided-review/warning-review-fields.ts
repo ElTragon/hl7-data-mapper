@@ -1,6 +1,7 @@
 import {
   createValidationSummary,
   stableReviewJson,
+  normalizedPathKind,
 } from "@hl7-data-mapper/contracts"
 import type { ParsedHl7Message } from "@hl7-data-mapper/hl7-parser"
 import type {
@@ -101,7 +102,10 @@ export function buildWarningReviewFields(
     return {
       ...field,
       label: `Review ${field.normalizedPath} source`,
-      hl7ItemId: trace?.itemId ?? null,
+      hl7ItemId:
+        normalizedPathKind(field.normalizedPath) === "array"
+          ? null
+          : (trace?.itemId ?? null),
       rawSegment: read?.rawSegment ?? null,
       sourceCandidates: read
         ? [
@@ -222,7 +226,9 @@ function findSourceExpectation(
 ): SourceExpectation | null {
   return (
     trace.sourceExpectations?.find(
-      (expectation) => expectation.path === sourcePath,
+      (expectation) =>
+        expectation.path === sourcePath ||
+        expectation.path === sourcePath.replace(/\[\d+\]/g, ""),
     ) ?? null
   )
 }

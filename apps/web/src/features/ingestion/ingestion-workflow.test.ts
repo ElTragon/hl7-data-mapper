@@ -22,7 +22,9 @@ const OCCURRED_AT = "2026-08-19T12:00:00.000Z"
 
 function createState() {
   return createReviewWorkflow({
-    parsedMessage: parseHl7Message(sampleHl7Message),
+    parsedMessage: parseHl7Message(
+      sampleHl7Message.replace("PID|1||", "PID|1|Alternate|"),
+    ),
     sourceProfile: defaultOmlO21ClientProfile,
     storedSnapshot: null,
     occurredAt: OCCURRED_AT,
@@ -392,7 +394,7 @@ it("attaches corrections initiated from a warning to the mapped field", () => {
     stepId: "warnings" as const,
   }
   const corrected = applySourceCorrection({
-    state,
+    state: { ...state, reviewFields: [...state.reviewFields, warningField] },
     field: warningField,
     source: createSourceReference({ segment: "PID", field: 2, component: 1 }),
     sourceRole: "middle",
@@ -404,4 +406,49 @@ it("attaches corrections initiated from a warning to the mapped field", () => {
     reviewStatus: "mapping_changed",
     appliedCorrection: { targetHl7ItemId: "patient-name" },
   })
+})
+
+it("ignores stale review values and missing replacement sources", () => {
+  const state = createState()
+  const field = state.reviewFields.find((field) => field.id === "patient-name")!
+  expect(
+    updateReviewedField(state, {
+      ...field,
+      value: "stale",
+      reviewStatus: "confirmed",
+    }),
+  ).toBe(state)
+  for (const source of [
+    createSourceReference({ segment: "PID", field: 99 }),
+    createSourceReference({ segment: "PID", field: 4 }),
+  ]) {
+    expect(
+      applySourceCorrection({ state, field, source, occurredAt: OCCURRED_AT }),
+    ).toBe(state)
+  }
+})
+
+it("does not replace an array composer through its exception field", () => {
+  const state = createState()
+  const original = state.reviewFields.find(
+    (field) =>
+      field.section === "exceptions" && field.normalizedPath === "labOrders",
+  )!
+  expect(original).toBeDefined()
+  expect(original.hl7ItemId).toBeNull()
+  const field = { ...original, hl7ItemId: "lab-order-groups" }
+  const staleState = {
+    ...state,
+    reviewFields: state.reviewFields.map((entry) =>
+      entry.id === field.id ? field : entry,
+    ),
+  }
+  expect(
+    applySourceCorrection({
+      state: staleState,
+      field,
+      source: createSourceReference({ segment: "PID", field: 8 }),
+      occurredAt: OCCURRED_AT,
+    }),
+  ).toBe(staleState)
 })

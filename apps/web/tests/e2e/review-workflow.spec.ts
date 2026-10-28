@@ -216,3 +216,139 @@ test("review controls remain usable at a phone width", async ({
     .scrollIntoViewIfNeeded()
   await page.screenshot({ path: testInfo.outputPath("review-phone.png") })
 })
+
+test("a record field correction survives reload and export without changing siblings", async ({
+  page,
+}) => {
+  await parseSample(page)
+  await page
+    .getByRole("button", {
+      name: "Select Patient addresses: Record 1 · City",
+      exact: true,
+    })
+    .click()
+  await page.getByLabel("Find a source").fill("PID-11.4")
+  await page
+    .locator('[data-source-option="PID-11.4"]')
+    .getByRole("button", { name: "Select", exact: true })
+    .click()
+  await page
+    .getByRole("button", { name: "Use this source", exact: true })
+    .click()
+  await page.reload()
+  await page.getByRole("button", { name: "Parse message", exact: true }).click()
+  const download = page.waitForEvent("download")
+  await page
+    .getByRole("button", { name: "Download interim report ZIP", exact: true })
+    .click()
+  const report = await readZip(await download)
+  expect(report.normalized.patient.addresses[0]).toMatchObject({
+    city: "CA",
+    state: "CA",
+    street: "742 Evergreen Ave",
+  })
+})
+
+test("reparsing closes an unsaved review editor", async ({ page }) => {
+  await parseSample(page)
+  const card = page.locator("[data-review-field-card]").filter({
+    has: page.getByRole("button", {
+      name: "Select Patient name",
+      exact: true,
+    }),
+  })
+  await card.getByRole("button", { name: "Incorrect", exact: true }).click()
+  await expect(page.getByRole("button", { name: /save/i })).toBeVisible()
+  await page.getByRole("button", { name: "Parse message", exact: true }).click()
+  await expect(page.getByRole("button", { name: /save/i })).toHaveCount(0)
+})
+
+test("a timestamp without a timezone keeps its precision in the report", async ({
+  page,
+}) => {
+  await page.goto("/")
+  const sample = (await readFile(fixture, "utf8")).replace(
+    "20260706101500-0700",
+    "202607061015",
+  )
+  await page.getByLabel("Editable HL7 message").fill(sample)
+  await page.getByRole("button", { name: "Parse message", exact: true }).click()
+  const download = page.waitForEvent("download")
+  await page
+    .getByRole("button", { name: "Download interim report ZIP", exact: true })
+    .click()
+  const report = await readZip(await download)
+  expect(report.normalized.message.sentAt).toBe("2026-07-06T10:15")
+  expect(report.validation.warnings).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({ code: "missing-timezone" }),
+    ]),
+  )
+})
+
+test("record corrections preserve absent objects and clear corrected timestamp errors", async ({
+  page,
+}, testInfo) => {
+  const errors: string[] = []
+  page.on("pageerror", (error) => errors.push(error.message))
+  page.on("console", (message) => {
+    if (message.type() === "error") errors.push(message.text())
+  })
+  await page.goto("/")
+  await expect(page).toHaveTitle("HL7 Data Mapper")
+  const raw = [
+    "MSH|^~\\&|A|B|C|D|20260706101500-0700||OML^O21^OML_O21|1|P|2.5.1",
+    "PID|1||MRN^^^LAB^MR||Doe^Jane||19870514|F|||~Second^^Two^NY^10001",
+    "ORC|NW|ORDER|||||||20260230100000",
+    "OBR|1|ORDER||CBC^CBC^LN",
+    "SPM|1||S|BLD",
+  ].join("\r")
+  await page.getByLabel("Editable HL7 message").fill(raw)
+  await page.getByRole("button", { name: "Parse message", exact: true }).click()
+  await page.getByRole("button", { name: /Lab orders/ }).click()
+  await page
+    .getByRole("button", {
+      name: "Select Laboratory orders: Record 1 · Ordering Provider",
+      exact: true,
+    })
+    .click()
+  await page.getByLabel("Find a source").fill("PID-5.2")
+  await expect(
+    page
+      .locator('[data-source-option="PID-5.2"]')
+      .getByRole("button", { name: "Select", exact: true }),
+  ).toBeDisabled()
+  await page
+    .getByRole("button", {
+      name: "Select Laboratory orders: Record 1 · Transaction At",
+      exact: true,
+    })
+    .click()
+  await page.getByLabel("Find a source").fill("MSH-7")
+  await page
+    .locator('[data-source-option="MSH-7"]')
+    .getByRole("button", { name: "Select", exact: true })
+    .click()
+  await page
+    .getByRole("button", { name: "Use this source", exact: true })
+    .click()
+  const download = page.waitForEvent("download")
+  await page
+    .getByRole("button", { name: "Download interim report ZIP", exact: true })
+    .click()
+  const report = await readZip(await download)
+  expect(report.normalized.labOrders[0]).toMatchObject({
+    transactionAt: "2026-07-06T10:15:00-07:00",
+    orderingProvider: null,
+  })
+  expect(report.normalized.patient.addresses).toMatchObject([{ city: "Two" }])
+  expect(report.validation.errors).toEqual([])
+  expect(errors).toEqual([])
+  await page
+    .getByRole("button", {
+      name: "Select Laboratory orders: Record 1 · Transaction At",
+      exact: true,
+    })
+    .scrollIntoViewIfNeeded()
+  await page.screenshot({ path: testInfo.outputPath("corrected-record.png") })
+})

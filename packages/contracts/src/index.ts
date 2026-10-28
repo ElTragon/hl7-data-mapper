@@ -6,6 +6,8 @@ export const contractsPackage = {
 
 export type ContractsPackage = typeof contractsPackage
 
+export { normalizedPathKind } from "./normalized-path-kind.js"
+
 export {
   AddressSchema,
   CodedValueSchema,

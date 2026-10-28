@@ -18,3 +18,20 @@ export function isPendingTransform(item: Hl7Item): boolean {
 
   return !SUPPORTED_TRANSFORMS.has(item.transform.name)
 }
+
+export function hasSupportedAction(item: Hl7Item): boolean {
+  if (
+    item.transform &&
+    item.transform.name !== "mustEqual" &&
+    SUPPORTED_TRANSFORMS.has(item.transform.name)
+  )
+    return true
+  return [
+    "extract",
+    "validate",
+    "join",
+    "default_value",
+    "normalize_date",
+    "normalize_timestamp",
+  ].includes(item.action)
+}

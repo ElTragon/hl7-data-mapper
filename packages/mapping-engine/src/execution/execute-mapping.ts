@@ -3,6 +3,7 @@ import {
   canExecuteClientProfile,
   ClientProfileSchema,
   createValidationSummary,
+  normalizedPathKind,
   sortHl7ItemsForExecution,
   type NormalizedField,
   type ValidationIssue,
@@ -33,14 +34,54 @@ export function executeMapping({
   const trace: MappingExecutionTraceEntry[] = []
   const issues: ValidationIssue[] = []
   const itemOutputs = new Map<string, unknown>()
+  const overriddenPaths = new Set<string>()
 
   for (const item of sortHl7ItemsForExecution(parsedProfile.itemSet.items)) {
-    const itemResult = executeItem({ item, parsedMessage, itemOutputs })
+    const isRecordCorrection = item.dependsOn.some((id) => {
+      const parent = parsedProfile.itemSet.items.find(
+        (candidate) => candidate.id === id,
+      )
+      return parent && item.targetPath.startsWith(`${parent.targetPath}[`)
+    })
+    const invalidRecordTarget =
+      isRecordCorrection && normalizedPathKind(item.targetPath) !== "string"
+    const missingRecord =
+      isRecordCorrection &&
+      valueAtPath(normalizedDraft, item.targetPath) === undefined
+    const executed = executeItem({ item, parsedMessage, itemOutputs })
+    const invalidRecordValue =
+      isRecordCorrection &&
+      executed.outputValue !== null &&
+      typeof executed.outputValue !== "string"
+    const invalidCorrection = invalidRecordTarget || invalidRecordValue
+    const skipWrite = invalidCorrection || missingRecord
+    const itemResult: MappingExecutionTraceEntry = skipWrite
+      ? {
+          ...executed,
+          outputValue: null,
+          status: "error",
+          validationIssues: [
+            {
+              code: invalidCorrection
+                ? "invalid-record-correction"
+                : "missing-record",
+              severity: "error",
+              fieldKey: item.targetPath,
+              section: item.section,
+              message: invalidCorrection
+                ? `The saved correction for "${item.label}" is incompatible with its field type and was not applied. Remove or replace this correction before completing review.`
+                : `The record for "${item.label}" is absent in this message. Review the saved correction.`,
+            },
+          ],
+        }
+      : executed
 
     itemOutputs.set(item.id, itemResult.outputValue)
     issues.push(...itemResult.validationIssues)
     trace.push(itemResult)
-    setValueAtPath(normalizedDraft, item.targetPath, itemResult.outputValue)
+    if (!skipWrite)
+      setValueAtPath(normalizedDraft, item.targetPath, itemResult.outputValue)
+    if (!skipWrite && isRecordCorrection) overriddenPaths.add(item.targetPath)
 
     fields.push({
       key: item.targetPath,
@@ -64,6 +105,16 @@ export function executeMapping({
     })
   }
 
+  // Keep the original trace as execution evidence; final validation reflects
+  // the source that now supplies each corrected field.
+  const isCurrentIssue = (issue: ValidationIssue) =>
+    !(
+      (issue.code === "invalid-temporal-value" ||
+        issue.code === "missing-timezone") &&
+      issue.path &&
+      issue.path !== issue.fieldKey &&
+      overriddenPaths.has(issue.path)
+    )
   const result: MappingExecutionResult = {
     profile: {
       clientId: parsedProfile.clientId,
@@ -72,12 +123,33 @@ export function executeMapping({
       status: parsedProfile.status,
     },
     normalizedDraft,
-    normalizedFields: fields,
-    validation: createValidationSummary(issues),
+    normalizedFields: fields.map((field) => ({
+      ...field,
+      value: valueAtPath(normalizedDraft, field.key),
+      validation: field.validation.filter(isCurrentIssue),
+      warnings: field.validation
+        .filter(isCurrentIssue)
+        .filter((issue) => issue.severity === "warning")
+        .map((issue) => issue.message),
+    })),
+    validation: createValidationSummary(issues.filter(isCurrentIssue)),
     executionTrace: trace,
   }
   return {
     ...result,
     validation: collectReviewValidation(result, parsedMessage),
   }
+}
+
+function valueAtPath(root: unknown, path: string): unknown {
+  return path
+    .replace(/\[(\d+)\]/g, ".$1")
+    .split(".")
+    .reduce<unknown>(
+      (value, key) =>
+        value && typeof value === "object"
+          ? (value as Record<string, unknown>)[key]
+          : undefined,
+      root,
+    )
 }
