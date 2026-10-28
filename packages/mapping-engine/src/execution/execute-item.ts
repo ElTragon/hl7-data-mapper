@@ -1,6 +1,8 @@
 import type { Hl7Item, ValidationIssue } from "@hl7-data-mapper/contracts"
 import type { ParsedHl7Message } from "@hl7-data-mapper/hl7-parser"
 
+import { getOrderGroups } from "../source-lookup.js"
+import { mapSpecimenFromSourceValues } from "./transforms/order.js"
 import { applySupportedAction } from "./apply-supported-action.js"
 import { getTraceStatus } from "./execution-status.js"
 import { repeatedItems } from "./repeated-inputs.js"
@@ -10,6 +12,7 @@ import {
   isPendingTransform,
 } from "./supported-transforms.js"
 import type { MappingExecutionTraceEntry } from "./types.js"
+import { temporalIssues } from "./temporal-validation.js"
 import { isMissingValue } from "./value-presence.js"
 
 export type ExecuteItemInput = {
@@ -34,24 +37,75 @@ export function executeItem({
   const issues: ValidationIssue[] = []
   const pendingTransform = isPendingTransform(item)
   const unsupportedAction = !pendingTransform && !hasSupportedAction(item)
+  function applyInput(entry: Hl7Item, index: number): unknown {
+    const entryInput = inputs[index]!
+    const output = applySupportedAction(
+      entry,
+      entryInput.values,
+      entryInput.sourceReads,
+      parsedMessage.delimiters,
+    )
+    if (
+      entry.transform?.name !== "mapOrcOrderGroups" ||
+      !Array.isArray(output) ||
+      item.sources.some(
+        (source) => source.segment === "SPM" && source.segmentIndex != null,
+      )
+    )
+      return output
+    const orcIndex = entryInput.sourceReads.find(
+      (read) => read.source.segment === "ORC",
+    )?.segmentIndex
+    const group = getOrderGroups(parsedMessage).find(
+      (group) => group.orc.index === orcIndex,
+    )
+    if (!group || group.spm.length < 2) return output
+    const specimens = group.spm.flatMap((segment, specimenIndex) => {
+      const scoped = {
+        ...entry,
+        sources: entry.sources.map((source) =>
+          source.segment === "SPM"
+            ? { ...source, segmentIndex: segment.index }
+            : source,
+        ),
+      }
+      const read = readItemInput(scoped, parsedMessage, itemOutputs)
+      if (specimenIndex > 0) {
+        const specimenReads = read.sourceReads.filter(
+          (source) => source.source.segment === "SPM",
+        )
+        input.sourceReads.push(...specimenReads)
+        input.values.push(...specimenReads.map((source) => source.value))
+        issues.push(
+          ...temporalIssues(
+            scoped,
+            read.values,
+            parsedMessage.delimiters,
+          ).filter((issue) => issue.source?.segment === "SPM"),
+        )
+      }
+      const specimen = mapSpecimenFromSourceValues(
+        read.values.slice(13),
+        parsedMessage.delimiters,
+      )
+      return specimen ? [specimen] : []
+    })
+    return output.map((order) => ({ ...order, specimens }))
+  }
   const outputValue =
     pendingTransform || unsupportedAction
       ? null
       : items.length === 1
-        ? applySupportedAction(
-            items[0]!,
-            inputs[0]!.values,
-            inputs[0]!.sourceReads,
-            parsedMessage.delimiters,
-          )
-        : items.flatMap((entry, index) =>
-            applySupportedAction(
-              entry,
-              inputs[index]!.values,
-              inputs[index]!.sourceReads,
-              parsedMessage.delimiters,
-            ),
-          )
+        ? applyInput(items[0]!, 0)
+        : items.flatMap(applyInput)
+
+  if (!pendingTransform && !unsupportedAction) {
+    issues.push(
+      ...items.flatMap((entry, index) =>
+        temporalIssues(entry, inputs[index]!.values, parsedMessage.delimiters),
+      ),
+    )
+  }
 
   if (unsupportedAction) {
     issues.push({
@@ -79,7 +133,8 @@ export function executeItem({
     item.required &&
     isMissingValue(outputValue) &&
     !pendingTransform &&
-    !unsupportedAction
+    !unsupportedAction &&
+    !issues.some((issue) => issue.code === "invalid-temporal-value")
   ) {
     issues.push({
       code: "missing-required-value",

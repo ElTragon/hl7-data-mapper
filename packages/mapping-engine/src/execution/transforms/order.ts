@@ -53,7 +53,7 @@ export function mapLabOrderArrayFromSourceValues(
   ]
 }
 
-function mapSpecimenFromSourceValues(
+export function mapSpecimenFromSourceValues(
   inputValues: readonly unknown[],
   delimiters: Hl7Delimiters = STANDARD_DELIMITERS,
 ): Specimen | null {

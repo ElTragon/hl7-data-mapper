@@ -262,3 +262,26 @@ test("reparsing closes an unsaved review editor", async ({ page }) => {
   await page.getByRole("button", { name: "Parse message", exact: true }).click()
   await expect(page.getByRole("button", { name: /save/i })).toHaveCount(0)
 })
+
+test("a timestamp without a timezone keeps its precision in the report", async ({
+  page,
+}) => {
+  await page.goto("/")
+  const sample = (await readFile(fixture, "utf8")).replace(
+    "20260706101500-0700",
+    "202607061015",
+  )
+  await page.getByLabel("Editable HL7 message").fill(sample)
+  await page.getByRole("button", { name: "Parse message", exact: true }).click()
+  const download = page.waitForEvent("download")
+  await page
+    .getByRole("button", { name: "Download interim report ZIP", exact: true })
+    .click()
+  const report = await readZip(await download)
+  expect(report.normalized.message.sentAt).toBe("2026-07-06T10:15")
+  expect(report.validation.warnings).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({ code: "missing-timezone" }),
+    ]),
+  )
+})
