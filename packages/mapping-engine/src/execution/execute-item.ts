@@ -42,12 +42,14 @@ export function executeItem({
             items[0]!,
             inputs[0]!.values,
             inputs[0]!.sourceReads,
+            parsedMessage.delimiters,
           )
         : items.flatMap((entry, index) =>
             applySupportedAction(
               entry,
               inputs[index]!.values,
               inputs[index]!.sourceReads,
+              parsedMessage.delimiters,
             ),
           )
 
