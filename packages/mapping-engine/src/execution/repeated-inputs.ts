@@ -37,7 +37,7 @@ export function repeatedItems(
             ...source,
             segmentIndex:
               group.segments.find((segment) => segment.name === source.segment)
-                ?.index ?? message.segments.length,
+                ?.index ?? message.segments.length + group.orderIndex,
           })),
         }))
       : [item]
