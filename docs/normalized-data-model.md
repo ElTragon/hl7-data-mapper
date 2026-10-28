@@ -182,3 +182,26 @@ Contract tests verify:
 
 Mapping-engine tests also verify that the default composers can generate the
 canonical normalized fixture from the supported synthetic OML/O21 message.
+
+## Temporal values and precision
+
+Normalized temporal values remain nullable strings. Their representation preserves
+source precision: `2026`, `2026-07`, `2026-07-06`, `2026-07-06T10`, and
+`2026-07-06T10:15` are distinct. Missing components are not filled with zeros.
+Seconds may carry one through four fractional digits. Explicit offsets are
+preserved as `±HH:MM`; an absent offset remains absent, never `Z` or the machine's
+local timezone. A time without an offset creates a `missing-timezone` review
+warning. Date-only values do not invent a time or need a timezone.
+
+The supported calendar uses years 0001–9999, Gregorian leap-year rules, hours
+00–23, and minutes/seconds 00–59. Leap seconds are not supported. The demo accepts
+offsets from -14:00 through +14:00, with valid minutes and no minutes beyond the
+14-hour boundary. Offsets require a time component. Impossible dates, unsupported
+precision, and trailing content produce null output and an
+`invalid-temporal-value` error, including optional and nested mapped fields.
+Date extraction validates the full source timestamp before retaining its date.
+
+Both the generic mapping executor and default report composers use the same
+normalizer. The report preserves these strings and their validation issues.
+Existing draft profile shapes remain compatible. The review engine revision
+changes so decisions made under earlier normalization rules require review again.

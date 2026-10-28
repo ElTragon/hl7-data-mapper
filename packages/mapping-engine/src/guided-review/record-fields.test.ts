@@ -19,6 +19,7 @@ const parsedMessage = parseHl7Message(
     "ORC|NW|ORDER-A",
     "OBR|1|ORDER-A||A^Test A^LN",
     "SPM|1||A|BLD",
+    "SPM|2||A2|SER",
     "ORC|NW|ORDER-B",
     "OBR|1|ORDER-B||B^Test B^LN",
     "SPM|1||B|BLD",
@@ -39,6 +40,27 @@ describe("record field review", () => {
       labOrders: [{ service: { code: "A" } }, { service: { code: "B" } }],
     })
     const fields = buildReviewableFields({ profile, mappingResult: result })
+    expect(
+      fields.find(
+        (field) => field.normalizedPath === "labOrders[1].service.code",
+      )?.rawSegment,
+    ).toContain("ORDER-B")
+    expect(
+      fields.find(
+        (field) =>
+          field.normalizedPath === "labOrders[0].specimens[1].type.code",
+      )?.value,
+    ).toBe("SER")
+    const specimenField = fields.find(
+      (field) => field.normalizedPath === "labOrders[0].specimens[1].type.code",
+    )!
+    expect(specimenField.rawSegment).toBe("SPM|2||A2|SER")
+    expect(
+      specimenField.sourceCandidates.every(
+        (candidate) => candidate.source.segmentIndex === 7,
+      ),
+    ).toBe(true)
+
     expect(
       fields.find(
         (field) => field.normalizedPath === "patient.addresses[1].city",
