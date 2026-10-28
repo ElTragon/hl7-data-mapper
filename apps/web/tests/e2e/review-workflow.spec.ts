@@ -216,3 +216,49 @@ test("review controls remain usable at a phone width", async ({
     .scrollIntoViewIfNeeded()
   await page.screenshot({ path: testInfo.outputPath("review-phone.png") })
 })
+
+test("a record field correction survives reload and export without changing siblings", async ({
+  page,
+}) => {
+  await parseSample(page)
+  await page
+    .getByRole("button", {
+      name: "Select Patient addresses: Record 1 · City",
+      exact: true,
+    })
+    .click()
+  await page.getByLabel("Find a source").fill("PID-11.4")
+  await page
+    .locator('[data-source-option="PID-11.4"]')
+    .getByRole("button", { name: "Select", exact: true })
+    .click()
+  await page
+    .getByRole("button", { name: "Use this source", exact: true })
+    .click()
+  await page.reload()
+  await page.getByRole("button", { name: "Parse message", exact: true }).click()
+  const download = page.waitForEvent("download")
+  await page
+    .getByRole("button", { name: "Download interim report ZIP", exact: true })
+    .click()
+  const report = await readZip(await download)
+  expect(report.normalized.patient.addresses[0]).toMatchObject({
+    city: "CA",
+    state: "CA",
+    street: "742 Evergreen Ave",
+  })
+})
+
+test("reparsing closes an unsaved review editor", async ({ page }) => {
+  await parseSample(page)
+  const card = page.locator("[data-review-field-card]").filter({
+    has: page.getByRole("button", {
+      name: "Select Patient name",
+      exact: true,
+    }),
+  })
+  await card.getByRole("button", { name: "Incorrect", exact: true }).click()
+  await expect(page.getByRole("button", { name: /save/i })).toBeVisible()
+  await page.getByRole("button", { name: "Parse message", exact: true }).click()
+  await expect(page.getByRole("button", { name: /save/i })).toHaveCount(0)
+})

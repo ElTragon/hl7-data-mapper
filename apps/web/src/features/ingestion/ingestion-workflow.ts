@@ -13,6 +13,7 @@ import {
   applyReviewCorrectionAndRerunMapping,
   buildReviewableFields,
   executeMapping,
+  readSource,
   selectAlternateSourceForReviewableField,
   selectCompositeSourceForReviewableField,
   type MappingExecutionResult,
@@ -79,6 +80,15 @@ export function updateReviewedField(
   state: ReviewWorkflowState,
   updatedField: ReviewableField,
 ): ReviewWorkflowState {
+  const current = state.reviewFields.find(
+    (field) => field.id === updatedField.id,
+  )
+  if (
+    !current ||
+    fieldEvidence(current, state.profile) !==
+      fieldEvidence(updatedField, state.profile)
+  )
+    return state
   return {
     ...state,
     reviewFields: state.reviewFields.map((field) =>
@@ -114,6 +124,28 @@ export function applySourceCorrection({
   readonly sourceRole?: PersonNameSourceRole
   readonly occurredAt: string
 }): ReviewWorkflowState {
+  const current = state.reviewFields.find(
+    (candidate) => candidate.id === field.id,
+  )
+  if (
+    !current ||
+    fieldEvidence(current, state.profile) !==
+      fieldEvidence(field, state.profile)
+  )
+    return state
+  if (Array.isArray(field.value)) return state
+  const read = readSource(state.parsedMessage, source)
+  if (read.status !== "found" || !read.value?.trim() || !field.hl7ItemId)
+    return state
+  if (
+    (sourceRole || field.id.includes(":")) &&
+    [
+      state.parsedMessage.delimiters.component,
+      state.parsedMessage.delimiters.subcomponent,
+      state.parsedMessage.delimiters.repetition,
+    ].some((delimiter) => read.value!.includes(delimiter))
+  )
+    return state
   const replacementSource = { ...source, raw: undefined }
   const correctedField = sourceRole
     ? selectCompositeSourceForReviewableField({
@@ -147,7 +179,9 @@ export function applySourceCorrection({
       nextProfile: result.profile,
       nextFields: result.reviewFields,
       overrideFieldId:
-        correctedField.correctionIntent?.targetHl7ItemId ?? field.id,
+        field.section === "exceptions"
+          ? (correctedField.correctionIntent?.targetHl7ItemId ?? field.id)
+          : field.id,
       overrideStatus: "mapping_changed",
       correctionIntent: correctedField.correctionIntent ?? null,
     }),

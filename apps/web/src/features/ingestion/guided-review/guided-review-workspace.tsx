@@ -84,6 +84,11 @@ export function GuidedReviewWorkspace({
 }: GuidedReviewWorkspaceProps) {
   const [decisionEditor, setDecisionEditor] =
     useState<ReviewDecisionEditorState | null>(null)
+  const [editorMapping, setEditorMapping] = useState(mappingResult)
+  if (editorMapping !== mappingResult) {
+    setEditorMapping(mappingResult)
+    setDecisionEditor(null)
+  }
   const activeFields = getActiveReviewFields(reviewFields, activeStepId)
   const selectedField = resolveSelectedReviewField({
     activeFields,
