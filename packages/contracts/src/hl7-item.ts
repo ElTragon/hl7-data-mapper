@@ -62,6 +62,11 @@ export const RecordSourceAnchorSchema = z.object({
   field: z.number().int().positive(),
   repetition: z.number().int().positive().nullable(),
   repetitionCount: z.number().int().nonnegative(),
+  orderShape: z
+    .string()
+    .regex(/^TQ1:\d+,OBR:\d+,SPM:\d+$/)
+    .nullable()
+    .optional(),
 })
 
 export const RecordCorrectionIdentitySchema = z.object({

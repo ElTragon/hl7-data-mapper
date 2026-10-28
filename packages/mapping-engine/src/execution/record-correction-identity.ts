@@ -2,6 +2,7 @@ import type { Hl7Item, SourceReference } from "@hl7-data-mapper/contracts"
 import type { ParsedHl7Message } from "@hl7-data-mapper/hl7-parser"
 
 import type { MappingExecutionTraceEntry } from "./types.js"
+import { getOrderGroups } from "../source-lookup.js"
 
 type Anchor = NonNullable<Hl7Item["recordCorrectionIdentity"]>["replacement"]
 
@@ -19,6 +20,9 @@ export function sourceAnchor(
       : segments.find((entry) => entry.index === resolvedIndex)
   if (!segment) return null
   const field = segment.fields.find((entry) => entry.index === source.field)
+  const group = getOrderGroups(message).find((entry) =>
+    entry.segments.some((member) => member.index === segment.index),
+  )
   return {
     segment: source.segment,
     occurrence: segments.indexOf(segment),
@@ -26,6 +30,10 @@ export function sourceAnchor(
     field: source.field,
     repetition: source.repetition ?? null,
     repetitionCount: field?.repetitions.length ?? 0,
+    orderShape:
+      group && (source.segment === "ORC" || source.segment === "SPM")
+        ? `TQ1:${group.tq1.length},OBR:${group.obr.length},SPM:${group.spm.length}`
+        : null,
   }
 }
 
@@ -84,6 +92,19 @@ export function resolveAnchor(
   const field = segment.fields.find((entry) => entry.index === anchor.field)
   if ((field?.repetitions.length ?? 0) !== anchor.repetitionCount) return null
   if (anchor.repetition && !field?.repetitions[anchor.repetition - 1])
+    return null
+  if (
+    anchor.orderShape &&
+    sourceAnchor(
+      message,
+      {
+        segment: anchor.segment,
+        field: anchor.field,
+        path: `${anchor.segment}-${anchor.field}`,
+      },
+      segment.index,
+    )?.orderShape !== anchor.orderShape
+  )
     return null
   return segment.index
 }

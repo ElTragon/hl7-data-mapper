@@ -486,4 +486,41 @@ describe("record field review", () => {
       expect.objectContaining({ code: "unresolved-record-identity" }),
     )
   })
+
+  it("blocks an order correction when differently shaped groups swap positions", () => {
+    const field = buildReviewableFields({
+      profile,
+      mappingResult: executeMapping({ profile, parsedMessage }),
+    }).find((entry) => entry.normalizedPath === "labOrders[0].service.code")!
+    const corrected = applyReviewCorrectionAndRerunMapping({
+      profile,
+      parsedMessage,
+      updatedAt: profile.updatedAt,
+      field: selectAlternateSourceForReviewableField({
+        field,
+        replacementSource: field.sourceCandidates.find(
+          (entry) => entry.source.segment === "OBR" && entry.source.field === 4,
+        )!.source,
+      }),
+    })
+    const lines = parsedMessage.normalizedText.split("\r")
+    const firstOrder = lines.findIndex((line) => line.startsWith("ORC|"))
+    const secondOrder = lines.findIndex(
+      (line, index) => index > firstOrder && line.startsWith("ORC|"),
+    )
+    const swapped = parseHl7Message(
+      [
+        ...lines.slice(0, firstOrder),
+        ...lines.slice(secondOrder),
+        ...lines.slice(firstOrder, secondOrder),
+      ].join("\r"),
+    )
+    const replay = executeMapping({
+      profile: corrected.profile,
+      parsedMessage: swapped,
+    })
+    expect(replay.validation.errors).toContainEqual(
+      expect.objectContaining({ code: "unresolved-record-identity" }),
+    )
+  })
 })

@@ -212,7 +212,8 @@ saved as a dependent mapping item with source-coordinate identity and runs after
 its composer, preserving sibling fields. Replay matches the original repetition
 or segment occurrence against the current execution trace, then resolves the
 selected source's current segment index. Identity metadata contains only
-structural coordinates and counts, never raw HL7 or extracted values. If the
+structural coordinates, counts, and order-group shape, never raw HL7 or
+extracted values. If the
 record, selected source, or sibling structure cannot be matched uniquely,
 replay skips the correction and raises a blocking `unresolved-record-identity`
 issue. Existing draft corrections without identity metadata remain in the draft
