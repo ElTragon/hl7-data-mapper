@@ -71,6 +71,14 @@ export function Hl7SourceBrowser({
     useState<SourceBuilderState>(EMPTY_SOURCE_BUILDER)
   const [selectedCandidate, setSelectedCandidate] =
     useState<SourceOption | null>(null)
+  const [context, setContext] = useState({ parsedMessage, field })
+  if (context.parsedMessage !== parsedMessage || context.field !== field) {
+    setContext({ parsedMessage, field })
+    setQuery(field.primarySource?.segment ?? "")
+    setSourceRole("family")
+    setBuilder(EMPTY_SOURCE_BUILDER)
+    setSelectedCandidate(null)
+  }
   const sourceOptions = useMemo(
     () => buildSourceOptions(parsedMessage),
     [parsedMessage],
@@ -87,10 +95,12 @@ export function Hl7SourceBrowser({
         query,
         builder,
       })
-  const candidateBlockReason = getCandidateBlockReason(
-    selectedCandidate,
-    isPersonNameField,
-  )
+  const candidateBlockReason = Array.isArray(field.value)
+    ? "Choose an individual field within this record to change its source."
+    : getCandidateBlockReason(
+        selectedCandidate,
+        isPersonNameField || field.id.includes(":"),
+      )
 
   function updateBuilder(nextBuilder: SourceBuilderState) {
     setBuilder(nextBuilder)
@@ -239,9 +249,14 @@ export function Hl7SourceBrowser({
               ? PERSON_NAME_SOURCE_LABELS[sourceRole]
               : field.label
           }
-          blockReason={candidateBlockReason}
+          blockReason={
+            !field.hl7ItemId
+              ? "This field has no editable mapping source."
+              : candidateBlockReason
+          }
           onClear={() => setSelectedCandidate(null)}
           onApply={() => {
+            if (!field.hl7ItemId || candidateBlockReason) return
             onApplySource(
               field,
               selectedCandidate.source,

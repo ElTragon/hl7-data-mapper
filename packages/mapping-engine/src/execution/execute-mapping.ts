@@ -35,12 +35,39 @@ export function executeMapping({
   const itemOutputs = new Map<string, unknown>()
 
   for (const item of sortHl7ItemsForExecution(parsedProfile.itemSet.items)) {
-    const itemResult = executeItem({ item, parsedMessage, itemOutputs })
+    const missingRecord = item.dependsOn.some((id) => {
+      const parent = parsedProfile.itemSet.items.find(
+        (candidate) => candidate.id === id,
+      )
+      return (
+        parent &&
+        item.targetPath.startsWith(`${parent.targetPath}[`) &&
+        valueAtPath(normalizedDraft, item.targetPath) === undefined
+      )
+    })
+    const executed = executeItem({ item, parsedMessage, itemOutputs })
+    const itemResult: MappingExecutionTraceEntry = missingRecord
+      ? {
+          ...executed,
+          outputValue: null,
+          status: "error",
+          validationIssues: [
+            {
+              code: "missing-record",
+              severity: "error",
+              fieldKey: item.targetPath,
+              section: item.section,
+              message: `The record for "${item.label}" is absent in this message. Review the saved correction.`,
+            },
+          ],
+        }
+      : executed
 
     itemOutputs.set(item.id, itemResult.outputValue)
     issues.push(...itemResult.validationIssues)
     trace.push(itemResult)
-    setValueAtPath(normalizedDraft, item.targetPath, itemResult.outputValue)
+    if (!missingRecord)
+      setValueAtPath(normalizedDraft, item.targetPath, itemResult.outputValue)
 
     fields.push({
       key: item.targetPath,
@@ -72,7 +99,10 @@ export function executeMapping({
       status: parsedProfile.status,
     },
     normalizedDraft,
-    normalizedFields: fields,
+    normalizedFields: fields.map((field) => ({
+      ...field,
+      value: valueAtPath(normalizedDraft, field.key),
+    })),
     validation: createValidationSummary(issues),
     executionTrace: trace,
   }
@@ -80,4 +110,17 @@ export function executeMapping({
     ...result,
     validation: collectReviewValidation(result, parsedMessage),
   }
+}
+
+function valueAtPath(root: unknown, path: string): unknown {
+  return path
+    .replace(/\[(\d+)\]/g, ".$1")
+    .split(".")
+    .reduce<unknown>(
+      (value, key) =>
+        value && typeof value === "object"
+          ? (value as Record<string, unknown>)[key]
+          : undefined,
+      root,
+    )
 }

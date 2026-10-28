@@ -1,6 +1,7 @@
 import type { ClientProfile, ReviewableField } from "@hl7-data-mapper/contracts"
 
 import type { MappingExecutionResult } from "../execute-mapping.js"
+import { recordFields } from "./record-fields.js"
 import { buildWarningReviewFields } from "./warning-review-fields.js"
 import {
   firstRawSegment,
@@ -58,5 +59,14 @@ export function buildReviewableFields({
     }
   })
 
-  return [...normalizedReviewFields, ...buildWarningReviewFields(mappingResult)]
+  const explicitPaths = new Set(
+    normalizedReviewFields.map((field) => field.normalizedPath),
+  )
+  const expanded = normalizedReviewFields.flatMap((field) =>
+    recordFields(field).filter(
+      (child) =>
+        child.id === field.id || !explicitPaths.has(child.normalizedPath),
+    ),
+  )
+  return [...expanded, ...buildWarningReviewFields(mappingResult)]
 }

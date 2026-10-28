@@ -202,3 +202,19 @@ server logs, or external persistence.
 The project is HIPAA-aware in design language, not HIPAA compliant by source
 code alone. Real PHI would require appropriate infrastructure, agreements,
 access controls, audit controls, policies, and organizational risk assessment.
+
+## Record corrections and editor lifetime
+
+Array mappings expose individual record fields alongside the aggregate preview.
+Choose a record field to change its source; aggregate arrays and structural
+sequence numbers cannot be replaced with a scalar source. A record correction is
+saved as a dependent mapping item and runs after its composer, preserving sibling
+fields. Missing records produce a blocking `missing-record` issue rather than
+creating a synthetic record. Record positions are explicit draft mapping choices;
+review the mapping again when the message layout changes.
+
+Reparsing or replacing mapping results closes unsaved decision editors. Source
+selection resets when the reviewed field changes. Empty, missing, stale, and
+incompatible composite source selections do not modify the draft. Completed
+reports require decisions for the individual record fields as well as the
+aggregate previews.

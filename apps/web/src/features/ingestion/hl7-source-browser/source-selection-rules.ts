@@ -8,7 +8,7 @@ export function getCandidateBlockReason(
     return null
   }
 
-  if (candidate.previewValue === "") {
+  if (candidate.previewValue.trim() === "") {
     return "This source exists but is empty in the current message."
   }
 

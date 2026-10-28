@@ -168,3 +168,34 @@ function createReviewField(
     ...overrides,
   }
 }
+
+it("resets search when the review field is replaced", () => {
+  const parsedMessage = parseHl7Message(
+    `${BASE_MSH}\nPID|1||MRN-1||Lopez^Elena`,
+  )
+  const field = createReviewField()
+  const onApplySource = vi.fn()
+  const { rerender } = render(
+    <Hl7SourceBrowser
+      parsedMessage={parsedMessage}
+      field={field}
+      onApplySource={onApplySource}
+    />,
+  )
+  fireEvent.change(screen.getByRole("textbox", { name: /find a source/i }), {
+    target: { value: "Elena" },
+  })
+  rerender(
+    <Hl7SourceBrowser
+      parsedMessage={parsedMessage}
+      field={{
+        ...field,
+        primarySource: createSourceReference({ segment: "MSH", field: 3 }),
+      }}
+      onApplySource={onApplySource}
+    />,
+  )
+  expect(screen.getByRole("textbox", { name: /find a source/i })).toHaveValue(
+    "MSH",
+  )
+})
