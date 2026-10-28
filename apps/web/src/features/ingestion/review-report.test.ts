@@ -115,12 +115,12 @@ describe("review report", () => {
       const originalData = composeCurrentNormalizedOutput(original)
       if (absentProvider)
         expect(originalData.labOrders[0]?.orderingProvider).toBeNull()
-      expect(normalizedData.labOrders).toEqual(
-        originalData.labOrders.map((order, index) =>
-          index === 0
-            ? { ...order, status: originalData.patient.name.given }
-            : order,
-        ),
+      expect(normalizedData.labOrders).toEqual(originalData.labOrders)
+      expect(restored.mappingResult.validation.errors).toContainEqual(
+        expect.objectContaining({
+          code: "unresolved-record-identity",
+          fieldKey: "labOrders[0].status",
+        }),
       )
       const hash = "a".repeat(64)
       const input = {

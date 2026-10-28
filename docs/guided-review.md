@@ -208,10 +208,16 @@ access controls, audit controls, policies, and organizational risk assessment.
 Array mappings expose individual record fields alongside the aggregate preview.
 Choose a record field to change its source; aggregate arrays and structural
 sequence numbers cannot be replaced with a scalar source. A record correction is
-saved as a dependent mapping item and runs after its composer, preserving sibling
-fields. Missing records produce a blocking `missing-record` issue rather than
-creating a synthetic record. Record positions are explicit draft mapping choices;
-review the mapping again when the message layout changes.
+saved as a dependent mapping item with source-coordinate identity and runs after
+its composer, preserving sibling fields. Replay matches the original repetition
+or segment occurrence against the current execution trace, then resolves the
+selected source's current segment index. Identity metadata contains only
+structural coordinates and counts, never raw HL7 or extracted values. If the
+record, selected source, or sibling structure cannot be matched uniquely,
+replay skips the correction and raises a blocking `unresolved-record-identity`
+issue. Existing draft corrections without identity metadata remain in the draft
+but are blocked until the reviewer replaces them; positional paths are never
+trusted on replay.
 
 Reparsing or replacing mapping results closes unsaved decision editors. Source
 selection resets when the reviewed field changes. Empty, missing, stale, and

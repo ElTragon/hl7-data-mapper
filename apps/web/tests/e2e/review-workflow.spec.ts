@@ -249,6 +249,97 @@ test("a record field correction survives reload and export without changing sibl
   })
 })
 
+test("a repeated address correction follows its source after the first repetition fills", async ({
+  page,
+}) => {
+  const sample = await readFile(fixture, "utf8")
+  const address = "742 Evergreen Ave^^Los Angeles^CA^90017^USA"
+  const first = sample.replace(address, "~Second^^Two^NY^10001")
+  const second = sample.replace(address, `${address}~Second^^Two^NY^10001`)
+  await page.goto("/")
+  await page.getByLabel("Editable HL7 message").fill(first)
+  await page.getByRole("button", { name: "Parse message" }).click()
+  await page
+    .getByRole("button", {
+      name: "Select Patient addresses: Record 1 · City",
+      exact: true,
+    })
+    .click()
+  await page.getByLabel("Find a source").fill("PID-11[2].4")
+  await page
+    .locator('[data-source-option="PID-11[2].4"]')
+    .getByRole("button", { name: "Select", exact: true })
+    .click()
+  await page
+    .getByRole("button", { name: "Use this source", exact: true })
+    .click()
+  const stored = await page.evaluate(
+    (key) => localStorage.getItem(key),
+    storageKey,
+  )
+  expect(stored).toContain("recordCorrectionIdentity")
+  expect(stored).not.toContain("Second^^Two")
+  await page.reload()
+  await page.getByLabel("Editable HL7 message").fill(second)
+  await page.getByRole("button", { name: "Parse message" }).click()
+  const download = page.waitForEvent("download")
+  await page
+    .getByRole("button", { name: "Download interim report ZIP", exact: true })
+    .click()
+  const report = await readZip(await download)
+  expect(report.normalized.patient.addresses).toMatchObject([
+    { city: "Los Angeles", street: "742 Evergreen Ave" },
+    { city: "NY", street: "Second", state: "NY" },
+  ])
+  expect(report.validation.errors).not.toContainEqual(
+    expect.objectContaining({ code: "unresolved-record-identity" }),
+  )
+})
+
+test("a legacy record correction stays in the draft but blocks replay", async ({
+  page,
+}) => {
+  await parseSample(page)
+  await page
+    .getByRole("button", {
+      name: "Select Patient addresses: Record 1 · City",
+      exact: true,
+    })
+    .click()
+  await page.getByLabel("Find a source").fill("PID-11.4")
+  await page
+    .locator('[data-source-option="PID-11.4"]')
+    .getByRole("button", { name: "Select", exact: true })
+    .click()
+  await page
+    .getByRole("button", { name: "Use this source", exact: true })
+    .click()
+  await page.evaluate((key) => {
+    const snapshot = JSON.parse(localStorage.getItem(key)!)
+    for (const profile of snapshot.draftProfiles)
+      for (const item of profile.itemSet.items)
+        delete item.recordCorrectionIdentity
+    localStorage.setItem(key, JSON.stringify(snapshot))
+  }, storageKey)
+  await page.reload()
+  await page.getByRole("button", { name: "Parse message" }).click()
+  const download = page.waitForEvent("download")
+  await page
+    .getByRole("button", { name: "Download interim report ZIP", exact: true })
+    .click()
+  const report = await readZip(await download)
+  expect(report.normalized.patient.addresses[0].city).toBe("Los Angeles")
+  expect(report.validation.errors).toContainEqual(
+    expect.objectContaining({ code: "unresolved-record-identity" }),
+  )
+  expect(
+    report.items.some(
+      (item: { targetPath: string }) =>
+        item.targetPath === "patient.addresses[0].city",
+    ),
+  ).toBe(true)
+})
+
 test("reparsing closes an unsaved review editor", async ({ page }) => {
   await parseSample(page)
   const card = page.locator("[data-review-field-card]").filter({
@@ -261,6 +352,41 @@ test("reparsing closes an unsaved review editor", async ({ page }) => {
   await expect(page.getByRole("button", { name: /save/i })).toBeVisible()
   await page.getByRole("button", { name: "Parse message", exact: true }).click()
   await expect(page.getByRole("button", { name: /save/i })).toHaveCount(0)
+})
+
+test("switching review fields clears an uncommitted source selection", async ({
+  page,
+}) => {
+  await parseSample(page)
+  await page
+    .getByRole("button", {
+      name: "Select Patient addresses: Record 1 · City",
+      exact: true,
+    })
+    .click()
+  await page.getByLabel("Find a source").fill("PID-11.4")
+  await page
+    .locator('[data-source-option="PID-11.4"]')
+    .getByRole("button", { name: "Select", exact: true })
+    .click()
+  await expect(
+    page.getByRole("button", { name: "Use this source", exact: true }),
+  ).toBeVisible()
+  await page
+    .getByRole("button", { name: "Select Patient MRN", exact: true })
+    .click()
+  await expect(
+    page.getByRole("button", { name: "Use this source", exact: true }),
+  ).toHaveCount(0)
+  await page
+    .getByRole("button", {
+      name: "Select Patient addresses: Record 1 · City",
+      exact: true,
+    })
+    .click()
+  await expect(
+    page.getByRole("button", { name: "Use this source", exact: true }),
+  ).toHaveCount(0)
 })
 
 test("a timestamp without a timezone keeps its precision in the report", async ({

@@ -34,7 +34,10 @@ export function buildReviewableFields({
     const section = item?.section ?? sectionFromPath(field.key)
 
     return {
-      id: item?.id ?? field.key,
+      id:
+        item?.targetPath !== field.key
+          ? `${item?.id ?? field.key}:replayed:${field.key}`
+          : (item?.id ?? field.key),
       stepId: stepIdFromSection(section),
       section,
       normalizedPath: field.key,

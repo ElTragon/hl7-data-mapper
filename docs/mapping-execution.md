@@ -88,10 +88,11 @@ generic behavior has been implemented.
 
 The default composers can enumerate repeating IN1 segments, PID address and
 telecom repetitions, and ORC order groups with SPM specimens. The current
-profile's named address, telecom, coverage, and order transforms each produce
-at most one entry from their configured source reads. Because the web export overlays
-those mapped arrays onto the default composer output, support for multiple
-entries in those sections still needs end-to-end validation and expansion.
+profile's named address and telecom transforms expand PID repetitions, the
+coverage transform expands IN1 segments, and the order transform expands ORC
+groups and their SPM specimens. Empty records are omitted, so output indexes
+can differ from source coordinates. Execution traces retain the source reads
+for each emitted record.
 
 See [guided review](guided-review.md) for source corrections and
 [normalized data](normalized-data-model.md) for the output schema.

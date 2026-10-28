@@ -152,8 +152,8 @@ export function executeMapping({
       key: targetPath,
       label: item.label,
       value: itemResult.outputValue,
-      sources: item.sources,
-      primarySource: item.sources[0] ?? null,
+      sources: itemResult.sourcesRead,
+      primarySource: itemResult.sourcesRead[0] ?? null,
       transformHistory: item.transform
         ? [
             {
