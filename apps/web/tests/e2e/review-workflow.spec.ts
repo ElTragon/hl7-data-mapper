@@ -285,3 +285,70 @@ test("a timestamp without a timezone keeps its precision in the report", async (
     ]),
   )
 })
+
+test("record corrections preserve absent objects and clear corrected timestamp errors", async ({
+  page,
+}, testInfo) => {
+  const errors: string[] = []
+  page.on("pageerror", (error) => errors.push(error.message))
+  page.on("console", (message) => {
+    if (message.type() === "error") errors.push(message.text())
+  })
+  await page.goto("/")
+  await expect(page).toHaveTitle("HL7 Data Mapper")
+  const raw = [
+    "MSH|^~\\&|A|B|C|D|20260706101500-0700||OML^O21^OML_O21|1|P|2.5.1",
+    "PID|1||MRN^^^LAB^MR||Doe^Jane||19870514|F|||~Second^^Two^NY^10001",
+    "ORC|NW|ORDER|||||||20260230100000",
+    "OBR|1|ORDER||CBC^CBC^LN",
+    "SPM|1||S|BLD",
+  ].join("\r")
+  await page.getByLabel("Editable HL7 message").fill(raw)
+  await page.getByRole("button", { name: "Parse message", exact: true }).click()
+  await page.getByRole("button", { name: /Lab orders/ }).click()
+  await page
+    .getByRole("button", {
+      name: "Select Laboratory orders: Record 1 · Ordering Provider",
+      exact: true,
+    })
+    .click()
+  await page.getByLabel("Find a source").fill("PID-5.2")
+  await expect(
+    page
+      .locator('[data-source-option="PID-5.2"]')
+      .getByRole("button", { name: "Select", exact: true }),
+  ).toBeDisabled()
+  await page
+    .getByRole("button", {
+      name: "Select Laboratory orders: Record 1 · Transaction At",
+      exact: true,
+    })
+    .click()
+  await page.getByLabel("Find a source").fill("MSH-7")
+  await page
+    .locator('[data-source-option="MSH-7"]')
+    .getByRole("button", { name: "Select", exact: true })
+    .click()
+  await page
+    .getByRole("button", { name: "Use this source", exact: true })
+    .click()
+  const download = page.waitForEvent("download")
+  await page
+    .getByRole("button", { name: "Download interim report ZIP", exact: true })
+    .click()
+  const report = await readZip(await download)
+  expect(report.normalized.labOrders[0]).toMatchObject({
+    transactionAt: "2026-07-06T10:15:00-07:00",
+    orderingProvider: null,
+  })
+  expect(report.normalized.patient.addresses).toMatchObject([{ city: "Two" }])
+  expect(report.validation.errors).toEqual([])
+  expect(errors).toEqual([])
+  await page
+    .getByRole("button", {
+      name: "Select Laboratory orders: Record 1 · Transaction At",
+      exact: true,
+    })
+    .scrollIntoViewIfNeeded()
+  await page.screenshot({ path: testInfo.outputPath("corrected-record.png") })
+})

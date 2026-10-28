@@ -1,4 +1,7 @@
-import { assessReviewCompletion } from "@hl7-data-mapper/contracts"
+import {
+  assessReviewCompletion,
+  normalizedPathKind,
+} from "@hl7-data-mapper/contracts"
 import type { BuildReportPackageInput } from "./types.js"
 
 export function assessReportReview(input: BuildReportPackageInput) {
@@ -55,7 +58,8 @@ export function assessReportReview(input: BuildReportPackageInput) {
         const decision = decisions.get(`${item.id}:${path}`)
         const valid =
           decision?.normalizedPath === path &&
-          decision.hl7ItemId === (typeof value === "number" ? null : item.id) &&
+          decision.hl7ItemId ===
+            (normalizedPathKind(path) === "string" ? item.id : null) &&
           decision.sourcePath == null
         result.push({
           section: item.section,
@@ -63,7 +67,9 @@ export function assessReportReview(input: BuildReportPackageInput) {
           reviewStatus: valid ? decision.reviewStatus : "unreviewed",
           reasonCode: valid ? decision.reasonCode : null,
           validation: issues.filter(
-            (issue) => issue.fieldKey === item.targetPath,
+            (issue) =>
+              issue.fieldKey === item.targetPath &&
+              (!issue.path || issue.path === path),
           ),
         })
       }

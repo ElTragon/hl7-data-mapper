@@ -1,4 +1,7 @@
-import { stableReviewJson } from "@hl7-data-mapper/contracts"
+import {
+  normalizedPathKind,
+  stableReviewJson,
+} from "@hl7-data-mapper/contracts"
 import { fieldEvidence, reviewContext } from "./review-evidence"
 import {
   type ClientProfile,
@@ -133,7 +136,16 @@ export function applySourceCorrection({
       fieldEvidence(field, state.profile)
   )
     return state
-  if (Array.isArray(field.value)) return state
+  if (
+    Array.isArray(field.value) ||
+    normalizedPathKind(field.normalizedPath) === "array"
+  )
+    return state
+  if (
+    field.normalizedPath.includes("[") &&
+    normalizedPathKind(field.normalizedPath) !== "string"
+  )
+    return state
   const read = readSource(state.parsedMessage, source)
   if (read.status !== "found" || !read.value?.trim() || !field.hl7ItemId)
     return state

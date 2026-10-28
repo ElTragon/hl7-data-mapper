@@ -1,6 +1,13 @@
-import type { ReviewableField } from "@hl7-data-mapper/contracts"
+import {
+  normalizedPathKind,
+  type ReviewableField,
+} from "@hl7-data-mapper/contracts"
+import type { MappingExecutionTraceEntry } from "../execution/types.js"
 
-export function recordFields(field: ReviewableField): ReviewableField[] {
+export function recordFields(
+  field: ReviewableField,
+  recordSources?: MappingExecutionTraceEntry["recordSources"],
+): ReviewableField[] {
   if (!Array.isArray(field.value)) return [field]
   const fields: ReviewableField[] = []
   function visit(value: unknown, path: string) {
@@ -10,16 +17,30 @@ export function recordFields(field: ReviewableField): ReviewableField[] {
       for (const [key, entry] of Object.entries(value))
         visit(entry, `${path}.${key}`)
     } else {
-      const recordIndex = Number(
-        path.slice(field.normalizedPath.length).match(/^\[(\d+)\]/)?.[1] ?? 0,
+      const recordPath = Object.keys(recordSources ?? {})
+        .filter((key) => path.startsWith(`${key}.`))
+        .sort((a, b) => b.length - a.length)[0]
+      const candidates = recordPath
+        ? recordSources![recordPath]!.map((read) => ({
+            source: read.source,
+            rawSegment: read.rawSegment,
+            previewValue: read.value,
+            reason: `Source read for "${field.label}".`,
+          }))
+        : []
+      const validation = field.validation.filter(
+        (issue) => !issue.path || issue.path === path,
       )
-      const candidates = candidatesForRecord(field, recordIndex, path)
       fields.push({
         ...field,
         id: `${field.id}:${path}`,
         normalizedPath: path,
         label: `${field.label}: ${recordLabel(path.slice(field.normalizedPath.length))}`,
         value: value ?? null,
+        validation,
+        warnings: validation
+          .filter((issue) => issue.severity === "warning")
+          .map((issue) => issue.message),
         primarySource: null,
         sourceCandidates: candidates,
         sources: candidates.map((candidate) => candidate.source),
@@ -31,8 +52,9 @@ export function recordFields(field: ReviewableField): ReviewableField[] {
                 .filter(Boolean),
             ),
           ].join("\n") || null,
-        // A record's numeric sequence is structural, not a source correction.
-        hl7ItemId: typeof value === "number" ? null : field.hl7ItemId,
+        // Only schema-defined string leaves accept scalar source corrections.
+        hl7ItemId:
+          normalizedPathKind(path) === "string" ? field.hl7ItemId : null,
       })
     }
   }
@@ -50,53 +72,4 @@ function recordLabel(path: string): string {
       return words.charAt(0).toUpperCase() + words.slice(1)
     })
     .join(" · ")
-}
-
-function candidatesForRecord(
-  field: ReviewableField,
-  index: number,
-  path: string,
-) {
-  const candidates = field.sourceCandidates
-  const anchor =
-    field.normalizedPath === "labOrders"
-      ? "ORC"
-      : field.normalizedPath === "coverages"
-        ? "IN1"
-        : null
-  if (!anchor)
-    return candidates.filter(
-      (candidate) => (candidate.source.repetition ?? 1) === index + 1,
-    )
-  const anchors = [
-    ...new Set(
-      candidates
-        .filter((candidate) => candidate.source.segment === anchor)
-        .map((candidate) => candidate.source.segmentIndex),
-    ),
-  ]
-  const start = anchors[index]
-  if (start == null) return candidates
-  const end = anchors[index + 1] ?? Infinity
-  const scoped = candidates.filter(
-    (candidate) =>
-      candidate.rawSegment != null &&
-      candidate.source.segmentIndex != null &&
-      candidate.source.segmentIndex >= start &&
-      candidate.source.segmentIndex < end,
-  )
-  const specimen = path.match(/\.specimens\[(\d+)\]/)
-  if (!specimen) return scoped
-  const specimenSegments = [
-    ...new Set(
-      scoped
-        .filter((candidate) => candidate.source.segment === "SPM")
-        .map((candidate) => candidate.source.segmentIndex),
-    ),
-  ]
-  return scoped.filter(
-    (candidate) =>
-      candidate.source.segment === "SPM" &&
-      candidate.source.segmentIndex === specimenSegments[Number(specimen[1])],
-  )
 }

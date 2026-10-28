@@ -63,7 +63,10 @@ export function buildReviewableFields({
     normalizedReviewFields.map((field) => field.normalizedPath),
   )
   const expanded = normalizedReviewFields.flatMap((field) =>
-    recordFields(field).filter(
+    recordFields(
+      field,
+      traceByTargetPath.get(field.normalizedPath)?.recordSources,
+    ).filter(
       (child) =>
         child.id === field.id || !explicitPaths.has(child.normalizedPath),
     ),

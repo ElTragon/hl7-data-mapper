@@ -1,6 +1,7 @@
 import {
   canEditClientProfile,
   ClientProfileSchema,
+  normalizedPathKind,
   type ClientProfile,
 } from "@hl7-data-mapper/contracts"
 
@@ -41,11 +42,16 @@ export function applyReviewFieldCorrectionToProfile({
   const parent = parsedProfile.itemSet.items.find(
     (item) => item.id === targetId,
   )
+  if (parent && normalizedPathKind(field.normalizedPath) === "array") {
+    throw new Error("Choose an individual record field to change its source.")
+  }
   if (
     parent &&
     field.normalizedPath !== parent.targetPath &&
     field.normalizedPath.startsWith(`${parent.targetPath}[`)
   ) {
+    if (normalizedPathKind(field.normalizedPath) !== "string")
+      throw new Error("A record source correction must target a string field.")
     if (!replacementSource)
       throw new Error("A record field correction needs a source.")
     const id = `${parent.id}:${field.normalizedPath}`

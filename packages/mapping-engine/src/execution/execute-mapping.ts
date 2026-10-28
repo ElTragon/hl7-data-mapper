@@ -33,6 +33,7 @@ export function executeMapping({
   const trace: MappingExecutionTraceEntry[] = []
   const issues: ValidationIssue[] = []
   const itemOutputs = new Map<string, unknown>()
+  const overriddenPaths = new Set<string>()
 
   for (const item of sortHl7ItemsForExecution(parsedProfile.itemSet.items)) {
     const missingRecord = item.dependsOn.some((id) => {
@@ -68,6 +69,16 @@ export function executeMapping({
     trace.push(itemResult)
     if (!missingRecord)
       setValueAtPath(normalizedDraft, item.targetPath, itemResult.outputValue)
+    if (
+      !missingRecord &&
+      item.dependsOn.some((id) => {
+        const parent = parsedProfile.itemSet.items.find(
+          (candidate) => candidate.id === id,
+        )
+        return parent && item.targetPath.startsWith(`${parent.targetPath}[`)
+      })
+    )
+      overriddenPaths.add(item.targetPath)
 
     fields.push({
       key: item.targetPath,
@@ -91,6 +102,16 @@ export function executeMapping({
     })
   }
 
+  // Keep the original trace as execution evidence; final validation reflects
+  // the source that now supplies each corrected field.
+  const isCurrentIssue = (issue: ValidationIssue) =>
+    !(
+      (issue.code === "invalid-temporal-value" ||
+        issue.code === "missing-timezone") &&
+      issue.path &&
+      issue.path !== issue.fieldKey &&
+      overriddenPaths.has(issue.path)
+    )
   const result: MappingExecutionResult = {
     profile: {
       clientId: parsedProfile.clientId,
@@ -102,8 +123,13 @@ export function executeMapping({
     normalizedFields: fields.map((field) => ({
       ...field,
       value: valueAtPath(normalizedDraft, field.key),
+      validation: field.validation.filter(isCurrentIssue),
+      warnings: field.validation
+        .filter(isCurrentIssue)
+        .filter((issue) => issue.severity === "warning")
+        .map((issue) => issue.message),
     })),
-    validation: createValidationSummary(issues),
+    validation: createValidationSummary(issues.filter(isCurrentIssue)),
     executionTrace: trace,
   }
   return {

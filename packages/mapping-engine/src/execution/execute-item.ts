@@ -35,6 +35,11 @@ export function executeItem({
     sourceReads: inputs.flatMap((entry) => entry.sourceReads),
   }
   const issues: ValidationIssue[] = []
+  const recordSources: Record<
+    string,
+    MappingExecutionTraceEntry["sourceReads"]
+  > = {}
+  let recordCount = 0
   const pendingTransform = isPendingTransform(item)
   const unsupportedAction = !pendingTransform && !hasSupportedAction(item)
   function applyInput(entry: Hl7Item, index: number): unknown {
@@ -45,21 +50,49 @@ export function executeItem({
       entryInput.sourceReads,
       parsedMessage.delimiters,
     )
-    if (
-      entry.transform?.name !== "mapOrcOrderGroups" ||
-      !Array.isArray(output) ||
-      item.sources.some(
-        (source) => source.segment === "SPM" && source.segmentIndex != null,
-      )
+    const recordPath = `${item.targetPath}[${recordCount}]`
+    const initialTemporalIssues = temporalIssues(
+      entry,
+      entryInput.values,
+      parsedMessage.delimiters,
+      recordPath,
     )
+    issues.push(
+      ...initialTemporalIssues.filter(
+        (issue) =>
+          entry.transform?.name !== "mapOrcOrderGroups" ||
+          issue.source?.segment !== "SPM",
+      ),
+    )
+    if (Array.isArray(output)) {
+      output.forEach((_, offset) => {
+        recordSources[`${item.targetPath}[${recordCount + offset}]`] =
+          entryInput.sourceReads
+      })
+      recordCount += output.length
+    }
+    if (entry.transform?.name !== "mapOrcOrderGroups" || !Array.isArray(output))
       return output
+    const explicitSpecimen = item.sources.some(
+      (source) => source.segment === "SPM" && source.segmentIndex != null,
+    )
     const orcIndex = entryInput.sourceReads.find(
       (read) => read.source.segment === "ORC",
     )?.segmentIndex
     const group = getOrderGroups(parsedMessage).find(
       (group) => group.orc.index === orcIndex,
     )
-    if (!group || group.spm.length < 2) return output
+    if (explicitSpecimen || !group) {
+      recordSources[`${recordPath}.specimens[0]`] =
+        entryInput.sourceReads.filter((read) => read.source.segment === "SPM")
+      issues.push(
+        ...initialTemporalIssues.filter(
+          (issue) => issue.source?.segment === "SPM",
+        ),
+      )
+      return output
+    }
+    let specimenCount = 0
     const specimens = group.spm.flatMap((segment, specimenIndex) => {
       const scoped = {
         ...entry,
@@ -76,18 +109,26 @@ export function executeItem({
         )
         input.sourceReads.push(...specimenReads)
         input.values.push(...specimenReads.map((source) => source.value))
-        issues.push(
-          ...temporalIssues(
-            scoped,
-            read.values,
-            parsedMessage.delimiters,
-          ).filter((issue) => issue.source?.segment === "SPM"),
-        )
       }
       const specimen = mapSpecimenFromSourceValues(
         read.values.slice(13),
         parsedMessage.delimiters,
       )
+      if (specimen) {
+        const specimenPath = `${recordPath}.specimens[${specimenCount++}]`
+        recordSources[specimenPath] = read.sourceReads.filter(
+          (source) => source.source.segment === "SPM",
+        )
+        issues.push(
+          ...temporalIssues(
+            scoped,
+            read.values,
+            parsedMessage.delimiters,
+            recordPath,
+            specimenPath,
+          ).filter((issue) => issue.source?.segment === "SPM"),
+        )
+      }
       return specimen ? [specimen] : []
     })
     return output.map((order) => ({ ...order, specimens }))
@@ -98,14 +139,6 @@ export function executeItem({
       : items.length === 1
         ? applyInput(items[0]!, 0)
         : items.flatMap(applyInput)
-
-  if (!pendingTransform && !unsupportedAction) {
-    issues.push(
-      ...items.flatMap((entry, index) =>
-        temporalIssues(entry, inputs[index]!.values, parsedMessage.delimiters),
-      ),
-    )
-  }
 
   if (unsupportedAction) {
     issues.push({
@@ -168,6 +201,7 @@ export function executeItem({
     status: getTraceStatus(issues, pendingTransform),
     sourcesRead: item.sources,
     sourceReads: input.sourceReads,
+    recordSources,
     sourceExpectations: item.sourceExpectations,
     inputValues: input.values,
     outputValue,

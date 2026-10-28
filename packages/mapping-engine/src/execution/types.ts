@@ -20,6 +20,8 @@ export type MappingExecutionTraceEntry = {
   readonly status: MappingExecutionStatus
   readonly sourcesRead: readonly SourceReference[]
   readonly sourceReads: readonly Hl7SourceRead[]
+  /** Actual source reads for each emitted record, after empty inputs are omitted. */
+  readonly recordSources?: Readonly<Record<string, readonly Hl7SourceRead[]>>
   readonly sourceExpectations: readonly SourceExpectation[]
   readonly inputValues: readonly unknown[]
   readonly outputValue: unknown

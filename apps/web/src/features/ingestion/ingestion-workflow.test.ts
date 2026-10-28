@@ -427,3 +427,28 @@ it("ignores stale review values and missing replacement sources", () => {
     ).toBe(state)
   }
 })
+
+it("does not replace an array composer through its exception field", () => {
+  const state = createState()
+  const original = state.reviewFields.find(
+    (field) =>
+      field.section === "exceptions" && field.normalizedPath === "labOrders",
+  )!
+  expect(original).toBeDefined()
+  expect(original.hl7ItemId).toBeNull()
+  const field = { ...original, hl7ItemId: "lab-order-groups" }
+  const staleState = {
+    ...state,
+    reviewFields: state.reviewFields.map((entry) =>
+      entry.id === field.id ? field : entry,
+    ),
+  }
+  expect(
+    applySourceCorrection({
+      state: staleState,
+      field,
+      source: createSourceReference({ segment: "PID", field: 8 }),
+      occurredAt: OCCURRED_AT,
+    }),
+  ).toBe(staleState)
+})

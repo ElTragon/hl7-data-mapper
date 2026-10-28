@@ -6,6 +6,11 @@ import {
 } from "@hl7-data-mapper/mapping-engine"
 import { describe, expect, it } from "vitest"
 import { buildReportPackage } from "@hl7-data-mapper/report-generator"
+import { createSourceReference } from "@hl7-data-mapper/contracts"
+import {
+  createReviewWorkflow,
+  applySourceCorrection,
+} from "./ingestion-workflow"
 
 import sampleHl7Message from "../../../../../fixtures/valid/oml-o21-basic.hl7?raw"
 import {
@@ -103,5 +108,77 @@ it("exports a completed report from current browser review decisions", async () 
     status: "completed",
     unresolvedCount: 0,
     totalCount: fields.length,
+  })
+})
+
+it("exports a completed report after correcting a timestamp while preserving absent objects", async () => {
+  const generatedAt = "2026-10-28T00:00:00Z"
+  const parsedMessage = parseHl7Message(
+    [
+      "MSH|^~\\&|A|B|C|D|20260706101500-0700||OML^O21^OML_O21|1|P|2.5.1",
+      "PID|1||MRN^^^LAB^MR||Doe^Jane||19870514|F",
+      "ORC|NW|ORDER|||||||20260230100000",
+      "OBR|1|ORDER||CBC^CBC^LN",
+      "SPM|1||S|BLD",
+    ].join("\r"),
+  )
+  const state = createReviewWorkflow({
+    parsedMessage,
+    sourceProfile: defaultOmlO21ClientProfile,
+    storedSnapshot: null,
+    occurredAt: generatedAt,
+  })
+  const provider = state.reviewFields.find(
+    (field) => field.normalizedPath === "labOrders[0].orderingProvider",
+  )!
+  expect(
+    applySourceCorrection({
+      state,
+      field: provider,
+      source: createSourceReference({ segment: "PID", field: 5, component: 2 }),
+      occurredAt: generatedAt,
+    }),
+  ).toBe(state)
+  const corrected = applySourceCorrection({
+    state,
+    field: state.reviewFields.find(
+      (field) => field.normalizedPath === "labOrders[0].transactionAt",
+    )!,
+    source: createSourceReference({ segment: "MSH", field: 7, component: 1 }),
+    occurredAt: generatedAt,
+  })
+  expect(corrected.mappingResult.validation.errors).toEqual([])
+  const normalizedData = composeCurrentNormalizedOutput(corrected)
+  expect(normalizedData.labOrders[0]).toMatchObject({
+    transactionAt: "2026-07-06T10:15:00-07:00",
+    orderingProvider: null,
+  })
+  const hash = "a".repeat(64)
+  const report = await buildReportPackage(
+    {
+      requestedReviewStatus: "completed",
+      appVersion: "0.1.0",
+      generatedAt,
+      clientId: corrected.profile.clientId,
+      profileId: corrected.profile.profileId,
+      profileVersion: corrected.profile.profileVersion,
+      messageHash: hash,
+      normalizedData,
+      hl7Items: corrected.profile.itemSet.items,
+      reviewDecisions: buildReportReviewDecisions(
+        corrected.reviewFields.map((field) => ({
+          ...field,
+          reviewStatus: "confirmed",
+        })),
+        generatedAt,
+      ),
+      validationResults: corrected.mappingResult.validation,
+    },
+    () => hash,
+  )
+  expect(report.manifest.review).toMatchObject({
+    status: "completed",
+    unresolvedCount: 0,
+    totalCount: corrected.reviewFields.length,
   })
 })
