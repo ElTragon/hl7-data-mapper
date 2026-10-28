@@ -1,11 +1,9 @@
+import type { Hl7Delimiters } from "@hl7-data-mapper/hl7-parser"
 import type { LabOrder, Specimen } from "@hl7-data-mapper/contracts"
 
 import {
-  component,
-  mapCodedValue,
-  mapEntityIdentifier,
-  mapEntityIdentifierFromComponent,
-  mapProvider,
+  createDatatypeMappers,
+  STANDARD_DELIMITERS,
   parsePositiveInteger,
   stringOrNull,
 } from "./hl7-datatypes.js"
@@ -13,12 +11,18 @@ import { normalizeTimestamp } from "./temporal.js"
 
 export function mapLabOrderArrayFromSourceValues(
   inputValues: readonly unknown[],
+  delimiters: Hl7Delimiters = STANDARD_DELIMITERS,
 ): LabOrder[] {
+  const { mapCodedValue, mapEntityIdentifier, mapProvider } =
+    createDatatypeMappers(delimiters)
   if (!inputValues.some((value) => stringOrNull(value) !== null)) {
     return []
   }
 
-  const specimen = mapSpecimenFromSourceValues(inputValues.slice(13))
+  const specimen = mapSpecimenFromSourceValues(
+    inputValues.slice(13),
+    delimiters,
+  )
 
   return [
     {
@@ -51,7 +55,10 @@ export function mapLabOrderArrayFromSourceValues(
 
 function mapSpecimenFromSourceValues(
   inputValues: readonly unknown[],
+  delimiters: Hl7Delimiters = STANDARD_DELIMITERS,
 ): Specimen | null {
+  const { component, mapCodedValue, mapEntityIdentifierFromComponent } =
+    createDatatypeMappers(delimiters)
   if (!inputValues.some((value) => stringOrNull(value) !== null)) {
     return null
   }

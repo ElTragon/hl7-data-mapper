@@ -1,12 +1,9 @@
+import type { Hl7Delimiters } from "@hl7-data-mapper/hl7-parser"
 import type { Coverage, Guarantor } from "@hl7-data-mapper/contracts"
 
 import {
-  firstComponent,
-  mapAddressField,
-  mapCodedValue,
-  mapIdentifier,
-  mapPersonNameField,
-  mapTelecomField,
+  createDatatypeMappers,
+  STANDARD_DELIMITERS,
   parsePositiveInteger,
   stringOrNull,
 } from "./hl7-datatypes.js"
@@ -14,7 +11,10 @@ import { normalizeDate } from "./temporal.js"
 
 export function mapCoverageArrayFromSourceValues(
   inputValues: readonly unknown[],
+  delimiters: Hl7Delimiters = STANDARD_DELIMITERS,
 ): Coverage[] {
+  const { firstComponent, mapCodedValue, mapPersonNameField } =
+    createDatatypeMappers(delimiters)
   if (!inputValues.some((value) => stringOrNull(value) !== null)) {
     return []
   }
@@ -43,7 +43,15 @@ export function mapCoverageArrayFromSourceValues(
 
 export function mapGuarantorFromSourceValues(
   inputValues: readonly unknown[],
+  delimiters: Hl7Delimiters = STANDARD_DELIMITERS,
 ): Guarantor | null {
+  const {
+    mapAddressField,
+    mapCodedValue,
+    mapIdentifier,
+    mapPersonNameField,
+    mapTelecomField,
+  } = createDatatypeMappers(delimiters)
   if (!inputValues.some((value) => stringOrNull(value) !== null)) {
     return null
   }
