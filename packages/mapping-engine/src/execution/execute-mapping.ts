@@ -3,6 +3,7 @@ import {
   canExecuteClientProfile,
   ClientProfileSchema,
   createValidationSummary,
+  normalizedPathKind,
   sortHl7ItemsForExecution,
   type NormalizedField,
   type ValidationIssue,
@@ -36,29 +37,40 @@ export function executeMapping({
   const overriddenPaths = new Set<string>()
 
   for (const item of sortHl7ItemsForExecution(parsedProfile.itemSet.items)) {
-    const missingRecord = item.dependsOn.some((id) => {
+    const isRecordCorrection = item.dependsOn.some((id) => {
       const parent = parsedProfile.itemSet.items.find(
         (candidate) => candidate.id === id,
       )
-      return (
-        parent &&
-        item.targetPath.startsWith(`${parent.targetPath}[`) &&
-        valueAtPath(normalizedDraft, item.targetPath) === undefined
-      )
+      return parent && item.targetPath.startsWith(`${parent.targetPath}[`)
     })
+    const invalidRecordTarget =
+      isRecordCorrection && normalizedPathKind(item.targetPath) !== "string"
+    const missingRecord =
+      isRecordCorrection &&
+      valueAtPath(normalizedDraft, item.targetPath) === undefined
     const executed = executeItem({ item, parsedMessage, itemOutputs })
-    const itemResult: MappingExecutionTraceEntry = missingRecord
+    const invalidRecordValue =
+      isRecordCorrection &&
+      executed.outputValue !== null &&
+      typeof executed.outputValue !== "string"
+    const invalidCorrection = invalidRecordTarget || invalidRecordValue
+    const skipWrite = invalidCorrection || missingRecord
+    const itemResult: MappingExecutionTraceEntry = skipWrite
       ? {
           ...executed,
           outputValue: null,
           status: "error",
           validationIssues: [
             {
-              code: "missing-record",
+              code: invalidCorrection
+                ? "invalid-record-correction"
+                : "missing-record",
               severity: "error",
               fieldKey: item.targetPath,
               section: item.section,
-              message: `The record for "${item.label}" is absent in this message. Review the saved correction.`,
+              message: invalidCorrection
+                ? `The saved correction for "${item.label}" is incompatible with its field type and was not applied. Remove or replace this correction before completing review.`
+                : `The record for "${item.label}" is absent in this message. Review the saved correction.`,
             },
           ],
         }
@@ -67,18 +79,9 @@ export function executeMapping({
     itemOutputs.set(item.id, itemResult.outputValue)
     issues.push(...itemResult.validationIssues)
     trace.push(itemResult)
-    if (!missingRecord)
+    if (!skipWrite)
       setValueAtPath(normalizedDraft, item.targetPath, itemResult.outputValue)
-    if (
-      !missingRecord &&
-      item.dependsOn.some((id) => {
-        const parent = parsedProfile.itemSet.items.find(
-          (candidate) => candidate.id === id,
-        )
-        return parent && item.targetPath.startsWith(`${parent.targetPath}[`)
-      })
-    )
-      overriddenPaths.add(item.targetPath)
+    if (!skipWrite && isRecordCorrection) overriddenPaths.add(item.targetPath)
 
     fields.push({
       key: item.targetPath,

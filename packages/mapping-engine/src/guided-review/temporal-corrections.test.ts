@@ -150,3 +150,49 @@ it("retains specimen validation when an order group cannot be identified", () =>
     }),
   )
 })
+
+it("does not overwrite a timestamp or clear its error for a saved correction with an invalid value type", () => {
+  const state = setup("20260230100000")
+  const parent = state.profile.itemSet.items.find(
+    (item) => item.id === "lab-order-groups",
+  )!
+  const targetPath = "labOrders[0].transactionAt"
+  const profile = ClientProfileSchema.parse({
+    ...state.profile,
+    itemSet: {
+      ...state.profile.itemSet,
+      items: [
+        ...state.profile.itemSet.items,
+        {
+          ...parent,
+          id: `${parent.id}:${targetPath}`,
+          targetPath,
+          sequence:
+            Math.max(
+              ...state.profile.itemSet.items.map((item) => item.sequence),
+            ) + 1,
+          dependsOn: [parent.id],
+          sources: [],
+          sourceExpectations: [],
+          action: "default_value",
+          transform: null,
+          defaultValue: 42,
+        },
+      ],
+    },
+  })
+  const result = executeMapping({ ...state, profile })
+  expect(result.normalizedDraft).toEqual(state.mappingResult.normalizedDraft)
+  expect(result.validation.errors).toContainEqual(
+    expect.objectContaining({
+      code: "invalid-record-correction",
+      fieldKey: targetPath,
+    }),
+  )
+  expect(result.validation.errors).toContainEqual(
+    expect.objectContaining({
+      code: "invalid-temporal-value",
+      path: targetPath,
+    }),
+  )
+})
