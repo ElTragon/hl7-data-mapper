@@ -167,41 +167,10 @@ export function parseInteger(value: string | null | undefined): number | null {
   return Number(value)
 }
 
-export function normalizeHl7Date(
-  value: string | null | undefined,
-): string | null {
-  if (!value || value.length < 8) {
-    return null
-  }
-
-  const compactDate = value.slice(0, 8)
-
-  if (!/^\d{8}$/.test(compactDate)) {
-    return null
-  }
-
-  return `${compactDate.slice(0, 4)}-${compactDate.slice(4, 6)}-${compactDate.slice(6, 8)}`
-}
-
-export function normalizeHl7Timestamp(
-  value: string | null | undefined,
-): string | null {
-  if (!value || value.length < 8) {
-    return null
-  }
-
-  const match = value.match(
-    /^(\d{4})(\d{2})(\d{2})(?:(\d{2})(\d{2})(\d{2})?)?([+-]\d{4})?$/,
-  )
-
-  if (!match) {
-    return null
-  }
-
-  const [, year, month, day, hour = "00", minute = "00", second = "00"] = match
-
-  return `${year}-${month}-${day}T${hour}:${minute}:${second}${formatOffset(match[7])}`
-}
+export {
+  normalizeDate as normalizeHl7Date,
+  normalizeTimestamp as normalizeHl7Timestamp,
+} from "./execution/transforms/temporal.js"
 
 function emptyToNull(value: string | undefined): string | null {
   if (value === undefined) {
@@ -215,12 +184,4 @@ function emptyToNull(value: string | undefined): string | null {
 
 function hasValue(value: string): boolean {
   return value.trim().length > 0
-}
-
-function formatOffset(offset: string | undefined): string {
-  if (!offset) {
-    return "Z"
-  }
-
-  return `${offset.slice(0, 3)}:${offset.slice(3)}`
 }
