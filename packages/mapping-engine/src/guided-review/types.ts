@@ -29,6 +29,7 @@ export type ApplyReviewCorrectionInput = {
   readonly profile: ClientProfile
   readonly field: ReviewableField
   readonly updatedAt: string
+  readonly parsedMessage?: ParsedHl7Message
 }
 
 export type ApplyReviewCorrectionAndRerunInput = ApplyReviewCorrectionInput & {

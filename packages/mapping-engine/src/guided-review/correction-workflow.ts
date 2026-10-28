@@ -16,6 +16,7 @@ export function applyReviewCorrectionAndRerunMapping({
     profile,
     field,
     updatedAt,
+    parsedMessage,
   })
   const mappingResult = executeMapping({
     parsedMessage,

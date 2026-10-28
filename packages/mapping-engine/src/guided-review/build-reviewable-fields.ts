@@ -27,8 +27,10 @@ export function buildReviewableFields({
   )
 
   const normalizedReviewFields = mappingResult.normalizedFields.map((field) => {
-    const item = itemByTargetPath.get(field.key)
     const trace = traceByTargetPath.get(field.key)
+    const item =
+      itemByTargetPath.get(field.key) ??
+      profile.itemSet.items.find((candidate) => candidate.id === trace?.itemId)
     const section = item?.section ?? sectionFromPath(field.key)
 
     return {

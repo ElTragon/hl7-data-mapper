@@ -10,6 +10,11 @@ import {
 } from "@hl7-data-mapper/contracts"
 
 import { executeItem } from "./execute-item.js"
+import {
+  recordAnchors,
+  resolveAnchor,
+  sameAnchors,
+} from "./record-correction-identity.js"
 import { setValueAtPath } from "./normalized-path.js"
 import type {
   ExecuteMappingInput,
@@ -45,16 +50,72 @@ export function executeMapping({
     })
     const invalidRecordTarget =
       isRecordCorrection && normalizedPathKind(item.targetPath) !== "string"
+    let targetPath = item.targetPath
+    let correctionSource = item.sources[0]
+    let identityFailure = false
+    if (isRecordCorrection) {
+      const identity = item.recordCorrectionIdentity
+      const parentTrace = trace.find(
+        (entry) => entry.itemId === item.dependsOn[0],
+      )
+      if (!identity || !parentTrace) {
+        identityFailure = true
+      } else {
+        const suffix = item.targetPath.slice(
+          item.targetPath.lastIndexOf("]") + 1,
+        )
+        const candidates = Object.keys(parentTrace.recordSources ?? {})
+          .filter(
+            (path) =>
+              path.startsWith(parentTrace.targetPath + "[") &&
+              (path.match(/\[/g)?.length ?? 0) === identity.records.length,
+          )
+          .filter((path) => {
+            const anchors = recordAnchors(parsedMessage, parentTrace, path)
+            return anchors && sameAnchors(anchors, identity.records)
+          })
+        const replacementIndex = resolveAnchor(
+          parsedMessage,
+          identity.replacement,
+        )
+        if (
+          candidates.length !== 1 ||
+          replacementIndex == null ||
+          !correctionSource
+        ) {
+          identityFailure = true
+        } else {
+          targetPath = `${candidates[0]}${suffix}`
+          correctionSource = {
+            ...correctionSource,
+            segmentIndex: replacementIndex,
+          }
+        }
+      }
+    }
     const missingRecord =
       isRecordCorrection &&
-      valueAtPath(normalizedDraft, item.targetPath) === undefined
-    const executed = executeItem({ item, parsedMessage, itemOutputs })
+      !identityFailure &&
+      valueAtPath(normalizedDraft, targetPath) === undefined
+    const executionItem =
+      isRecordCorrection && !identityFailure
+        ? {
+            ...item,
+            targetPath,
+            sources: correctionSource ? [correctionSource] : item.sources,
+          }
+        : item
+    const executed = executeItem({
+      item: executionItem,
+      parsedMessage,
+      itemOutputs,
+    })
     const invalidRecordValue =
       isRecordCorrection &&
       executed.outputValue !== null &&
       typeof executed.outputValue !== "string"
     const invalidCorrection = invalidRecordTarget || invalidRecordValue
-    const skipWrite = invalidCorrection || missingRecord
+    const skipWrite = invalidCorrection || missingRecord || identityFailure
     const itemResult: MappingExecutionTraceEntry = skipWrite
       ? {
           ...executed,
@@ -64,13 +125,17 @@ export function executeMapping({
             {
               code: invalidCorrection
                 ? "invalid-record-correction"
-                : "missing-record",
+                : identityFailure
+                  ? "unresolved-record-identity"
+                  : "missing-record",
               severity: "error",
               fieldKey: item.targetPath,
               section: item.section,
               message: invalidCorrection
                 ? `The saved correction for "${item.label}" is incompatible with its field type and was not applied. Remove or replace this correction before completing review.`
-                : `The record for "${item.label}" is absent in this message. Review the saved correction.`,
+                : identityFailure
+                  ? `The saved correction for "${item.label}" could not be matched to its original record or source. Review and replace this correction before completing review.`
+                  : `The record for "${item.label}" is absent in this message. Review the saved correction.`,
             },
           ],
         }
@@ -80,11 +145,11 @@ export function executeMapping({
     issues.push(...itemResult.validationIssues)
     trace.push(itemResult)
     if (!skipWrite)
-      setValueAtPath(normalizedDraft, item.targetPath, itemResult.outputValue)
-    if (!skipWrite && isRecordCorrection) overriddenPaths.add(item.targetPath)
+      setValueAtPath(normalizedDraft, targetPath, itemResult.outputValue)
+    if (!skipWrite && isRecordCorrection) overriddenPaths.add(targetPath)
 
     fields.push({
-      key: item.targetPath,
+      key: targetPath,
       label: item.label,
       value: itemResult.outputValue,
       sources: item.sources,

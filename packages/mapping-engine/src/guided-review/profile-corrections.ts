@@ -10,11 +10,17 @@ import {
   buildUpdatedSourceExpectations,
 } from "./person-name-corrections.js"
 import type { ApplyReviewCorrectionInput } from "./types.js"
+import { executeMapping } from "../execution/execute-mapping.js"
+import {
+  recordAnchors,
+  sourceAnchor,
+} from "../execution/record-correction-identity.js"
 
 export function applyReviewFieldCorrectionToProfile({
   profile,
   field,
   updatedAt,
+  parsedMessage,
 }: ApplyReviewCorrectionInput): ClientProfile {
   const parsedProfile = ClientProfileSchema.parse(profile)
 
@@ -39,9 +45,15 @@ export function applyReviewFieldCorrectionToProfile({
     )
   }
 
-  const parent = parsedProfile.itemSet.items.find(
+  const selectedItem = parsedProfile.itemSet.items.find(
     (item) => item.id === targetId,
   )
+  const parent =
+    selectedItem?.dependsOn.length && selectedItem.targetPath.includes("[")
+      ? parsedProfile.itemSet.items.find(
+          (item) => item.id === selectedItem.dependsOn[0],
+        )
+      : selectedItem
   if (parent && normalizedPathKind(field.normalizedPath) === "array") {
     throw new Error("Choose an individual record field to change its source.")
   }
@@ -54,7 +66,24 @@ export function applyReviewFieldCorrectionToProfile({
       throw new Error("A record source correction must target a string field.")
     if (!replacementSource)
       throw new Error("A record field correction needs a source.")
-    const id = `${parent.id}:${field.normalizedPath}`
+    if (!parsedMessage)
+      throw new Error(
+        "A record field correction needs the current message to establish record identity.",
+      )
+    const trace = executeMapping({
+      profile: parsedProfile,
+      parsedMessage,
+    }).executionTrace.find((entry) => entry.itemId === parent.id)
+    const records =
+      trace && recordAnchors(parsedMessage, trace, field.normalizedPath)
+    const replacement = sourceAnchor(parsedMessage, replacementSource)
+    if (!records || !replacement)
+      throw new Error(
+        "Cannot establish record and source identity for this correction.",
+      )
+    const id = selectedItem?.dependsOn.includes(parent.id)
+      ? selectedItem.id
+      : `${parent.id}:${field.normalizedPath}`
     const existing = parsedProfile.itemSet.items.find((item) => item.id === id)
     const correction = {
       ...parent,
@@ -75,6 +104,7 @@ export function applyReviewFieldCorrectionToProfile({
       transform: null,
       required: false,
       notes: field.correctionIntent?.notes,
+      recordCorrectionIdentity: { records, replacement },
     }
     return ClientProfileSchema.parse({
       ...parsedProfile,

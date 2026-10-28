@@ -55,6 +55,20 @@ export const SourceExpectationSchema = z.object({
   guidance: z.string().min(1).nullable().optional(),
 })
 
+export const RecordSourceAnchorSchema = z.object({
+  segment: z.string().regex(/^[A-Z0-9]{3}$/),
+  occurrence: z.number().int().nonnegative(),
+  segmentCount: z.number().int().positive(),
+  field: z.number().int().positive(),
+  repetition: z.number().int().positive().nullable(),
+  repetitionCount: z.number().int().nonnegative(),
+})
+
+export const RecordCorrectionIdentitySchema = z.object({
+  records: z.array(RecordSourceAnchorSchema).min(1),
+  replacement: RecordSourceAnchorSchema,
+})
+
 export const Hl7ItemSchema = z
   .object({
     id: z.string().min(1),
@@ -73,6 +87,7 @@ export const Hl7ItemSchema = z
     reviewRequired: z.boolean().default(true),
     defaultValue: z.unknown().optional(),
     notes: z.string().nullable().optional(),
+    recordCorrectionIdentity: RecordCorrectionIdentitySchema.optional(),
   })
   .superRefine(({ sources, sourceExpectations }, context) => {
     const sourcePaths = new Set(sources.map((source) => source.path))
