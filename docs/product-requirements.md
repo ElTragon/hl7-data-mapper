@@ -131,11 +131,10 @@ These checks validate the application profile, not the entire HL7 standard.
 
 ### FR-3: Default extraction
 
-These are target requirements for the exported output. The default composer
-preserves repeated IN1, ORC, and SPM groups, but the current browser report can
-replace those arrays with single-entry arrays from the built-in mapping profile.
-Preserving every repeated entry in browser exports remains to be implemented;
-see [mapping execution](mapping-execution.md).
+The default composer, built-in mapping profile, and browser report preserve
+repeated IN1, ORC, and SPM groups, omitting empty records. Execution traces retain
+source coordinates when omitted records change output positions; see
+[mapping execution](mapping-execution.md).
 
 - Apply the defaults in `docs/supported-hl7-fields.md`.
 - Preserve repeating IN1 coverage records.

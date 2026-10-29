@@ -24,10 +24,10 @@ profile persistence, and server-side ingestion or report generation are planned.
 Some schemas and lifecycle helpers for those capabilities already exist in the
 shared packages; they are not deployed product workflows.
 
-The current profile's mapped arrays can retain only one configured entry for
-repeated addresses, telecom, coverage, or orders in the browser export. The
-default composers handle repetitions, but complete repeated-entry export still
-needs work; see [mapping execution](docs/mapping-execution.md).
+The built-in profile and browser export preserve repeated addresses, telecom,
+coverage, orders, and specimens. Empty records are omitted, and review
+corrections retain source identity when output positions change; see
+[mapping execution](docs/mapping-execution.md).
 
 ## Run locally
 
@@ -91,8 +91,13 @@ pnpm lint
 pnpm test
 pnpm test:coverage
 pnpm build
+pnpm test:api
 pnpm format:check
 ```
+
+The API smoke check starts a local Worker with the checked-in Wrangler config,
+verifies `/health` and the 404 response, and stops the Worker afterward. It uses
+an available local port and does not require Cloudflare credentials.
 
 Install Chromium once, then run the browser journeys against a production
 build:
@@ -105,7 +110,7 @@ pnpm test:e2e
 The browser suite covers upload, correction, re-parsing after refresh, interim
 ZIP export, competing-tab conflicts, reset, and phone-width layout. Completion
 rules and completed-report output have package and web unit/integration tests;
-the browser export journey currently verifies an interim ZIP. CI runs the
+the browser journeys verify both interim and completed ZIP exports. CI runs the
 browser suite in a separate Chromium job and retains failure evidence.
 
 To add a shadcn component, run its CLI on demand from the repository root:
