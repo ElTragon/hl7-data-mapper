@@ -10,6 +10,7 @@ import {
 } from "@hl7-data-mapper/contracts"
 
 import { executeItem } from "./execute-item.js"
+import { recordFieldLabel } from "../record-label.js"
 import {
   fingerprintMessage,
   recordAnchors,
@@ -43,12 +44,12 @@ export function executeMapping({
   const overriddenPaths = new Set<string>()
 
   for (const item of sortHl7ItemsForExecution(parsedProfile.itemSet.items)) {
-    const isRecordCorrection = item.dependsOn.some((id) => {
-      const parent = parsedProfile.itemSet.items.find(
-        (candidate) => candidate.id === id,
-      )
-      return parent && item.targetPath.startsWith(`${parent.targetPath}[`)
-    })
+    const recordParent = parsedProfile.itemSet.items.find(
+      (parent) =>
+        item.dependsOn.includes(parent.id) &&
+        item.targetPath.startsWith(`${parent.targetPath}[`),
+    )
+    const isRecordCorrection = Boolean(recordParent)
     const invalidRecordTarget =
       isRecordCorrection && normalizedPathKind(item.targetPath) !== "string"
     let targetPath = item.targetPath
@@ -161,7 +162,14 @@ export function executeMapping({
 
     fields.push({
       key: targetPath,
-      label: item.label,
+      label:
+        recordParent && !skipWrite && targetPath !== item.targetPath
+          ? recordFieldLabel(
+              recordParent.label,
+              recordParent.targetPath,
+              targetPath,
+            )
+          : item.label,
       value: itemResult.outputValue,
       sources: itemResult.sourcesRead,
       primarySource: itemResult.sourcesRead[0] ?? null,

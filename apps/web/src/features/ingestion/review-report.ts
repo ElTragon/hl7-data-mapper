@@ -15,7 +15,10 @@ export function buildReportHl7Items(
   mappingResult: MappingExecutionResult,
 ) {
   const traces = new Map(
-    mappingResult.executionTrace.map((entry) => [entry.itemId, entry]),
+    mappingResult.executionTrace.map((entry, index) => [
+      entry.itemId,
+      { ...entry, label: mappingResult.normalizedFields[index]?.label },
+    ]),
   )
   return profile.itemSet.items.map((item) => {
     const trace = traces.get(item.id)
@@ -23,6 +26,7 @@ export function buildReportHl7Items(
       throw new Error(`Missing execution evidence for mapping "${item.id}".`)
     return {
       ...item,
+      label: trace.label ?? item.label,
       targetPath: trace.targetPath,
       sources: [...trace.sourcesRead],
     }

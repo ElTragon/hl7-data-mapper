@@ -3,6 +3,7 @@ import {
   type ReviewableField,
 } from "@hl7-data-mapper/contracts"
 import type { MappingExecutionTraceEntry } from "../execution/types.js"
+import { recordFieldLabel } from "../record-label.js"
 
 export function recordFields(
   field: ReviewableField,
@@ -35,7 +36,7 @@ export function recordFields(
         ...field,
         id: `${field.id}:${path}`,
         normalizedPath: path,
-        label: `${field.label}: ${recordLabel(path.slice(field.normalizedPath.length))}`,
+        label: recordFieldLabel(field.label, field.normalizedPath, path),
         value: value ?? null,
         validation,
         warnings: validation
@@ -60,16 +61,4 @@ export function recordFields(
   }
   visit(field.value, field.normalizedPath)
   return [field, ...fields]
-}
-
-function recordLabel(path: string): string {
-  return path
-    .replace(/\[(\d+)\]/g, (_, index: string) => `.Record ${Number(index) + 1}`)
-    .split(".")
-    .filter(Boolean)
-    .map((part) => {
-      const words = part.replace(/([a-z])([A-Z])/g, "$1 $2")
-      return words.charAt(0).toUpperCase() + words.slice(1)
-    })
-    .join(" · ")
 }

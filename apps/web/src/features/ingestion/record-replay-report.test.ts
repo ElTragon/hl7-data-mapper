@@ -114,8 +114,11 @@ it("exports completed review with resolved paths without rewriting the saved pro
   )!
   expect(correction.targetPath).toBe("patient.addresses[0].city")
   expect(
-    items.find((item: { id: string }) => item.id === correction.id).targetPath,
-  ).toBe("patient.addresses[1].city")
+    items.find((item: { id: string }) => item.id === correction.id),
+  ).toMatchObject({
+    targetPath: "patient.addresses[1].city",
+    label: "Patient addresses: Record 2 · City",
+  })
   expect(JSON.stringify(state.profile)).toBe(saved)
 })
 
@@ -143,6 +146,11 @@ it("preserves both corrections, their review state, and completed export after r
   })
   const restored = reload(corrected, populated)
   expect(
+    restored.reviewFields.find(
+      (field) => field.normalizedPath === "patient.addresses[1].city",
+    )?.label,
+  ).toBe("Patient addresses: Record 2 · City")
+  expect(
     composeCurrentNormalizedOutput(restored).patient.addresses.map(
       (address) => address.city,
     ),
@@ -164,6 +172,9 @@ it("preserves both corrections, their review state, and completed export after r
   )
   // Editing the relocated correction must keep its stable ID and its sibling.
   const edited = correct(restored, 1, 2, 5)
+  expect(
+    edited.profile.itemSet.items.find((item) => item.id === original.id)?.label,
+  ).toBe("Patient addresses: Record 2 · City")
   expect(
     edited.profile.itemSet.items.filter(
       (item) => item.recordCorrectionIdentity,

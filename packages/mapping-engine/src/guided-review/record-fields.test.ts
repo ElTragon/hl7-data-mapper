@@ -302,6 +302,16 @@ describe("record field review", () => {
       profile: corrected.profile,
       mappingResult: replay,
     })
+    expect(
+      replayFields
+        .filter((entry) =>
+          /^patient\.addresses\[\d+\]\.city$/.test(entry.normalizedPath),
+        )
+        .map((entry) => [entry.normalizedPath, entry.label]),
+    ).toEqual([
+      ["patient.addresses[0].city", "Patient addresses: Record 1 · City"],
+      ["patient.addresses[1].city", "Patient addresses: Record 2 · City"],
+    ])
     expect(new Set(replayFields.map((entry) => entry.id)).size).toBe(
       replayFields.length,
     )

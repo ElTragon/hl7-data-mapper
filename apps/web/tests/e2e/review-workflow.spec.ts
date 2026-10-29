@@ -433,14 +433,25 @@ test("relocated and newly added corrections survive reload and completed export"
   await correctFirst("PID-11[2].4")
   await page.reload()
   await parse(second)
+  for (const record of [1, 2]) {
+    await expect(
+      page.getByRole("button", {
+        name: `Select Patient addresses: Record ${record} · City`,
+        exact: true,
+      }),
+    ).toHaveCount(1)
+  }
   const replayed = await exportCompleted()
   expect(replayed.manifest.review.status).toBe("completed")
   expect(
     replayed.items.find(
       (item: { recordCorrectionIdentity?: unknown }) =>
         item.recordCorrectionIdentity,
-    ).targetPath,
-  ).toBe("patient.addresses[1].city")
+    ),
+  ).toMatchObject({
+    targetPath: "patient.addresses[1].city",
+    label: "Patient addresses: Record 2 · City",
+  })
   await page.getByRole("button", { name: /Patient information/ }).click()
   await correctFirst("PID-11[1].4")
   await page.reload()
