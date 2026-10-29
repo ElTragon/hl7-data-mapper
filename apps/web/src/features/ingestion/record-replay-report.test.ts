@@ -122,6 +122,70 @@ it("exports completed review with resolved paths without rewriting the saved pro
   expect(JSON.stringify(state.profile)).toBe(saved)
 })
 
+it("refreshes stale labels from older re-edited drafts in review and completed export", async () => {
+  const state = replay()
+  // Before labels followed relocation, re-editing saved the new target path
+  // alongside the original record label. Reproduce that persisted draft.
+  const legacy = correct(
+    {
+      ...state,
+      reviewFields: state.reviewFields.map((field) =>
+        field.normalizedPath === "patient.addresses[1].city"
+          ? { ...field, label: "Patient addresses: Record 1 · City" }
+          : field,
+      ),
+    },
+    1,
+    2,
+    5,
+  )
+  const correction = legacy.profile.itemSet.items.find(
+    (item) => item.recordCorrectionIdentity,
+  )!
+  expect(correction).toMatchObject({
+    targetPath: "patient.addresses[1].city",
+    label: "Patient addresses: Record 1 · City",
+  })
+  const restored = reload(legacy, populated)
+  const saved = JSON.stringify(restored.profile)
+  expect(new Set(restored.reviewFields.map((field) => field.id)).size).toBe(
+    restored.reviewFields.length,
+  )
+  expect(
+    restored.reviewFields.find((field) => field.hl7ItemId === correction.id),
+  ).toMatchObject({
+    reviewStatus: "mapping_changed",
+    appliedCorrection: { targetHl7ItemId: correction.id },
+  })
+  expect(
+    restored.reviewFields
+      .filter((field) =>
+        /^patient\.addresses\[\d+\]\.city$/.test(field.normalizedPath),
+      )
+      .map((field) => [field.normalizedPath, field.label, field.value]),
+  ).toEqual([
+    ["patient.addresses[0].city", "Patient addresses: Record 1 · City", "One"],
+    [
+      "patient.addresses[1].city",
+      "Patient addresses: Record 2 · City",
+      "10001",
+    ],
+  ])
+  const report = await completedReport(restored)
+  expect(report.manifest.review.status).toBe("completed")
+  const items = JSON.parse(
+    report.files.find((file) => file.fileName === "hl7-items.json")!.content,
+  )
+  expect(
+    items.find((item: { id: string }) => item.id === correction.id),
+  ).toMatchObject({
+    targetPath: correction.targetPath,
+    sources: JSON.parse(JSON.stringify(correction.sources)),
+    label: "Patient addresses: Record 2 · City",
+  })
+  expect(JSON.stringify(restored.profile)).toBe(saved)
+})
+
 it("preserves both corrections, their review state, and completed export after relocation and reload", async () => {
   const state = replay()
   const original = state.profile.itemSet.items.find(

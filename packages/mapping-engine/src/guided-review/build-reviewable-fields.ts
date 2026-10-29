@@ -70,5 +70,15 @@ export function buildReviewableFields({
         child.id === field.id || !explicitPaths.has(child.normalizedPath),
     ),
   )
-  return [...expanded, ...buildWarningReviewFields(mappingResult)]
+  // Re-editing a moved correction updates its target but keeps its original
+  // item ID. That ID can now belong to a sibling's generated review field.
+  const idCounts = new Map<string, number>()
+  for (const field of expanded)
+    idCounts.set(field.id, (idCounts.get(field.id) ?? 0) + 1)
+  const distinctFields = expanded.map((field) =>
+    (idCounts.get(field.id) ?? 0) > 1 && field.id === field.hl7ItemId
+      ? { ...field, id: `${field.id}:replayed:${field.normalizedPath}` }
+      : field,
+  )
+  return [...distinctFields, ...buildWarningReviewFields(mappingResult)]
 }

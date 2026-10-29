@@ -163,7 +163,7 @@ export function executeMapping({
     fields.push({
       key: targetPath,
       label:
-        recordParent && !skipWrite && targetPath !== item.targetPath
+        recordParent && !skipWrite
           ? recordFieldLabel(
               recordParent.label,
               recordParent.targetPath,
