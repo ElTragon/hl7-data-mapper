@@ -340,6 +340,53 @@ test("a legacy record correction stays in the draft but blocks replay", async ({
   ).toBe(true)
 })
 
+test("two address corrections retain distinct review IDs when the first repetition empties", async ({
+  page,
+}) => {
+  const sample = await readFile(fixture, "utf8")
+  const address = "742 Evergreen Ave^^Los Angeles^CA^90017^USA"
+  const first = sample.replace(address, `${address}~Second^^Two^NY^10001`)
+  const second = sample.replace(address, "~Second^^Two^NY^10001")
+  await page.goto("/")
+  await page.getByLabel("Editable HL7 message").fill(first)
+  await page.getByRole("button", { name: "Parse message" }).click()
+  for (const [record, source] of [
+    [1, "PID-11[1].4"],
+    [2, "PID-11[2].4"],
+  ] as const) {
+    await page
+      .getByRole("button", {
+        name: `Select Patient addresses: Record ${record} · City`,
+        exact: true,
+      })
+      .click()
+    await page.getByLabel("Find a source").fill(source)
+    await page
+      .locator(`[data-source-option="${source}"]`)
+      .getByRole("button", { name: "Select", exact: true })
+      .click()
+    await page
+      .getByRole("button", { name: "Use this source", exact: true })
+      .click()
+  }
+  await page.reload()
+  await page.getByLabel("Editable HL7 message").fill(second)
+  await page.getByRole("button", { name: "Parse message" }).click()
+  const download = page.waitForEvent("download")
+  await page
+    .getByRole("button", { name: "Download interim report ZIP", exact: true })
+    .click()
+  const report = await readZip(await download)
+  expect(report.normalized.patient.addresses[0].city).toBe("NY")
+  expect(report.validation.errors).toContainEqual(
+    expect.objectContaining({ code: "unresolved-record-identity" }),
+  )
+  expect(
+    new Set(report.decisions.map((entry: { fieldId: string }) => entry.fieldId))
+      .size,
+  ).toBe(report.decisions.length)
+})
+
 test("reparsing closes an unsaved review editor", async ({ page }) => {
   await parseSample(page)
   const card = page.locator("[data-review-field-card]").filter({

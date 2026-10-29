@@ -11,6 +11,8 @@ import {
 
 import { executeItem } from "./execute-item.js"
 import {
+  fingerprintMessage,
+  hasIndistinguishablePeer,
   recordAnchors,
   resolveAnchor,
   sameAnchors,
@@ -78,10 +80,17 @@ export function executeMapping({
           parsedMessage,
           identity.replacement,
         )
+        const ambiguousChangedMessage =
+          identity.records.some((anchor) =>
+            hasIndistinguishablePeer(parsedMessage, anchor),
+          ) &&
+          identity.messageFingerprint !==
+            fingerprintMessage(parsedMessage.normalizedText)
         if (
           candidates.length !== 1 ||
           replacementIndex == null ||
-          !correctionSource
+          !correctionSource ||
+          ambiguousChangedMessage
         ) {
           identityFailure = true
         } else {

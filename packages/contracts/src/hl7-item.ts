@@ -72,6 +72,10 @@ export const RecordSourceAnchorSchema = z.object({
 export const RecordCorrectionIdentitySchema = z.object({
   records: z.array(RecordSourceAnchorSchema).min(1),
   replacement: RecordSourceAnchorSchema,
+  messageFingerprint: z
+    .string()
+    .regex(/^[a-f0-9]{16}$/i)
+    .optional(),
 })
 
 export const Hl7ItemSchema = z

@@ -12,6 +12,7 @@ import {
 import type { ApplyReviewCorrectionInput } from "./types.js"
 import { executeMapping } from "../execution/execute-mapping.js"
 import {
+  fingerprintMessage,
   recordAnchors,
   sourceAnchor,
 } from "../execution/record-correction-identity.js"
@@ -104,7 +105,11 @@ export function applyReviewFieldCorrectionToProfile({
       transform: null,
       required: false,
       notes: field.correctionIntent?.notes,
-      recordCorrectionIdentity: { records, replacement },
+      recordCorrectionIdentity: {
+        records,
+        replacement,
+        messageFingerprint: fingerprintMessage(parsedMessage.normalizedText),
+      },
     }
     return ClientProfileSchema.parse({
       ...parsedProfile,

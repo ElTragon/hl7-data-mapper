@@ -444,6 +444,13 @@ describe("record field review", () => {
         profile: corrected.profile,
         parsedMessage: shifted,
       })
+      const ambiguous = segment === "IN1" || segment === "SPM"
+      if (ambiguous) {
+        expect(replay.validation.errors).toContainEqual(
+          expect.objectContaining({ code: "unresolved-record-identity" }),
+        )
+        return
+      }
       expect(replay.validation.errors).not.toContainEqual(
         expect.objectContaining({ code: "unresolved-record-identity" }),
       )
@@ -522,5 +529,133 @@ describe("record field review", () => {
     expect(replay.validation.errors).toContainEqual(
       expect.objectContaining({ code: "unresolved-record-identity" }),
     )
+  })
+
+  it("blocks replay across changed messages with indistinguishable IN1 records", () => {
+    const field = buildReviewableFields({
+      profile,
+      mappingResult: executeMapping({ profile, parsedMessage }),
+    }).find((entry) => entry.normalizedPath === "coverages[1].insurer.name")!
+    const corrected = applyReviewCorrectionAndRerunMapping({
+      profile,
+      parsedMessage,
+      updatedAt: profile.updatedAt,
+      field: selectAlternateSourceForReviewableField({
+        field,
+        replacementSource: field.sourceCandidates.find(
+          (entry) => entry.source.segment === "IN1" && entry.source.field === 4,
+        )!.source,
+      }),
+    })
+    const swapped = parseHl7Message(
+      parsedMessage.normalizedText
+        .replace("IN1|1|A^Plan A|INS-A|Insurer A", "IN1|TEMP")
+        .replace(
+          "IN1|2|B^Plan B|INS-B|Insurer B",
+          "IN1|1|A^Plan A|INS-A|Insurer A",
+        )
+        .replace("IN1|TEMP", "IN1|2|B^Plan B|INS-B|Insurer B"),
+    )
+    const replay = executeMapping({
+      profile: corrected.profile,
+      parsedMessage: swapped,
+    })
+    expect(replay.validation.errors).toContainEqual(
+      expect.objectContaining({ code: "unresolved-record-identity" }),
+    )
+    expect(
+      (replay.normalizedDraft.coverages as { insurer: { name: string } }[])[1]!
+        .insurer.name,
+    ).toBe("Insurer A")
+  })
+
+  it("blocks replay when two same-shaped order groups exchange positions", () => {
+    const sameShape = parseHl7Message(
+      parsedMessage.normalizedText.replace("SPM|2||A2|SER\r", ""),
+    )
+    const field = buildReviewableFields({
+      profile,
+      mappingResult: executeMapping({ profile, parsedMessage: sameShape }),
+    }).find((entry) => entry.normalizedPath === "labOrders[0].service.code")!
+    const corrected = applyReviewCorrectionAndRerunMapping({
+      profile,
+      parsedMessage: sameShape,
+      updatedAt: profile.updatedAt,
+      field: selectAlternateSourceForReviewableField({
+        field,
+        replacementSource: field.sourceCandidates.find(
+          (entry) => entry.source.segment === "OBR" && entry.source.field === 4,
+        )!.source,
+      }),
+    })
+    const lines = sameShape.normalizedText.split("\r")
+    const firstOrder = lines.findIndex((line) => line.startsWith("ORC|"))
+    const secondOrder = lines.findIndex(
+      (line, index) => index > firstOrder && line.startsWith("ORC|"),
+    )
+    const swapped = parseHl7Message(
+      [
+        ...lines.slice(0, firstOrder),
+        ...lines.slice(secondOrder),
+        ...lines.slice(firstOrder, secondOrder),
+      ].join("\r"),
+    )
+    const replay = executeMapping({
+      profile: corrected.profile,
+      parsedMessage: swapped,
+    })
+    expect(replay.validation.errors).toContainEqual(
+      expect.objectContaining({ code: "unresolved-record-identity" }),
+    )
+  })
+
+  it("keeps blocked and replayed corrections distinct when an earlier repetition is empty", () => {
+    const fields = buildReviewableFields({
+      profile,
+      mappingResult: executeMapping({ profile, parsedMessage }),
+    })
+    let updated = profile
+    for (const index of [0, 1]) {
+      const field = fields.find(
+        (entry) => entry.normalizedPath === `patient.addresses[${index}].city`,
+      )!
+      updated = applyReviewCorrectionAndRerunMapping({
+        profile: updated,
+        parsedMessage,
+        updatedAt: profile.updatedAt,
+        field: selectAlternateSourceForReviewableField({
+          field,
+          replacementSource: createSourceReference({
+            segment: "PID",
+            field: 11,
+            repetition: index + 1,
+            component: 4,
+          }),
+        }),
+      }).profile
+    }
+    const changed = parseHl7Message(
+      parsedMessage.normalizedText.replace("First^^One^CA^90001~", "~"),
+    )
+    const result = executeMapping({ profile: updated, parsedMessage: changed })
+    const reviewFields = buildReviewableFields({
+      profile: updated,
+      mappingResult: result,
+    })
+    expect(result.validation.errors).toContainEqual(
+      expect.objectContaining({ code: "unresolved-record-identity" }),
+    )
+    expect(new Set(reviewFields.map((entry) => entry.id)).size).toBe(
+      reviewFields.length,
+    )
+    expect(
+      reviewFields.filter(
+        (entry) => entry.normalizedPath === "patient.addresses[0].city",
+      ).length,
+    ).toBeGreaterThanOrEqual(2)
+    expect(
+      (result.normalizedDraft.patient as { addresses: { city: string }[] })
+        .addresses[0]!.city,
+    ).toBe("NY")
   })
 })
