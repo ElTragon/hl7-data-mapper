@@ -37,6 +37,7 @@ export type ApplyReviewCorrectionAndRerunInput = ApplyReviewCorrectionInput & {
 }
 
 export type ApplyReviewCorrectionAndRerunResult = {
+  readonly correctedItemId: string | null
   readonly profile: ClientProfile
   readonly mappingResult: MappingExecutionResult
   readonly reviewFields: readonly ReviewableField[]

@@ -233,3 +233,9 @@ selection resets when the reviewed field changes. Empty, missing, stale, and
 incompatible composite source selections do not modify the draft. Completed
 reports require decisions for the individual record fields as well as the
 aggregate previews.
+
+Correction IDs remain stable when their output positions move. A new correction
+gets a distinct ID even when it occupies a previous correction's saved position.
+Reports export mapping targets and source coordinates resolved for the current
+message; this does not rewrite the saved draft. Completion checks use those
+resolved targets and the corresponding replayed review fields.

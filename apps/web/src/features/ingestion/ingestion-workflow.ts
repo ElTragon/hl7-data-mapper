@@ -180,6 +180,20 @@ export function applySourceCorrection({
     field: correctedField,
     updatedAt: occurredAt,
   })
+  const correctedFieldId =
+    result.reviewFields.find(
+      (candidate) =>
+        candidate.section !== "exceptions" &&
+        candidate.hl7ItemId === result.correctedItemId &&
+        candidate.normalizedPath === field.normalizedPath,
+    )?.id ?? field.id
+  const correctionIntent =
+    correctedField.correctionIntent && result.correctedItemId
+      ? {
+          ...correctedField.correctionIntent,
+          targetHl7ItemId: result.correctedItemId,
+        }
+      : correctedField.correctionIntent
 
   return {
     ...state,
@@ -190,14 +204,11 @@ export function applySourceCorrection({
       previousProfile: state.profile,
       nextProfile: result.profile,
       nextFields: result.reviewFields,
-      overrideFieldId:
-        field.section === "exceptions"
-          ? (correctedField.correctionIntent?.targetHl7ItemId ?? field.id)
-          : field.id,
+      overrideFieldId: correctedFieldId,
       overrideStatus: "mapping_changed",
-      correctionIntent: correctedField.correctionIntent ?? null,
+      correctionIntent: correctionIntent ?? null,
     }),
-    selectedFieldId: field.id,
+    selectedFieldId: correctedFieldId,
   }
 }
 

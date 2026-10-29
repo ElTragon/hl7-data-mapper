@@ -1,4 +1,5 @@
 import { executeMapping } from "../execute-mapping.js"
+import { stableReviewJson } from "@hl7-data-mapper/contracts"
 import { buildReviewableFields } from "./build-reviewable-fields.js"
 import { applyReviewFieldCorrectionToProfile } from "./profile-corrections.js"
 import type {
@@ -24,6 +25,14 @@ export function applyReviewCorrectionAndRerunMapping({
   })
 
   return {
+    correctedItemId:
+      updatedProfile.itemSet.items.find(
+        (item) =>
+          stableReviewJson(item) !==
+          stableReviewJson(
+            profile.itemSet.items.find((previous) => previous.id === item.id),
+          ),
+      )?.id ?? field.hl7ItemId,
     profile: updatedProfile,
     mappingResult,
     reviewFields: buildReviewableFields({

@@ -23,6 +23,7 @@ import sampleHl7Message from "../../../../../fixtures/valid/oml-o21-basic.hl7?ra
 import { GuidedReviewWorkspace } from "./guided-review/guided-review-workspace"
 import {
   buildReportReviewDecisions,
+  buildReportHl7Items,
   composeCurrentNormalizedOutput,
 } from "./review-report"
 import { useIngestionWorkflow } from "./use-ingestion-workflow"
@@ -228,7 +229,10 @@ export function Hl7IngestionPanel() {
             parsedMessage: snapshot.parsedMessage,
             mappingResult: snapshot.mappingResult,
           }),
-          hl7Items: snapshot.activeProfile.itemSet.items,
+          hl7Items: buildReportHl7Items(
+            snapshot.activeProfile,
+            snapshot.mappingResult,
+          ),
           reviewDecisions: buildReportReviewDecisions(
             snapshot.reviewFields,
             generatedAt,

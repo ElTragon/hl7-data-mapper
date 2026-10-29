@@ -82,9 +82,16 @@ export function applyReviewFieldCorrectionToProfile({
       throw new Error(
         "Cannot establish record and source identity for this correction.",
       )
-    const id = selectedItem?.dependsOn.includes(parent.id)
-      ? selectedItem.id
-      : `${parent.id}:${field.normalizedPath}`
+    const editingCorrection = selectedItem?.dependsOn.includes(parent.id)
+      ? selectedItem
+      : undefined
+    const baseId = `${parent.id}:${field.normalizedPath}`
+    let id = editingCorrection?.id ?? baseId
+    if (!editingCorrection) {
+      let suffix = 2
+      while (parsedProfile.itemSet.items.some((item) => item.id === id))
+        id = `${baseId}:correction:${suffix++}`
+    }
     const existing = parsedProfile.itemSet.items.find((item) => item.id === id)
     const correction = {
       ...parent,

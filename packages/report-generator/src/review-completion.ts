@@ -14,16 +14,20 @@ export function assessReportReview(input: BuildReportPackageInput) {
     ...input.validationResults.info,
   ]
   const fields = input.hl7Items.map((item) => {
-    const decision = decisions.get(item.id)
-    const valid =
-      decision?.normalizedPath === item.targetPath &&
-      decision.hl7ItemId === item.id &&
-      (decision.sourcePath ?? null) === (item.sources[0]?.path ?? null)
+    const decision = [
+      decisions.get(item.id),
+      decisions.get(`${item.id}:replayed:${item.targetPath}`),
+    ].find(
+      (candidate) =>
+        candidate?.normalizedPath === item.targetPath &&
+        candidate.hl7ItemId === item.id &&
+        (candidate.sourcePath ?? null) === (item.sources[0]?.path ?? null),
+    )
     return {
       section: item.section,
       value: valueAt(input.normalizedData, item.targetPath),
-      reviewStatus: valid ? decision.reviewStatus : ("unreviewed" as const),
-      reasonCode: valid ? decision.reasonCode : null,
+      reviewStatus: decision?.reviewStatus ?? ("unreviewed" as const),
+      reasonCode: decision?.reasonCode ?? null,
       validation: issues.filter((issue) => issue.fieldKey === item.targetPath),
     }
   })
@@ -65,7 +69,7 @@ export function assessReportReview(input: BuildReportPackageInput) {
           section: item.section,
           value,
           reviewStatus: valid ? decision.reviewStatus : "unreviewed",
-          reasonCode: valid ? decision.reasonCode : null,
+          reasonCode: valid ? (decision.reasonCode ?? null) : null,
           validation: issues.filter(
             (issue) =>
               issue.fieldKey === item.targetPath &&
