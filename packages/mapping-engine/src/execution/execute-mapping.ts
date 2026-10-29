@@ -12,7 +12,6 @@ import {
 import { executeItem } from "./execute-item.js"
 import {
   fingerprintMessage,
-  hasIndistinguishablePeer,
   recordAnchors,
   resolveAnchor,
   sameAnchors,
@@ -80,9 +79,12 @@ export function executeMapping({
           parsedMessage,
           identity.replacement,
         )
-        const ambiguousChangedMessage =
-          identity.records.some((anchor) =>
-            hasIndistinguishablePeer(parsedMessage, anchor),
+        const changedSegmentMessage =
+          [...identity.records, identity.replacement].some(
+            (anchor) =>
+              anchor.segment === "IN1" ||
+              anchor.segment === "ORC" ||
+              anchor.segment === "SPM",
           ) &&
           identity.messageFingerprint !==
             fingerprintMessage(parsedMessage.normalizedText)
@@ -90,7 +92,7 @@ export function executeMapping({
           candidates.length !== 1 ||
           replacementIndex == null ||
           !correctionSource ||
-          ambiguousChangedMessage
+          changedSegmentMessage
         ) {
           identityFailure = true
         } else {

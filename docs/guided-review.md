@@ -213,14 +213,18 @@ its composer, preserving sibling fields. Replay matches the original repetition
 or segment occurrence against the current execution trace, then resolves the
 selected source's current segment index. Identity metadata contains only
 structural coordinates, counts, order-group shape, and a message fingerprint,
-never raw HL7 or extracted values. When multiple segment records have the same
-structure, a correction replays on its original message but blocks on a changed
-message because their identities cannot be distinguished. If the
-record, selected source, or sibling structure cannot be matched uniquely,
+never raw HL7 or extracted values. Segment-based coverage, order, and specimen
+corrections replay on their original message but block on a changed message:
+even a unique current shape could result from moving and changing records. PID
+repetition corrections can replay across messages when their repetition
+coordinates still match. If the record, selected source, or sibling structure
+cannot be matched uniquely,
 replay skips the correction and raises a blocking `unresolved-record-identity`
 issue. Existing draft corrections without identity metadata remain in the draft
 but are blocked until the reviewer replaces them; positional paths are never
-trusted on replay.
+trusted on replay. Segment-based corrections saved before the message fingerprint was added also
+block until replaced. Decisions saved under an earlier review engine revision
+are re-evaluated on reload.
 
 Reparsing or replacing mapping results closes unsaved decision editors. Source
 selection resets when the reviewed field changes. Empty, missing, stale, and

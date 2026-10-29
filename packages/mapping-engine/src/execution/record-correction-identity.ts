@@ -90,36 +90,6 @@ export function fingerprintMessage(value: string): string {
   return hash.toString(16).padStart(16, "0")
 }
 
-export function hasIndistinguishablePeer(
-  message: ParsedHl7Message,
-  anchor: Anchor,
-): boolean {
-  if (
-    anchor.segment !== "IN1" &&
-    anchor.segment !== "ORC" &&
-    anchor.segment !== "SPM"
-  )
-    return false
-  return message.segments.some((segment) => {
-    if (segment.name !== anchor.segment) return false
-    const other = sourceAnchor(
-      message,
-      {
-        segment: anchor.segment,
-        field: anchor.field,
-        path: `${anchor.segment}-${anchor.field}`,
-      },
-      segment.index,
-    )
-    return (
-      other !== null &&
-      other.occurrence !== anchor.occurrence &&
-      other.repetitionCount === anchor.repetitionCount &&
-      other.orderShape === anchor.orderShape
-    )
-  })
-}
-
 export function resolveAnchor(
   message: ParsedHl7Message,
   anchor: Anchor,

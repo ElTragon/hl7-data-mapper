@@ -266,6 +266,7 @@ it("does not restore decisions after mapping or review-engine revisions", () => 
   for (const context of [
     { ...snapshot.reviewContext!, mappingRevision: "ffffffffffffffff" },
     { ...snapshot.reviewContext!, engineRevision: "future" },
+    { ...snapshot.reviewContext!, engineRevision: "review-v4" },
   ]) {
     expect(
       restoreStoredReviewDecisions({

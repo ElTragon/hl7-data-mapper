@@ -417,7 +417,7 @@ describe("record field review", () => {
       "SPM|2||A2|SER",
     ],
   ] as const)(
-    "keeps %s bound after an unrelated segment is inserted",
+    "blocks %s after an unrelated segment is inserted",
     (path, segment, sourceField, before, marker) => {
       const field = buildReviewableFields({
         profile,
@@ -444,22 +444,13 @@ describe("record field review", () => {
         profile: corrected.profile,
         parsedMessage: shifted,
       })
-      const ambiguous = segment === "IN1" || segment === "SPM"
-      if (ambiguous) {
-        expect(replay.validation.errors).toContainEqual(
-          expect.objectContaining({ code: "unresolved-record-identity" }),
-        )
-        return
-      }
-      expect(replay.validation.errors).not.toContainEqual(
+      expect(replay.validation.errors).toContainEqual(
         expect.objectContaining({ code: "unresolved-record-identity" }),
       )
-      const correction = replay.executionTrace.find((entry) =>
-        entry.itemId.includes(`:${path}`),
-      )!
-      expect(correction.sourceReads[0]?.segmentIndex).toBe(
-        source.segmentIndex! + 1,
-      )
+      expect(
+        replay.executionTrace.find((entry) => entry.itemId.includes(`:${path}`))
+          ?.outputValue,
+      ).toBeNull()
     },
   )
 
@@ -529,6 +520,50 @@ describe("record field review", () => {
     expect(replay.validation.errors).toContainEqual(
       expect.objectContaining({ code: "unresolved-record-identity" }),
     )
+  })
+
+  it("blocks a compensating order swap that preserves the shape at each position", () => {
+    const field = buildReviewableFields({
+      profile,
+      mappingResult: executeMapping({ profile, parsedMessage }),
+    }).find((entry) => entry.normalizedPath === "labOrders[0].service.code")!
+    const corrected = applyReviewCorrectionAndRerunMapping({
+      profile,
+      parsedMessage,
+      updatedAt: profile.updatedAt,
+      field: selectAlternateSourceForReviewableField({
+        field,
+        replacementSource: field.sourceCandidates.find(
+          (entry) => entry.source.segment === "OBR" && entry.source.field === 4,
+        )!.source,
+      }),
+    })
+    const lines = parsedMessage.normalizedText.split("\r")
+    const firstOrder = lines.findIndex((line) => line.startsWith("ORC|"))
+    const secondOrder = lines.findIndex(
+      (line, index) => index > firstOrder && line.startsWith("ORC|"),
+    )
+    const moved = parseHl7Message(
+      [
+        ...lines.slice(0, firstOrder),
+        ...lines.slice(secondOrder),
+        "SPM|2||B2|SER",
+        ...lines
+          .slice(firstOrder, secondOrder)
+          .filter((line) => !line.startsWith("SPM|2|")),
+      ].join("\r"),
+    )
+    const replay = executeMapping({
+      profile: corrected.profile,
+      parsedMessage: moved,
+    })
+    expect(replay.validation.errors).toContainEqual(
+      expect.objectContaining({ code: "unresolved-record-identity" }),
+    )
+    expect(
+      (replay.normalizedDraft.labOrders as { service: { code: string } }[])[0]!
+        .service.code,
+    ).toBe("B")
   })
 
   it("blocks replay across changed messages with indistinguishable IN1 records", () => {
