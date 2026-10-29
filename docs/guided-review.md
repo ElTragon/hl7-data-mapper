@@ -174,7 +174,9 @@ metadata across a refresh. It does not store the message text or extracted
 values. To resume an uploaded or pasted message after reloading, the user must
 provide the same message and parse it again; decisions restore only when its
 fingerprint, client/profile identity and version, mapping revision, and review
-engine revision match. Free-text review and correction notes remain in memory
+engine revision match. Applied correction history can restore across a review
+engine revision when the message and draft mapping still match; review decisions
+reset under the new revision. Free-text review and correction notes remain in memory
 for the active review and report, but are not saved to browser storage. **Reset
 demo draft** clears the stored draft and decisions; refreshing alone does not.
 

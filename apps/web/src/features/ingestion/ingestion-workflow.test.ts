@@ -1,5 +1,6 @@
 import { createSourceReference } from "@hl7-data-mapper/contracts"
 import { parseHl7Message } from "@hl7-data-mapper/hl7-parser"
+import { buildReportPackage } from "@hl7-data-mapper/report-generator"
 import {
   confirmReviewableField,
   defaultOmlO21ClientProfile,
@@ -8,7 +9,10 @@ import { describe, expect, it } from "vitest"
 
 import sampleHl7Message from "../../../../../fixtures/valid/oml-o21-basic.hl7?raw"
 import { buildReviewWorkspaceSnapshot } from "./demo-storage"
-import { buildReportReviewDecisions } from "./review-report"
+import {
+  buildReportReviewDecisions,
+  composeCurrentNormalizedOutput,
+} from "./review-report"
 import {
   mergeReviewFields,
   changeReviewStep,
@@ -333,6 +337,115 @@ it("preserves applied correction history after confirmation and reload", () => {
     reviewStatus: "confirmed",
     appliedCorrection: { replacementSource: { path: "PID-2.1" } },
   })
+})
+
+it("retains applied history through a review engine upgrade, save, and report export", async () => {
+  const state = createState()
+  const field = state.reviewFields.find(
+    (entry) => entry.hl7ItemId === "patient-name",
+  )!
+  const corrected = applySourceCorrection({
+    state,
+    field,
+    source: createSourceReference({ segment: "PID", field: 2, component: 1 }),
+    sourceRole: "middle",
+    occurredAt: OCCURRED_AT,
+  })
+  const confirmed = updateReviewedField(
+    corrected,
+    confirmReviewableField(
+      corrected.reviewFields.find((entry) => entry.id === field.id)!,
+    ),
+  )
+  const snapshot = buildReviewWorkspaceSnapshot({
+    previousSnapshot: null,
+    profile: confirmed.profile,
+    reviewFields: confirmed.reviewFields,
+    messageFingerprint: confirmed.messageFingerprint,
+    updatedAt: OCCURRED_AT,
+  })
+  const oldSnapshot = {
+    ...snapshot,
+    reviewContext: { ...snapshot.reviewContext!, engineRevision: "review-v4" },
+  }
+  const restored = createReviewWorkflow({
+    parsedMessage: state.parsedMessage,
+    sourceProfile: defaultOmlO21ClientProfile,
+    storedSnapshot: oldSnapshot,
+    occurredAt: OCCURRED_AT,
+  })
+  const restoredField = restored.reviewFields.find(
+    (entry) => entry.id === field.id,
+  )!
+  expect(restoredField.reviewStatus).toBe("unreviewed")
+  expect(restoredField.appliedCorrection?.replacementSource?.path).toBe(
+    "PID-2.1",
+  )
+  const savedAgain = buildReviewWorkspaceSnapshot({
+    previousSnapshot: oldSnapshot,
+    profile: restored.profile,
+    reviewFields: restored.reviewFields,
+    messageFingerprint: restored.messageFingerprint,
+    updatedAt: OCCURRED_AT,
+  })
+  expect(savedAgain.appliedCorrections).toHaveLength(1)
+  const reloaded = createReviewWorkflow({
+    parsedMessage: state.parsedMessage,
+    sourceProfile: defaultOmlO21ClientProfile,
+    storedSnapshot: savedAgain,
+    occurredAt: OCCURRED_AT,
+  })
+  expect(
+    buildReportReviewDecisions(reloaded.reviewFields, OCCURRED_AT).find(
+      (entry) => entry.fieldId === field.id,
+    )?.correctionApplied,
+  ).toBe(true)
+  const hash = "a".repeat(64)
+  const report = await buildReportPackage(
+    {
+      appVersion: "0.1.0",
+      generatedAt: OCCURRED_AT,
+      clientId: reloaded.profile.clientId,
+      profileId: reloaded.profile.profileId,
+      profileVersion: reloaded.profile.profileVersion,
+      messageHash: hash,
+      normalizedData: composeCurrentNormalizedOutput(reloaded),
+      hl7Items: reloaded.profile.itemSet.items,
+      reviewDecisions: buildReportReviewDecisions(
+        reloaded.reviewFields,
+        OCCURRED_AT,
+      ),
+      validationResults: reloaded.mappingResult.validation,
+    },
+    () => hash,
+  )
+  const decisionsFile = report.files.find((entry) =>
+    entry.fileName.endsWith("review-decisions.json"),
+  )!
+  expect(
+    (
+      JSON.parse(decisionsFile.content) as {
+        fieldId: string
+        correctionApplied: boolean
+      }[]
+    ).find((entry) => entry.fieldId === field.id)?.correctionApplied,
+  ).toBe(true)
+  const staleMapping = createReviewWorkflow({
+    parsedMessage: state.parsedMessage,
+    sourceProfile: defaultOmlO21ClientProfile,
+    storedSnapshot: {
+      ...oldSnapshot,
+      reviewContext: {
+        ...oldSnapshot.reviewContext,
+        mappingRevision: "ffffffffffffffff",
+      },
+    },
+    occurredAt: OCCURRED_AT,
+  })
+  expect(
+    staleMapping.reviewFields.find((entry) => entry.id === field.id)
+      ?.appliedCorrection,
+  ).toBeUndefined()
 })
 
 it("invalidates a dependent field when its mapping dependency changes even if its value does not", () => {

@@ -161,6 +161,38 @@ test("two tabs detect a stale save and reload the newer review", async ({
   ).toBe("confirmed")
 })
 
+test("an older review revision preserves correction history through reload and export", async ({
+  page,
+}) => {
+  await parseSample(page)
+  const nameCard = await correctPatientName(page)
+  await nameCard.getByRole("button", { name: "Confirm" }).click()
+  await page.evaluate((key) => {
+    const snapshot = JSON.parse(localStorage.getItem(key)!)
+    snapshot.reviewContext.engineRevision = "review-v4"
+    localStorage.setItem(key, JSON.stringify(snapshot))
+  }, storageKey)
+  await page.reload()
+  await page.getByRole("button", { name: "Parse message" }).click()
+  await expect(nameCard).toContainText("Needs review")
+  await nameCard.getByRole("button", { name: "Confirm" }).click()
+  const saved = await page.evaluate(
+    (key) => JSON.parse(localStorage.getItem(key)!),
+    storageKey,
+  )
+  expect(saved.appliedCorrections).toHaveLength(1)
+  const download = page.waitForEvent("download")
+  await page
+    .getByRole("button", { name: "Download interim report ZIP", exact: true })
+    .click()
+  const report = await readZip(await download)
+  expect(
+    report.decisions.find(
+      (entry: { fieldId: string }) => entry.fieldId === "patient-name",
+    ),
+  ).toMatchObject({ reviewStatus: "confirmed", correctionApplied: true })
+})
+
 test("reset clears stored decisions and corrections after reload", async ({
   page,
 }) => {

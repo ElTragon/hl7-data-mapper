@@ -212,13 +212,30 @@ export function restoreStoredReviewDecisions({
   readonly storedSnapshot: DemoBrowserStorageSnapshot | null
   readonly profile?: ClientProfile
 }): readonly ReviewableField[] {
-  if (
-    !storedSnapshot ||
-    !profile ||
-    stableReviewJson(storedSnapshot.reviewContext) !==
-      stableReviewJson(reviewContext(profile, messageFingerprint))
-  )
+  if (!storedSnapshot || !profile || !storedSnapshot.reviewContext)
     return fields
+
+  const currentContext = reviewContext(profile, messageFingerprint)
+  const storedContext = storedSnapshot.reviewContext
+  const sameMapping =
+    stableReviewJson({
+      ...storedContext,
+      engineRevision: currentContext.engineRevision,
+    }) === stableReviewJson(currentContext)
+  if (!sameMapping) return fields
+
+  const sameReviewEngine =
+    storedContext.engineRevision === currentContext.engineRevision
+  if (!sameReviewEngine)
+    return fields.map((field) => ({
+      ...field,
+      appliedCorrection: restoreCorrectionIntent({
+        field,
+        profile,
+        storedSnapshot,
+        applied: true,
+      }),
+    }))
 
   const decisionByFieldId = new Map(
     storedSnapshot.reviewDecisions.map((decision) => [
