@@ -67,6 +67,10 @@ jobs:
       - name: Production build
         run: pnpm build
 
+      - name: API startup and health
+        timeout-minutes: 2
+        run: pnpm test:api
+
       - name: Format check
         run: pnpm format:check
 
