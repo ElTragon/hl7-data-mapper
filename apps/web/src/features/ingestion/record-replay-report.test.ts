@@ -7,6 +7,7 @@ import { buildReviewWorkspaceSnapshot } from "./demo-storage"
 import {
   applySourceCorrection,
   createReviewWorkflow,
+  updateReviewedField,
   type ReviewWorkflowState,
 } from "./ingestion-workflow"
 import {
@@ -71,6 +72,85 @@ function replay() {
   })
   return reload(correct(state, 0, 2), populated)
 }
+
+it("retains a re-edited correction's confirmation and history when its sibling is corrected", async () => {
+  let state = correct(replay(), 1, 2, 5)
+  const field = state.reviewFields.find(
+    (field) => field.normalizedPath === "patient.addresses[1].city",
+  )!
+  state = updateReviewedField(state, { ...field, reviewStatus: "confirmed" })
+  const expected = {
+    id: field.id,
+    hl7ItemId: field.hl7ItemId,
+    normalizedPath: field.normalizedPath,
+    value: "10001",
+    reviewStatus: "confirmed",
+    appliedCorrection: {
+      targetHl7ItemId: field.appliedCorrection!.targetHl7ItemId,
+      replacementSource: { path: "PID-11[2].5" },
+    },
+  }
+  expect(field.appliedCorrection).toBeTruthy()
+  state = correct(state, 0, 1)
+  for (const current of [state, reload(state, populated)]) {
+    expect(
+      current.reviewFields.find(
+        (candidate) => candidate.normalizedPath === field.normalizedPath,
+      ),
+    ).toMatchObject(expected)
+    expect(new Set(current.reviewFields.map((field) => field.id)).size).toBe(
+      current.reviewFields.length,
+    )
+    expect((await completedReport(current)).manifest.review.status).toBe(
+      "completed",
+    )
+  }
+  // Earlier versions could save the same correction under the bare item ID
+  // after its sibling was corrected and the collision disappeared.
+  const legacy = {
+    ...state,
+    reviewFields: state.reviewFields.map((candidate) =>
+      candidate.id === field.id
+        ? { ...candidate, id: field.hl7ItemId! }
+        : candidate,
+    ),
+  }
+  const migrated = reload(legacy, populated)
+  expect(
+    migrated.reviewFields.find((candidate) => candidate.id === field.id),
+  ).toMatchObject(expected)
+  expect((await completedReport(migrated)).manifest.review.status).toBe(
+    "completed",
+  )
+  const parentId = state.profile.itemSet.items.find(
+    (item) => item.id === field.hl7ItemId,
+  )!.dependsOn[0]!
+  const siblingDecision = reload(
+    {
+      ...legacy,
+      reviewFields: legacy.reviewFields.map((candidate) =>
+        candidate.id === field.hl7ItemId
+          ? {
+              ...candidate,
+              normalizedPath: "patient.addresses[0].city",
+              appliedCorrection: {
+                ...candidate.appliedCorrection!,
+                targetHl7ItemId: parentId,
+              },
+            }
+          : candidate,
+      ),
+    },
+    populated,
+  )
+  expect(
+    siblingDecision.reviewFields.find((candidate) => candidate.id === field.id),
+  ).toMatchObject({
+    reviewStatus: "unreviewed",
+    appliedCorrection: null,
+  })
+})
+
 async function completedReport(state: ReviewWorkflowState) {
   return buildReportPackage(
     {

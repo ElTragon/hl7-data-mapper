@@ -256,7 +256,10 @@ export function restoreStoredReviewDecisions({
   )
 
   return fields.map((field) => {
-    const decision = decisionByFieldId.get(field.id)
+    const legacyId = legacyCorrectionReviewId(field, profile)
+    const decision =
+      decisionByFieldId.get(field.id) ??
+      (legacyId ? decisionByFieldId.get(legacyId) : undefined)
     const appliedCorrection = restoreCorrectionIntent({
       field,
       profile,
@@ -286,6 +289,18 @@ export function restoreStoredReviewDecisions({
   })
 }
 
+function legacyCorrectionReviewId(
+  field: ReviewableField,
+  profile: ClientProfile,
+) {
+  const item = profile.itemSet.items.find((item) => item.id === field.hl7ItemId)
+  return item?.recordCorrectionIdentity &&
+    item.targetPath === field.normalizedPath &&
+    field.id === `${item.id}:replayed:${field.normalizedPath}`
+    ? item.id
+    : null
+}
+
 function restoreCorrectionIntent({
   field,
   profile,
@@ -297,11 +312,18 @@ function restoreCorrectionIntent({
   readonly profile: ClientProfile
   readonly storedSnapshot: DemoBrowserStorageSnapshot
 }): ReviewCorrectionIntent | null {
-  const storedIntent = (
-    applied
-      ? storedSnapshot.appliedCorrections
-      : storedSnapshot.correctionIntents
-  ).find((intent) => intent.fieldId === field.id)
+  const intents = applied
+    ? storedSnapshot.appliedCorrections
+    : storedSnapshot.correctionIntents
+  const legacyId = legacyCorrectionReviewId(field, profile)
+  const storedIntent =
+    intents.find((intent) => intent.fieldId === field.id) ??
+    intents.find(
+      (intent) =>
+        legacyId !== null &&
+        intent.fieldId === legacyId &&
+        intent.targetHl7ItemId === field.hl7ItemId,
+    )
   if (!storedIntent) return null
 
   const targetItem = profile.itemSet.items.find(

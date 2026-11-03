@@ -25,10 +25,21 @@ export function buildReviewableFields({
       const trace = mappingResult.executionTrace[index]
       const item = trace ? itemById.get(trace.itemId) : undefined
       const section = item?.section ?? sectionFromPath(field.key)
+      const parent = item?.recordCorrectionIdentity
+        ? itemById.get(item.dependsOn[0] ?? "")
+        : undefined
+      // Generated correction IDs retain their original target even after a
+      // re-edit changes targetPath. Compare that identity to the resolved path,
+      // not to the presence of sibling fields or the mutable saved target.
+      const originalTarget =
+        parent && item?.id.startsWith(`${parent.id}:`)
+          ? item.id.slice(parent.id.length + 1).replace(/:correction:\d+$/, "")
+          : undefined
 
       return {
         id:
-          item?.targetPath !== field.key
+          item?.targetPath !== field.key ||
+          (originalTarget !== undefined && originalTarget !== field.key)
             ? `${item?.id ?? field.key}:replayed:${field.key}`
             : (item?.id ?? field.key),
         stepId: stepIdFromSection(section),
@@ -70,15 +81,5 @@ export function buildReviewableFields({
         child.id === field.id || !explicitPaths.has(child.normalizedPath),
     ),
   )
-  // Re-editing a moved correction updates its target but keeps its original
-  // item ID. That ID can now belong to a sibling's generated review field.
-  const idCounts = new Map<string, number>()
-  for (const field of expanded)
-    idCounts.set(field.id, (idCounts.get(field.id) ?? 0) + 1)
-  const distinctFields = expanded.map((field) =>
-    (idCounts.get(field.id) ?? 0) > 1 && field.id === field.hl7ItemId
-      ? { ...field, id: `${field.id}:replayed:${field.normalizedPath}` }
-      : field,
-  )
-  return [...distinctFields, ...buildWarningReviewFields(mappingResult)]
+  return [...expanded, ...buildWarningReviewFields(mappingResult)]
 }
