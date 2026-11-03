@@ -68,10 +68,10 @@ For the public demo, the button:
 The browser download is intentionally local. It does not upload the message,
 store raw HL7 text, or write report data to a public database.
 
-The current Playwright journey verifies an interim ZIP after upload, correction,
-reload, and re-parsing the same message. Completed-report assembly is covered by
-web and report-generator tests; the completed download journey has not yet been
-verified in a browser test.
+Playwright journeys verify interim and completed ZIP downloads after upload,
+correction, reload, and re-parsing. The completed-export journey also checks
+relocated repeated-record corrections and sibling values. Web and
+report-generator tests cover report assembly and completion validation.
 
 ### `REPORT.md`
 

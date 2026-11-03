@@ -180,6 +180,20 @@ export function applySourceCorrection({
     field: correctedField,
     updatedAt: occurredAt,
   })
+  const correctedFieldId =
+    result.reviewFields.find(
+      (candidate) =>
+        candidate.section !== "exceptions" &&
+        candidate.hl7ItemId === result.correctedItemId &&
+        candidate.normalizedPath === field.normalizedPath,
+    )?.id ?? field.id
+  const correctionIntent =
+    correctedField.correctionIntent && result.correctedItemId
+      ? {
+          ...correctedField.correctionIntent,
+          targetHl7ItemId: result.correctedItemId,
+        }
+      : correctedField.correctionIntent
 
   return {
     ...state,
@@ -190,14 +204,11 @@ export function applySourceCorrection({
       previousProfile: state.profile,
       nextProfile: result.profile,
       nextFields: result.reviewFields,
-      overrideFieldId:
-        field.section === "exceptions"
-          ? (correctedField.correctionIntent?.targetHl7ItemId ?? field.id)
-          : field.id,
+      overrideFieldId: correctedFieldId,
       overrideStatus: "mapping_changed",
-      correctionIntent: correctedField.correctionIntent ?? null,
+      correctionIntent: correctionIntent ?? null,
     }),
-    selectedFieldId: field.id,
+    selectedFieldId: correctedFieldId,
   }
 }
 
@@ -212,13 +223,30 @@ export function restoreStoredReviewDecisions({
   readonly storedSnapshot: DemoBrowserStorageSnapshot | null
   readonly profile?: ClientProfile
 }): readonly ReviewableField[] {
-  if (
-    !storedSnapshot ||
-    !profile ||
-    stableReviewJson(storedSnapshot.reviewContext) !==
-      stableReviewJson(reviewContext(profile, messageFingerprint))
-  )
+  if (!storedSnapshot || !profile || !storedSnapshot.reviewContext)
     return fields
+
+  const currentContext = reviewContext(profile, messageFingerprint)
+  const storedContext = storedSnapshot.reviewContext
+  const sameMapping =
+    stableReviewJson({
+      ...storedContext,
+      engineRevision: currentContext.engineRevision,
+    }) === stableReviewJson(currentContext)
+  if (!sameMapping) return fields
+
+  const sameReviewEngine =
+    storedContext.engineRevision === currentContext.engineRevision
+  if (!sameReviewEngine)
+    return fields.map((field) => ({
+      ...field,
+      appliedCorrection: restoreCorrectionIntent({
+        field,
+        profile,
+        storedSnapshot,
+        applied: true,
+      }),
+    }))
 
   const decisionByFieldId = new Map(
     storedSnapshot.reviewDecisions.map((decision) => [
@@ -228,7 +256,10 @@ export function restoreStoredReviewDecisions({
   )
 
   return fields.map((field) => {
-    const decision = decisionByFieldId.get(field.id)
+    const legacyId = legacyCorrectionReviewId(field, profile)
+    const decision =
+      decisionByFieldId.get(field.id) ??
+      (legacyId ? decisionByFieldId.get(legacyId) : undefined)
     const appliedCorrection = restoreCorrectionIntent({
       field,
       profile,
@@ -258,6 +289,18 @@ export function restoreStoredReviewDecisions({
   })
 }
 
+function legacyCorrectionReviewId(
+  field: ReviewableField,
+  profile: ClientProfile,
+) {
+  const item = profile.itemSet.items.find((item) => item.id === field.hl7ItemId)
+  return item?.recordCorrectionIdentity &&
+    item.targetPath === field.normalizedPath &&
+    field.id === `${item.id}:replayed:${field.normalizedPath}`
+    ? item.id
+    : null
+}
+
 function restoreCorrectionIntent({
   field,
   profile,
@@ -269,11 +312,18 @@ function restoreCorrectionIntent({
   readonly profile: ClientProfile
   readonly storedSnapshot: DemoBrowserStorageSnapshot
 }): ReviewCorrectionIntent | null {
-  const storedIntent = (
-    applied
-      ? storedSnapshot.appliedCorrections
-      : storedSnapshot.correctionIntents
-  ).find((intent) => intent.fieldId === field.id)
+  const intents = applied
+    ? storedSnapshot.appliedCorrections
+    : storedSnapshot.correctionIntents
+  const legacyId = legacyCorrectionReviewId(field, profile)
+  const storedIntent =
+    intents.find((intent) => intent.fieldId === field.id) ??
+    intents.find(
+      (intent) =>
+        legacyId !== null &&
+        intent.fieldId === legacyId &&
+        intent.targetHl7ItemId === field.hl7ItemId,
+    )
   if (!storedIntent) return null
 
   const targetItem = profile.itemSet.items.find(

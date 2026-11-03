@@ -19,53 +19,63 @@ export function buildReviewableFields({
   mappingResult,
   profile,
 }: BuildReviewableFieldsInput): ReviewableField[] {
-  const itemByTargetPath = new Map(
-    profile.itemSet.items.map((item) => [item.targetPath, item]),
-  )
-  const traceByTargetPath = new Map(
-    mappingResult.executionTrace.map((entry) => [entry.targetPath, entry]),
-  )
+  const itemById = new Map(profile.itemSet.items.map((item) => [item.id, item]))
+  const normalizedReviewFields = mappingResult.normalizedFields.map(
+    (field, index) => {
+      const trace = mappingResult.executionTrace[index]
+      const item = trace ? itemById.get(trace.itemId) : undefined
+      const section = item?.section ?? sectionFromPath(field.key)
+      const parent = item?.recordCorrectionIdentity
+        ? itemById.get(item.dependsOn[0] ?? "")
+        : undefined
+      // Generated correction IDs retain their original target even after a
+      // re-edit changes targetPath. Compare that identity to the resolved path,
+      // not to the presence of sibling fields or the mutable saved target.
+      const originalTarget =
+        parent && item?.id.startsWith(`${parent.id}:`)
+          ? item.id.slice(parent.id.length + 1).replace(/:correction:\d+$/, "")
+          : undefined
 
-  const normalizedReviewFields = mappingResult.normalizedFields.map((field) => {
-    const item = itemByTargetPath.get(field.key)
-    const trace = traceByTargetPath.get(field.key)
-    const section = item?.section ?? sectionFromPath(field.key)
-
-    return {
-      id: item?.id ?? field.key,
-      stepId: stepIdFromSection(section),
-      section,
-      normalizedPath: field.key,
-      label: field.label,
-      value: field.value,
-      hl7ItemId: item?.id ?? null,
-      primarySource: field.primarySource ?? null,
-      sources: [...field.sources],
-      rawSegment: firstRawSegment(trace),
-      transformHistory: [...field.transformHistory],
-      validation: [...field.validation],
-      warnings: [...field.warnings],
-      reviewStatus: field.reviewStatus,
-      reasonCode: null,
-      reviewNote: null,
-      sourceCandidates: trace
-        ? trace.sourceReads.map((sourceRead) => ({
-            source: sourceRead.source,
-            rawSegment: sourceRead.rawSegment,
-            previewValue: sourceRead.value,
-            reason: sourceCandidateReason(item, trace),
-          }))
-        : [],
-    }
-  })
+      return {
+        id:
+          item?.targetPath !== field.key ||
+          (originalTarget !== undefined && originalTarget !== field.key)
+            ? `${item?.id ?? field.key}:replayed:${field.key}`
+            : (item?.id ?? field.key),
+        stepId: stepIdFromSection(section),
+        section,
+        normalizedPath: field.key,
+        label: field.label,
+        value: field.value,
+        hl7ItemId: item?.id ?? null,
+        primarySource: field.primarySource ?? null,
+        sources: [...field.sources],
+        rawSegment: firstRawSegment(trace),
+        transformHistory: [...field.transformHistory],
+        validation: [...field.validation],
+        warnings: [...field.warnings],
+        reviewStatus: field.reviewStatus,
+        reasonCode: null,
+        reviewNote: null,
+        sourceCandidates: trace
+          ? trace.sourceReads.map((sourceRead) => ({
+              source: sourceRead.source,
+              rawSegment: sourceRead.rawSegment,
+              previewValue: sourceRead.value,
+              reason: sourceCandidateReason(item, trace),
+            }))
+          : [],
+      }
+    },
+  )
 
   const explicitPaths = new Set(
     normalizedReviewFields.map((field) => field.normalizedPath),
   )
-  const expanded = normalizedReviewFields.flatMap((field) =>
+  const expanded = normalizedReviewFields.flatMap((field, index) =>
     recordFields(
       field,
-      traceByTargetPath.get(field.normalizedPath)?.recordSources,
+      mappingResult.executionTrace[index]?.recordSources,
     ).filter(
       (child) =>
         child.id === field.id || !explicitPaths.has(child.normalizedPath),

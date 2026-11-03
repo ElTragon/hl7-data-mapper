@@ -151,9 +151,9 @@ The mapping engine also exposes source lookup helpers for deterministic reads:
 - `getOrderGroups()`
 
 These helpers keep raw HL7 traversal out of the item executor. Coverage,
-guarantor, and lab-order composers and named transforms are implemented, with
-the current browser repetition limit described in
-[mapping execution](mapping-execution.md).
+guarantor, and lab-order composers and named transforms are implemented. The
+built-in profile preserves repeated records and their source evidence through
+browser export, as described in [mapping execution](mapping-execution.md).
 
 ## Mapping execution result
 

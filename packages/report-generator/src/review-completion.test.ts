@@ -9,6 +9,31 @@ import {
 } from "./report-fixtures.test-support.js"
 
 describe("report review completion", () => {
+  it("accepts a replayed decision only for the matching resolved mapping and source", async () => {
+    const replayed = {
+      ...sampleReviewDecision,
+      fieldId: `${sampleHl7Item.id}:replayed:${sampleHl7Item.targetPath}`,
+    }
+    const input = createReportInput({
+      requestedReviewStatus: "completed",
+      reviewDecisions: [replayed],
+    })
+    expect(
+      (await buildReportPackage(input, () => fakeHash)).manifest.review.status,
+    ).toBe("completed")
+    for (const changed of [
+      { normalizedPath: "patient.addresses[1].city" },
+      { hl7ItemId: "another-item" },
+      { sourcePath: "PID-99" },
+    ]) {
+      await expect(
+        buildReportPackage(
+          { ...input, reviewDecisions: [{ ...replayed, ...changed }] },
+          () => fakeHash,
+        ),
+      ).rejects.toThrow("Complete all required")
+    }
+  })
   it("derives completed and interim status from decisions", async () => {
     for (const status of [
       "confirmed",

@@ -29,6 +29,7 @@ export type ApplyReviewCorrectionInput = {
   readonly profile: ClientProfile
   readonly field: ReviewableField
   readonly updatedAt: string
+  readonly parsedMessage?: ParsedHl7Message
 }
 
 export type ApplyReviewCorrectionAndRerunInput = ApplyReviewCorrectionInput & {
@@ -36,6 +37,7 @@ export type ApplyReviewCorrectionAndRerunInput = ApplyReviewCorrectionInput & {
 }
 
 export type ApplyReviewCorrectionAndRerunResult = {
+  readonly correctedItemId: string | null
   readonly profile: ClientProfile
   readonly mappingResult: MappingExecutionResult
   readonly reviewFields: readonly ReviewableField[]

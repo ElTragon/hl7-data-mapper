@@ -1,5 +1,6 @@
 import {
   NormalizedOutputSchema,
+  type ClientProfile,
   type ReviewableField,
 } from "@hl7-data-mapper/contracts"
 import type { ParsedHl7Message } from "@hl7-data-mapper/hl7-parser"
@@ -7,6 +8,30 @@ import {
   composeDefaultNormalizedOutput,
   type MappingExecutionResult,
 } from "@hl7-data-mapper/mapping-engine"
+
+/** Export the mappings that produced this message, without changing saved rules. */
+export function buildReportHl7Items(
+  profile: ClientProfile,
+  mappingResult: MappingExecutionResult,
+) {
+  const traces = new Map(
+    mappingResult.executionTrace.map((entry, index) => [
+      entry.itemId,
+      { ...entry, label: mappingResult.normalizedFields[index]?.label },
+    ]),
+  )
+  return profile.itemSet.items.map((item) => {
+    const trace = traces.get(item.id)
+    if (!trace)
+      throw new Error(`Missing execution evidence for mapping "${item.id}".`)
+    return {
+      ...item,
+      label: trace.label ?? item.label,
+      targetPath: trace.targetPath,
+      sources: [...trace.sourcesRead],
+    }
+  })
+}
 
 export function buildReportReviewDecisions(
   reviewFields: readonly ReviewableField[],

@@ -174,7 +174,9 @@ metadata across a refresh. It does not store the message text or extracted
 values. To resume an uploaded or pasted message after reloading, the user must
 provide the same message and parse it again; decisions restore only when its
 fingerprint, client/profile identity and version, mapping revision, and review
-engine revision match. Free-text review and correction notes remain in memory
+engine revision match. Applied correction history can restore across a review
+engine revision when the message and draft mapping still match; review decisions
+reset under the new revision. Free-text review and correction notes remain in memory
 for the active review and report, but are not saved to browser storage. **Reset
 demo draft** clears the stored draft and decisions; refreshing alone does not.
 
@@ -208,13 +210,32 @@ access controls, audit controls, policies, and organizational risk assessment.
 Array mappings expose individual record fields alongside the aggregate preview.
 Choose a record field to change its source; aggregate arrays and structural
 sequence numbers cannot be replaced with a scalar source. A record correction is
-saved as a dependent mapping item and runs after its composer, preserving sibling
-fields. Missing records produce a blocking `missing-record` issue rather than
-creating a synthetic record. Record positions are explicit draft mapping choices;
-review the mapping again when the message layout changes.
+saved as a dependent mapping item with source-coordinate identity and runs after
+its composer, preserving sibling fields. Replay matches the original repetition
+or segment occurrence against the current execution trace, then resolves the
+selected source's current segment index. Identity metadata contains only
+structural coordinates, counts, order-group shape, and a message fingerprint,
+never raw HL7 or extracted values. Segment-based coverage, order, and specimen
+corrections replay on their original message but block on a changed message:
+even a unique current shape could result from moving and changing records. PID
+repetition corrections can replay across messages when their repetition
+coordinates still match. If the record, selected source, or sibling structure
+cannot be matched uniquely,
+replay skips the correction and raises a blocking `unresolved-record-identity`
+issue. Existing draft corrections without identity metadata remain in the draft
+but are blocked until the reviewer replaces them; positional paths are never
+trusted on replay. Segment-based corrections saved before the message fingerprint was added also
+block until replaced. Decisions saved under an earlier review engine revision
+are re-evaluated on reload.
 
 Reparsing or replacing mapping results closes unsaved decision editors. Source
 selection resets when the reviewed field changes. Empty, missing, stale, and
 incompatible composite source selections do not modify the draft. Completed
 reports require decisions for the individual record fields as well as the
 aggregate previews.
+
+Correction IDs remain stable when their output positions move. A new correction
+gets a distinct ID even when it occupies a previous correction's saved position.
+Reports export mapping targets and source coordinates resolved for the current
+message; this does not rewrite the saved draft. Completion checks use those
+resolved targets and the corresponding replayed review fields.
