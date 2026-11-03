@@ -2,6 +2,8 @@ packages:
   - "apps/*"
   - "packages/*"
 overrides:
+  # ESLint and typescript-estree still require v10; patch GHSA-g3hv-75wg-m249.
+  minimatch: 11.0.1
   # Keep all router serialization paths on the patched release.
   seroval: 1.6.11
   # Miniflare pins an older sharp; use a patched release until it updates.
