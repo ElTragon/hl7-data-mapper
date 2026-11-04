@@ -12,7 +12,7 @@ HL7 v2.5.1 application profile; it is not a general HL7 conformance service.
 
 | Area          | Current behavior                                                                                                                                                                                                                                               |
 | ------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Input         | Paste, edit, or upload one `.hl7` or `.txt` message, or load the bundled synthetic sample. The browser enforces a 1 MiB UTF-8 byte limit.                                                                                                                      |
+| Input         | Paste, edit, or upload one message, or load the bundled synthetic sample. The file picker suggests `.hl7` and `.txt`; the browser enforces a 1 MiB UTF-8 byte limit.                                                                                           |
 | Parse and map | Profile checks block malformed or unsupported messages. The built-in client profile maps patient, sender, coverage, guarantor, order, and specimen fields with source evidence.                                                                                |
 | Guided review | Confirm fields, record review reasons and notes, or choose a different HL7 source. A source correction updates a draft mapping and reruns extraction.                                                                                                          |
 | Local draft   | Browser storage keeps safe draft rules, decisions, corrections, and demo events. It does not keep raw HL7 or extracted patient values. To resume a review after refresh, provide the same message and parse it again.                                          |
@@ -25,7 +25,7 @@ Some schemas and lifecycle helpers for those capabilities already exist in the
 shared packages; they are not deployed product workflows.
 
 The built-in profile and browser export preserve repeated addresses, telecom,
-coverage, orders, and specimens. Empty records are omitted, and review
+coverage, orders, and specimens. The mapped browser export omits empty records, and review
 corrections retain source identity when output positions change; see
 [mapping execution](docs/mapping-execution.md).
 
@@ -134,7 +134,8 @@ that file when adding components that need further variants or utilities.
 | `packages/report-generator` | Report files and in-memory ZIP creation                               |
 | `fixtures`                  | Synthetic HL7 messages and expected output                            |
 
-Start with [project structure](docs/project-structure.md) for boundaries and
+Start with the [documentation index](docs/README.md) for a reading path through
+the system, [project structure](docs/project-structure.md) for boundaries, and
 [product requirements](docs/product-requirements.md) for the intended scope.
 Detailed references cover [ingestion](docs/hl7-ingestion.md),
 [supported fields](docs/supported-hl7-fields.md),

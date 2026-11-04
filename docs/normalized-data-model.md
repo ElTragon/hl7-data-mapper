@@ -43,7 +43,7 @@ Important rules:
 - Optional properties may be omitted; present nullable scalar values use `null`
   when absent from the source.
 - Repeating concepts use arrays, even when only one value is present.
-- Dates use `YYYY-MM-DD`.
+- Dates preserve source precision: `YYYY`, `YYYY-MM`, or `YYYY-MM-DD`.
 - Timestamps use ISO 8601 and preserve the source UTC offset when supplied.
 - Codes keep `code`, `display`, and `system` separate.
 - The normalized object contains business values, not every mapping decision.
@@ -53,6 +53,15 @@ The canonical fixture is:
 ```text
 fixtures/expected/oml-o21-basic.normalized.json
 ```
+
+The executor first produces a **partial** `normalizedDraft`. For export,
+[`composeCurrentNormalizedOutput`](../apps/web/src/features/ingestion/review-report.ts)
+recursively merges that draft over the default composer's complete object and
+then calls `NormalizedOutputSchema.parse`. Mapped scalars and whole arrays
+replace their baseline values; nested plain objects merge. A mapped `null` or
+`[]` therefore remains authoritative. This is why changes to the built-in
+profile and [default composers](../packages/mapping-engine/src/default-composers.ts)
+should be checked together.
 
 ## Source references
 
@@ -87,8 +96,13 @@ It stores:
 - `reviewStatus`: current user review state; and
 - `warnings`: simple warning messages.
 
-The normalized output remains a clean business object. `NormalizedField` is
-used for review screens, mapping evidence, and report files.
+The normalized output remains a clean business object. `NormalizedField` is an
+in-memory mapping and review evidence wrapper. The report exports normalized
+data, mapping rules, decisions, and validation results, not `NormalizedField`
+objects as a separate payload.
+The current executor adds a history entry for a declared named transform; a
+component choice is expressed by its source path, and a date-normalization
+action alone does not add a history entry.
 
 ## Guided review fields
 
@@ -146,6 +160,14 @@ Multiple `hl7Item`s may contribute to one final field. The current profile
 uses named patient-name transforms to read XPN components from `PID-5`; a
 general-purpose `split` action is defined by the contract but is not yet
 implemented by the executor.
+
+[`NormalizedTargetPathSchema`](../packages/contracts/src/normalized-target-path.ts)
+limits target roots, array index syntax, and unsafe JavaScript property names.
+It checks path syntax, not whether every nested property exists in the output
+schema. The final `NormalizedOutputSchema` validation checks the assembled
+business object. The contract's `reviewRequired` flag is available on mapping
+items, but the current report completion check visits every item and emitted
+record leaf; it does not use that flag to exempt an item.
 
 ## Validation
 
@@ -205,3 +227,22 @@ Both the generic mapping executor and default report composers use the same
 normalizer. The report preserves these strings and their validation issues.
 Existing draft profile shapes remain compatible. The review engine revision
 changes so decisions made under earlier normalization rules require review again.
+
+## Adding or changing a business field
+
+1. Describe the HL7 source and target in the [supported field matrix](supported-hl7-fields.md).
+2. If the target is new, add it to
+   [`NormalizedOutputSchema`](../packages/contracts/src/normalized-output.ts)
+   and update the [expected JSON fixture](../fixtures/expected/oml-o21-basic.normalized.json).
+3. Add or change its rule in the [built-in profile](../packages/mapping-engine/src/profiles/default-oml-o21-profile.ts),
+   implement any needed transform, and keep the [default composer](../packages/mapping-engine/src/default-composers.ts)
+   aligned with the export path.
+4. Check value, source evidence, missing-value behavior, and report output in
+   contract, mapping, web, and report tests that cover the changed boundary.
+
+The UI normally renders `ReviewableField` objects generically; add field-specific
+UI only when the interaction actually changes. For a client-specific source
+feeding an existing target, start with the profile and transform rather than
+adding a property to the normalized schema.
+
+See the [documentation index](README.md) for the complete reading path.

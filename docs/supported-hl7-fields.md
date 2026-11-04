@@ -40,7 +40,7 @@ retains their original coordinates. See
 | `patient.name.middle`                      | PID-5.3    | XPN     | No           | Empty becomes `null`                |
 | `patient.name.suffix`                      | PID-5.4    | XPN     | No           | Empty becomes `null`                |
 | `patient.name.prefix`                      | PID-5.5    | XPN     | No           | Empty becomes `null`                |
-| `patient.dateOfBirth`                      | PID-7.1    | TS      | Yes          | Convert to `YYYY-MM-DD`             |
+| `patient.dateOfBirth`                      | PID-7.1    | TS      | Yes          | Preserve date precision             |
 | `patient.administrativeSex`                | PID-8      | IS      | No           | Preserve code                       |
 | `patient.addresses[].street`               | PID-11.1.1 | XAD/SAD | No           | Preserve repetitions                |
 | `patient.addresses[].city`                 | PID-11.3   | XAD     | No           | Trim                                |
@@ -56,7 +56,8 @@ retains their original coordinates. See
 ## Coverage
 
 The built-in profile and browser export create one `coverages[]` entry per
-nonempty IN1 in the patient group.
+nonempty `IN1` segment in the message. They do not scope `IN1` records to a
+particular patient group; multiple `PID` groups are not modeled by this demo.
 
 | Target                                        | HL7 source | Type | MVP required        | Default behavior     |
 | --------------------------------------------- | ---------- | ---- | ------------------- | -------------------- |
@@ -96,7 +97,7 @@ OML_O21 permits one optional GT1 in the patient group. If GT1 is absent,
 | `guarantor.telecom.equipmentType`         | GT1-6.3    | XTN     | No                  | Preserve code           |
 | `guarantor.telecom.areaCode`              | GT1-6.6    | XTN     | No                  | Trim                    |
 | `guarantor.telecom.localNumber`           | GT1-6.7    | XTN     | No                  | Trim                    |
-| `guarantor.dateOfBirth`                   | GT1-8.1    | TS      | No                  | Convert to `YYYY-MM-DD` |
+| `guarantor.dateOfBirth`                   | GT1-8.1    | TS      | No                  | Preserve date precision |
 | `guarantor.administrativeSex`             | GT1-9      | IS      | No                  | Preserve code           |
 | `guarantor.type`                          | GT1-10     | IS      | No                  | Preserve code           |
 | `guarantor.relationship.code`             | GT1-11.1   | CE      | No                  | Preserve code           |
@@ -105,8 +106,9 @@ OML_O21 permits one optional GT1 in the patient group. If GT1 is absent,
 ## Laboratory orders
 
 Each ORC starts an order group. TQ1, OBR, and SPM segments belong to the current
-ORC group until the next ORC. The parser, built-in profile, and browser export
-preserve these groups as `labOrders[]` entries, omitting empty records.
+ORC group until the next ORC. The parser preserves their order as flat segments;
+the mapping engine groups them, and the built-in profile and browser export
+preserve the groups as `labOrders[]` entries, omitting empty records.
 
 | Target                                      | HL7 source              | Type | MVP required | Default behavior      |
 | ------------------------------------------- | ----------------------- | ---- | ------------ | --------------------- |
@@ -134,10 +136,12 @@ schedule.
 
 ## Specimens
 
-The default composer and browser export preserve repeated order groups and
-their specimens, with one `labOrders[].specimens[]` entry per nonempty SPM
-inside its order. Review corrections target individual record fields while
-preserving sibling orders and specimens.
+The default composer enumerates every SPM in its order group, including an
+empty one. The built-in profile omits empty specimens, and its mapped array
+takes precedence in browser export. The browser therefore has one
+`labOrders[].specimens[]` entry per nonempty SPM inside its order. Review
+corrections target individual record fields while preserving sibling orders
+and specimens.
 
 | Target                              | HL7 source | Type   | MVP required        | Default behavior       |
 | ----------------------------------- | ---------- | ------ | ------------------- | ---------------------- |
@@ -160,9 +164,9 @@ preserving sibling orders and specimens.
 
 ## Repetitions and unknown segments
 
-- `~` separates field repetitions.
-- `^` separates components.
-- `&` separates subcomponents.
+- With the standard delimiters, `~` separates field repetitions, `^` separates
+  components, and `&` separates subcomponents. The parser detects the actual
+  separators from each message's first `MSH`.
 - The default profile uses semantic selectors where documented, such as
   PID-3.5=`MR`, rather than assuming the first repetition is always correct.
 - Unknown standard segments and local `Z` segments are preserved in the parsed

@@ -41,7 +41,9 @@ Each field shows:
 - the related `hl7Item` ID;
 - the primary HL7 source location, such as `PID-5.1`;
 - the raw segment where the value came from;
-- transform history, such as selecting a component or normalizing a date;
+- named-transform history when the item declares one (a component choice is
+  represented by its source path, and a date-normalization action alone does
+  not add a history step);
 - validation issues and warnings; and
 - the current review status.
 
@@ -49,16 +51,20 @@ The shared contract for this shape lives in
 `packages/contracts/src/guided-review.ts`.
 
 The mapping-engine implementation that produces these fields lives in
-`packages/mapping-engine/src/review-fields.ts`.
+[`guided-review/build-reviewable-fields.ts`](../packages/mapping-engine/src/guided-review/build-reviewable-fields.ts).
+[`review-fields.ts`](../packages/mapping-engine/src/review-fields.ts) re-exports
+it from the package's public entry point.
 
 ## Review actions
 
-For each field, the user can:
+For reviewable fields, the user can:
 
 - confirm the extracted value;
 - mark the mapping as incorrect;
 - mark the value as unavailable in the source message; or
-- select another HL7 source.
+- select another HL7 source when the field has a linked `hl7Item` and its value
+  type supports a source correction. Aggregate arrays and non-string record
+  leaves cannot be replaced by a scalar source.
 
 Selecting another source creates or updates an `hl7Item` correction. The
 normalized value is then regenerated from mapping rules instead of being
@@ -98,6 +104,11 @@ That function combines:
 
 This gives the UI a ready-to-render checklist while keeping mapping logic inside
 the mapping package.
+[`buildReviewableFields`](../packages/mapping-engine/src/guided-review/build-reviewable-fields.ts)
+also expands array values into individual record-leaf fields and adds issue
+cards from the validation summary. The aggregate array remains reviewable.
+Record leaves receive source candidates from their record's execution trace;
+the browser UI does not reconstruct those associations by array index alone.
 
 ## Guided navigation
 
@@ -119,7 +130,7 @@ The web UI uses this to show progress such as “Patient information complete”
 `buildWarningReviewFields` converts validation issues into reviewable fields in
 the warnings step.
 
-It also turns non-successful HL7 source reads into reviewable warning cards.
+It also turns non-successful HL7 source reads into reviewable issue cards.
 That includes:
 
 - missing segments;
@@ -129,10 +140,11 @@ That includes:
 - missing subcomponents; and
 - empty source values.
 
-This means missing required values, optional-but-empty fields, unsupported
-transforms, and other validation issues are not hidden in logs. They become part
-of the same guided review flow as patient, sender, coverage, guarantor, and
-lab-order data.
+Missing required values, optional-but-empty fields, unsupported transforms,
+and other validation issues are not hidden in logs. The issue severity can be
+error, warning, or info; optional empty components and subcomponents may be
+informational. These cards are part of the same guided review flow as patient,
+sender, coverage, guarantor, and lab-order data.
 
 ## Review status meanings
 
@@ -157,6 +169,11 @@ resolved unless it has a validation error. An unavailable field is resolved only
 when its value is absent and its reason is `source_not_populated` or
 `not_applicable`. Incorrect, unreviewed, and mapping-changed fields remain
 unresolved. Corrected values must be confirmed again. Empty steps are complete.
+
+The contract has a `reviewRequired` flag on each `hl7Item`, but current
+[report completion](../packages/report-generator/src/review-completion.ts)
+checks every mapping item, record leaf, and issue. Changing the flag alone
+does not remove a field from the completed-report requirements.
 
 Warnings require acknowledgment; informational issues do not. Errors block
 completion. Parser, mapping, and source-read issues share stable identities based
@@ -239,3 +256,30 @@ gets a distinct ID even when it occupies a previous correction's saved position.
 Reports export mapping targets and source coordinates resolved for the current
 message; this does not rewrite the saved draft. Completion checks use those
 resolved targets and the corresponding replayed review fields.
+
+## Code ownership and change points
+
+The [contracts](../packages/contracts/src/guided-review.ts) define field and
+step shapes. The [mapping engine](../packages/mapping-engine/src/guided-review)
+builds evidence, navigation, decisions, and correction rules. The pure
+[web workflow](../apps/web/src/features/ingestion/ingestion-workflow.ts)
+applies those operations and preserves decisions only when field evidence is
+unchanged. The [React hook](../apps/web/src/features/ingestion/use-ingestion-workflow.ts)
+connects that workflow to state and browser persistence; the
+[workspace components](../apps/web/src/features/ingestion/guided-review/guided-review-workspace.tsx)
+render it. See [frontend architecture](frontend-architecture.md) for component
+and event details.
+
+For a new decision rule, update the
+[completion helper](../packages/contracts/src/review-completion.ts) and the
+[report generator's independent check](../packages/report-generator/src/review-completion.ts),
+then test both interim and completed export. For a new source correction,
+update the [profile correction code](../packages/mapping-engine/src/guided-review/profile-corrections.ts),
+the [web workflow](../apps/web/src/features/ingestion/ingestion-workflow.ts),
+and any storage contract needed for replay. The
+[guided-review integration tests](../packages/mapping-engine/src/guided-review/guided-review.integration.test.ts),
+[web workflow tests](../apps/web/src/features/ingestion/ingestion-workflow.test.ts),
+and [browser journey](../apps/web/tests/e2e/review-workflow.spec.ts)
+exercise the important boundaries.
+
+See the [documentation index](README.md) for the complete reading path.

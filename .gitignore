@@ -34,6 +34,9 @@ uploads/
 reports/
 fixtures/private/
 
+# Local draft documentation
+docs/end-to-end-guide.md
+
 # Editors and operating systems
 .vscode/*
 !.vscode/extensions.json

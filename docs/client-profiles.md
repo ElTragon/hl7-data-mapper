@@ -44,6 +44,22 @@ The MVP profile is intentionally narrow:
 The `itemSet` contains the ordered `hl7Item` rules that map parsed HL7 values
 into normalized output fields.
 
+Each [`Hl7Item`](../packages/contracts/src/hl7-item.ts) names a normalized
+`targetPath`, its `sources`, an `action`, optional named `transform`, and a
+positive `sequence`. It can refer to earlier item IDs through `dependsOn`.
+`required` controls missing-output errors, while `sourceExpectations` describe
+what a reviewer should expect at a source and help classify missing-source
+issues. `reviewRequired` is part of the contract, but current report completion
+checks every mapping item and emitted record leaf rather than using that flag
+as an exemption. A rule stores **how** to find a value; the result and raw
+source evidence are kept separately during execution.
+
+[`Hl7ItemSetSchema`](../packages/contracts/src/hl7-item.ts) rejects duplicate
+IDs or sequences, an item with a different client ID, unknown dependencies,
+and dependencies whose sequence is not earlier. These checks make execution
+order explicit. The profile schema also requires its item set to declare the
+same client ID, HL7 version, and message type as the profile.
+
 ## Built-in default profile
 
 The mapping engine includes a published default profile:
@@ -61,9 +77,14 @@ This profile is the current demo's starting point. It declares mappings for:
 - laboratory-order fields from `ORC`, `TQ1`, `OBR`, and `SPM`.
 
 The web app makes a draft copy before a reviewer changes a source. The default
-profile itself is published and read-only. Supporting other clients and complete
-repeating coverage/order output in the browser is future work; see
-[mapping execution](mapping-execution.md) for the current array limit.
+profile itself is published and read-only. The built-in profile and browser
+export already preserve repeated addresses, telecom, coverages, orders, and
+specimens with source evidence. Selecting other clients in the UI is planned;
+see [mapping execution](mapping-execution.md) for current repeat behavior.
+The bundled profile is published version 1; starting a review normally creates
+an editable version 2 draft based on version 1, or reuses a compatible saved
+draft. A source correction changes the draft rule and reruns mapping. Completing
+review does not publish it.
 
 ## Profile statuses
 
@@ -138,7 +159,7 @@ Execution rules:
 - Dependencies must point to items with lower sequence numbers.
 - Forward dependencies are invalid.
 - Required missing values become validation errors.
-- Optional missing values become `null`.
+- Optional missing scalars can become `null`; array composers can return `[]`.
 
 The contracts expose `sortHl7ItemsForExecution()` so the mapping engine has one
 shared rule for execution order.
@@ -217,3 +238,27 @@ history. This schema is not a completed runtime persistence layer yet; current
 code defines the contracts and safety boundary first.
 
 Persistence requirements: [client-profile-persistence.md](client-profile-persistence.md)
+
+## Changing a profile rule
+
+1. Find the target in the [supported field matrix](supported-hl7-fields.md)
+   and its item in the [built-in profile](../packages/mapping-engine/src/profiles/default-oml-o21-profile.ts).
+2. Check that its action or named transform is actually supported by the
+   [executor](../packages/mapping-engine/src/execution/supported-transforms.ts).
+   The contract lists some future actions that have no generic execution yet.
+3. Change the source/transform and its `sourceExpectations` together, so the
+   review guidance still describes what the rule reads. For repeated records,
+   also check [repeat expansion](../packages/mapping-engine/src/execution/repeated-inputs.ts)
+   and [record correction replay](../packages/mapping-engine/src/execution/record-correction-identity.ts).
+4. Check the [default composer](../packages/mapping-engine/src/default-composers.ts),
+   because browser export merges it with the profile result. Run the
+   [profile tests](../packages/mapping-engine/src/profiles/default-oml-o21-profile.test.ts),
+   [execution tests](../packages/mapping-engine/src/execution/execute-mapping.integration.test.ts),
+   and relevant web/report tests.
+
+Keep the original published built-in profile immutable at runtime; browser
+review changes belong to a draft copy. A new message type would also require
+contract, parser, composer, and report changes because the current schemas and
+manifest metadata are fixed to OML/O21 version 2.5.1.
+
+See the [documentation index](README.md) for the complete reading path.

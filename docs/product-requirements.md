@@ -50,9 +50,10 @@ clients. Engineers need a transparent way to:
 - Business workflow: new laboratory orders
 - Data policy: synthetic data only
 
-The application profile requires one patient and at least one laboratory order,
-even though the base OML_O21 message structure allows the patient group to be
-absent.
+The intended application profile has one patient and at least one laboratory
+order, even though the base OML_O21 message structure allows the patient group
+to be absent. The current parser requires at least one PID and both ORC and
+OBR order content, but does not reject multiple PIDs.
 
 ### Business data
 
@@ -131,9 +132,10 @@ These checks validate the application profile, not the entire HL7 standard.
 
 ### FR-3: Default extraction
 
-The default composer, built-in mapping profile, and browser report preserve
-repeated IN1, ORC, and SPM groups, omitting empty records. Execution traces retain
-source coordinates when omitted records change output positions; see
+The default composer enumerates repeated IN1, ORC, and SPM occurrences,
+including structurally present empty records. The built-in profile omits empty
+records, and its mapped arrays take precedence in browser export. Execution
+traces retain source coordinates when omitted records change output positions; see
 [mapping execution](mapping-execution.md).
 
 - Apply the defaults in `docs/supported-hl7-fields.md`.
@@ -145,7 +147,8 @@ source coordinates when omitted records change output positions; see
   non-empty PID-3 repetition.
 - Prefer ORC-12 for the ordering provider and fall back to OBR-16.
 - Prefer OBR order numbers and fall back to the corresponding ORC values.
-- Return `null` for absent optional values; never infer clinical data.
+- Return `null` for absent nullable scalars and `[]` for absent repeating
+  records; never infer clinical data.
 
 ### FR-4: Guided review
 
@@ -183,7 +186,11 @@ non-successful HL7 source reads, including missing fields and empty values.
 
 ### FR-5: hl7Item mapping model
 
-An `hl7Item` represents one atomic mapping operation:
+An `hl7Item` represents one atomic mapping operation. This is a **contract and
+future-behavior example**, not a runnable current rule: the generic `split`
+action and `selectComponent` transform shown here are not implemented by the
+executor. For working rules, see the
+[built-in profile](../packages/mapping-engine/src/profiles/default-oml-o21-profile.ts).
 
 ```json
 {
@@ -286,7 +293,7 @@ IDs and must form an acyclic graph. Item execution must be deterministic.
 The browser generates a ZIP containing:
 
 ```text
-northstar-lab/
+default-oml-o21/
   REPORT.md
   manifest.json
   normalized-data.json
@@ -342,7 +349,7 @@ Rules:
 - JSON keys use camelCase.
 - Empty optional scalar values are `null`.
 - Repeating concepts are arrays, including when one value is present.
-- Dates use `YYYY-MM-DD`.
+- Dates preserve source precision: `YYYY`, `YYYY-MM`, or `YYYY-MM-DD`.
 - Timestamps use ISO 8601 and preserve the source UTC offset when supplied.
 - Codes retain code, display text, and coding system independently.
 - Identifiers retain assigning authority and identifier type when supplied.
@@ -378,11 +385,10 @@ The MVP requirements are accepted when:
 - scope and non-goals are visible in the repository; and
 - formatting, tests, lint, and build checks pass.
 
-The current browser journey verifies source correction, re-parsing the same
-message after a reload, and an interim report ZIP. Completed-report assembly is
-covered by web and report-generator tests. The full target workflow remains
-open until client creation, profile publishing, and persistence are implemented
-and the complete browser journey is verified.
+Browser journeys verify source correction, re-parsing after a reload, and both
+interim and completed report ZIPs. Web and report-generator tests also cover
+report assembly and completion rules. The full target workflow remains open
+until client creation, profile publishing, and persistence are implemented.
 
 ## 10. Reference material
 

@@ -24,8 +24,9 @@ source-selection corrections. Applying a source correction changes the linked
 `hl7Item` on an editable draft profile, reruns mapping, and rebuilds the review
 fields. The package does not parse raw HL7 text or render the UI.
 
-The current named address, telecom, coverage, and order transforms each produce
-at most one entry from their configured source reads. See
-[mapping execution](../../docs/mapping-execution.md) for this limit and the
+The current named transforms expand unqualified PID address and telecom
+repetitions, IN1 coverage segments, and ORC order groups with their SPM
+specimens. Explicit source coordinates remain authoritative. See
+[mapping execution](../../docs/mapping-execution.md) for repeat handling and
 supported actions, and [guided review](../../docs/guided-review.md) for the
 review workflow.
