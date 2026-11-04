@@ -32,7 +32,8 @@ It should stay free of UI, file-upload, and parser implementation details. That 
   message hash but no message payload.
 - `AuditEventSchema`: safe audit event metadata for profile and mapping events.
 - `DemoPersistencePolicySchema`: public-demo storage policy that keeps built-in
-  profiles read-only and recruiter changes in browser storage.
+  profiles read-only and reviewer changes in browser storage. Its two
+  `recruiterChanges` property names are retained in the current contract.
 - `DemoBrowserStorageSnapshotSchema`: browser-only demo scratchpad for draft
   profile copies, review decisions, correction intents, and safe demo events.
 - `ReviewDecisionReasonSchema` and `ReviewNoteSchema`: consistent onboarding

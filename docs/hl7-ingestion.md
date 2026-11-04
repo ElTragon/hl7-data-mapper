@@ -24,11 +24,38 @@ In plain English, ingestion means:
 6. run basic MVP profile checks; and
 7. show parse results, warnings, and blocking errors to the user.
 
+## Parser mechanics
+
+[`parseHl7Message(rawText)`](../packages/hl7-parser/src/parse-hl7-message.ts)
+is a pure function. It first changes CRLF and LF segment endings to carriage
+returns, trims the message and individual nonempty segment lines, and preserves
+both the original `rawText` and the resulting `normalizedText`. The first
+segment supplies the field separator and four encoding characters only when it
+starts with `MSH`; otherwise the parser uses the standard `|^~\&` separators
+and reports the header problem. It then splits every segment into fields,
+repetitions, components, and subcomponents.
+
+`MSH` needs special treatment: its field separator is `MSH-1`, while its
+encoding characters are `MSH-2`. The parser inserts the separator into its
+field list so `MSH-9` and `MSH-12` retain their HL7 field numbers. An HL7
+source path such as `PID-5.1` uses one-based field and component positions;
+the parsed segment's `index` is zero-based. The parser keeps unknown segment
+names and raw segment/field text for later evidence. It does not decode HL7
+escape tokens or interpret patient and order values.
+
+The parser returns `errors` and `warnings` with the parsed structure even for
+invalid input. The [web parse handler](../apps/web/src/features/ingestion/hl7-ingestion-panel.tsx)
+blocks review when `errors` is nonempty; warnings remain visible and flow into
+mapping review. The parser validates the presence and order of `ORC`/`OBR`
+groups but returns a flat ordered segment array. The mapping engine creates
+the order-group objects later.
+
 ## In scope
 
 The ingestion layer includes:
 
-- `.hl7` and `.txt` message input up to 1 MiB;
+- message upload up to 1 MiB, with `.hl7` and `.txt` suggested by the file
+  picker rather than enforced as extensions;
 - pasted message text;
 - loading a built-in synthetic OML/O21 sample;
 - editable raw message text before parsing;
@@ -67,7 +94,8 @@ The parser reports errors for:
 - `MSH` not being the first segment;
 - unsupported `MSH-9`, meaning anything other than `OML^O21^OML_O21`;
 - unsupported `MSH-12`, meaning anything other than `2.5.1`;
-- missing `PID`, because this app profile requires one patient;
+- missing `PID`, because this app profile requires a patient segment (the
+  current parser does not reject multiple `PID` segments);
 - multiple `MSH` headers, including messages using different delimiters;
 - missing order content, an `OBR` before any `ORC`, or an `ORC` group without
   an associated `OBR`; and
@@ -150,3 +178,16 @@ loading the sample, or unmounting invalidates pending reads. Older results and
 failures cannot replace newer input or change its loading/error state. A failed
 file can be selected again. An export already being generated is discarded if
 its input is replaced before the download begins.
+
+## Where to change ingestion
+
+| Change                                                    | Code and focused check                                                                                                                                                                                                  |
+| --------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Segment splitting, delimiter detection, or profile errors | [Parser](../packages/hl7-parser/src/parse-hl7-message.ts) and [parser tests](../packages/hl7-parser/src/parse-hl7-message.test.ts)                                                                                      |
+| Upload, paste, sample, size limit, or stale file reads    | [Input panel](../apps/web/src/features/ingestion/hl7-ingestion-panel.tsx), [limits](../apps/web/src/features/ingestion/input-limits.ts), and [input tests](../apps/web/src/features/ingestion/ingestion-input.test.tsx) |
+| Meaning of a parsed source field                          | [Mapping execution](mapping-execution.md) and the [supported field matrix](supported-hl7-fields.md)                                                                                                                     |
+
+Add a synthetic fixture for a new structural case. If a new field fits the
+existing segment/field grammar, change its mapping rule rather than the parser.
+
+See the [documentation index](README.md) for the complete reading path.
