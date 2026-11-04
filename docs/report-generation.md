@@ -10,10 +10,11 @@ excluded from the required report files by default.
 
 ## Required ZIP contents
 
-The default report folder is named from the client ID, such as:
+The web app names the report folder from the active profile's client ID. For
+the bundled profile, it is:
 
 ```text
-northstar-lab/
+default-oml-o21/
   REPORT.md
   manifest.json
   normalized-data.json
@@ -30,16 +31,18 @@ These files are represented by `REQUIRED_REPORT_FILE_NAMES` in
 when the report uses the `synthetic_source_included` policy.
 
 The report generator creates the ZIP archive in memory with
-`buildReportZip(reportPackage)`. It uses `fflate`, a small browser-friendly ZIP
-library. The web app passes the returned `Uint8Array` to the browser download
-flow.
+`buildReportZip(reportPackage, options)`. Without a folder option, the package
+uses `hl7-data-mapper-report`; the web app passes its client ID explicitly. It
+uses `fflate`, a browser-compatible ZIP library, and the web app passes the
+returned `Uint8Array` to the browser download flow.
 
 ## Web download flow
 
 After parsing, the React app labels the download as an **interim report** until
-all required review decisions are resolved and no validation errors remain. It
-then offers a **completed report**. Both require valid normalized output; interim
-exports do not bypass `NormalizedOutputSchema`. Parser errors prevent export.
+the current completion rules resolve mapped fields, record leaves, and issues
+without validation errors. It then offers a **completed report**. Both require
+valid normalized output; interim exports do not bypass
+`NormalizedOutputSchema`. Parser errors prevent export.
 
 Manifest version `1.2.0` includes a `review` summary with status, total, resolved,
 unresolved, error, warning, and informational counts. `REPORT.md` shows the same
@@ -58,8 +61,8 @@ confirmed after correction.
 
 For the public demo, the button:
 
-- runs the default OML/O21 client profile locally;
-- composes normalized output from the current parsed message;
+- uses the active profile and current mapping result from the review session;
+- composes normalized output from the current parsed message and mapping draft;
 - converts reviewable fields into report review decisions;
 - hashes the source message and generated report files in the browser;
 - creates the ZIP with `buildReportZip`; and
@@ -72,6 +75,35 @@ Playwright journeys verify interim and completed ZIP downloads after upload,
 correction, reload, and re-parsing. The completed-export journey also checks
 relocated repeated-record corrections and sibling values. Web and
 report-generator tests cover report assembly and completion validation.
+
+## Package stages and trust boundaries
+
+[`buildReportPackage`](../packages/report-generator/src/build-report-package.ts)
+first checks the input with Zod schemas for normalized data, each `hl7Item`,
+each decision, and the validation summary. It rejects parser errors even for
+interim export, duplicate decision IDs, and a requested completed status that
+its own [completion check](../packages/report-generator/src/review-completion.ts)
+cannot justify. That completion check visits mapping items, emitted array
+record leaves, and validation issues; the `hl7Item.reviewRequired` flag does
+not currently exempt an item.
+
+The [payload builder](../packages/report-generator/src/payload-files.ts) makes
+the human report, JSON, and CSV. The [manifest builder](../packages/report-generator/src/manifest.ts)
+asks the caller's hash callback for each payload's SHA-256, records its UTF-8
+byte length, then validates the manifest. The manifest is not among the files
+it hashes. [`buildReportZip`](../packages/report-generator/src/build-report-zip.ts)
+uses `fflate` to compress the ordered files synchronously in memory and returns
+bytes; the web app owns the Blob URL and download.
+
+The web app computes the source-message SHA-256 from the raw editor text and
+supplies a hash callback using browser crypto. The report generator accepts
+those supplied hashes; it does not independently rehash the original message
+or verify that an input is synthetic. The normal ZIP omits the source message,
+so rerunning the same mapping requires the original HL7 text, the exported
+rules, and compatible mapping code. The hash can compare a candidate message
+with the original; it cannot reconstruct the message. Keeping all files and ZIP
+bytes in memory suits the bounded demo input but is a scaling consideration for
+larger exports.
 
 ### `REPORT.md`
 
@@ -126,7 +158,9 @@ Before writing this file, the report generator validates the payload with
 
 ### `hl7-items.json`
 
-The ordered mapping instructions used for the run.
+The mapping instructions used for the run, with resolved paths and sources for
+the current message. The executor sorts rules by sequence when it runs them;
+this file follows the profile's item-set order.
 
 This file shows how fields were collected. It stores mapping rules, such as
 `PID-5.1`, not raw HL7 message text.
@@ -195,6 +229,9 @@ Real PHI must never be included in the public report package.
 The report generator enforces this boundary: `syntheticSourceText` is rejected
 unless the policy is `synthetic_source_included`, and that policy requires a
 non-empty synthetic source message.
+This policy controls the optional source file. Callers must also keep real PHI
+out of normalized data, source references, validation messages, and free-text
+review notes; schema validation is not a general PHI detector.
 
 ## Shared contracts
 
@@ -217,3 +254,21 @@ Current contracts:
 
 In plain English: this file is the report checklist. If the report does not
 match the checklist, it is not considered complete.
+
+## Changing report output
+
+Change the [report contracts](../packages/contracts/src/report.ts) when the
+required file list or manifest shape changes, then update the
+[payload builder](../packages/report-generator/src/payload-files.ts),
+[human report](../packages/report-generator/src/markdown-report.ts), or
+[CSV builder](../packages/report-generator/src/mapping-summary.ts) as needed.
+For a completion-rule change, keep the [shared review helper](../packages/contracts/src/review-completion.ts)
+and the report generator's [independent assessment](../packages/report-generator/src/review-completion.ts)
+aligned. Update the browser handoff in
+[`review-report.ts`](../apps/web/src/features/ingestion/review-report.ts)
+if it needs a new field. Verify package
+[integration tests](../packages/report-generator/src/report-package.integration.test.ts),
+[ZIP tests](../packages/report-generator/src/build-report-zip.integration.test.ts),
+and the [browser export journey](../apps/web/tests/e2e/review-workflow.spec.ts).
+
+See the [documentation index](README.md) for the complete reading path.

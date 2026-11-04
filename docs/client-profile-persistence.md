@@ -11,6 +11,13 @@ lifecycle helpers for that design. The public portfolio demo uses a bundled
 read-only profile and browser storage for a draft copy, structured review
 decisions, corrections, and safe demo events.
 
+| Boundary                | Current code                                                                                                                                                                                                                           | Status                                                             |
+| ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
+| Browser snapshot        | [v3 Zod contract](../packages/contracts/src/persistence.ts), [localStorage adapter](../apps/web/src/features/ingestion/demo-storage.ts), [session conflict handling](../apps/web/src/features/ingestion/review-persistence-session.ts) | Implemented for the synthetic demo                                 |
+| Profile version helpers | [Draft/publish/archive functions](../packages/contracts/src/client-profile.ts)                                                                                                                                                         | Implemented functions; browser uses draft creation, not publishing |
+| D1 record shapes        | [Persistence schemas](../packages/contracts/src/persistence.ts)                                                                                                                                                                        | Contracts for future storage                                       |
+| Worker and D1           | [Worker](../apps/api/src/index.ts) and [Wrangler config](../apps/api/wrangler.jsonc)                                                                                                                                                   | `/health` only; D1 ID is a placeholder and no query runs           |
+
 ## Allowed D1 data
 
 D1 may store configuration and audit records only:
@@ -422,7 +429,7 @@ If the answer to questions 2, 3, or 4 is yes, the value does not belong in D1.
 The public demo has stricter rules than the production-style design:
 
 - built-in profiles are read-only;
-- recruiter changes remain in browser storage;
+- reviewer draft and decision changes remain in browser storage;
 - no publicly accessible database writes are allowed;
 - no raw HL7 messages are persisted;
 - no extracted patient data is persisted by the app;
@@ -445,6 +452,9 @@ persistRawMessages: false
 persistExtractedPatientData: false
 resetClearsRecruiterChanges: true
 ```
+
+The two `recruiterChanges` property names are retained in the current
+contract; they refer to temporary demo reviewer changes in this application.
 
 In plain English: reviewers can try the workflow, but they cannot permanently
 write to a public database. Demo edits are temporary, local, and safe to reset.
@@ -542,3 +552,25 @@ audit controls, and organizational risk assessment.
 
 For this repository, the persistence rule is simple: store mapping
 configuration, version metadata, and safe audit metadata only.
+
+## Changing the storage boundary
+
+For a browser snapshot change, update the
+[snapshot schema and migration](../packages/contracts/src/persistence.ts)
+first, then the [serializer and localStorage adapter](../apps/web/src/features/ingestion/demo-storage.ts).
+Preserve the distinction between an empty store, an invalid snapshot, and an
+unavailable read. The [persistence session](../apps/web/src/features/ingestion/review-persistence-session.ts)
+must keep conflict behavior consistent with any new write path. Check
+[contract tests](../packages/contracts/src/contracts.test.ts),
+[storage tests](../apps/web/src/features/ingestion/demo-storage.test.ts),
+[session tests](../apps/web/src/features/ingestion/review-persistence-session.test.ts),
+and the [browser competing-tab journey](../apps/web/tests/e2e/review-workflow.spec.ts).
+
+For D1 work, start from the planned tables and contracts above, then add an
+actual migration, Worker binding/query code, and tests. The checked-in SQL is
+a design proposal, not a migration that runs today. A database write should
+accept only validated configuration and safe audit metadata. The current
+browser design does not provide authentication, authorization, or transactional
+storage; those are separate requirements for a server implementation.
+
+See the [documentation index](README.md) for the complete reading path.
