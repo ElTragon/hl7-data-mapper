@@ -26,6 +26,7 @@ export type {
   Hl7SourceRead,
   Hl7SourceReadStatus,
 } from "./source-lookup.js"
+export { findSourceExpectationForRead } from "./source-expectation.js"
 
 export {
   applyReviewCorrectionAndRerunMapping,
@@ -39,6 +40,7 @@ export {
   markReviewableFieldUnavailable,
   selectAlternateSourceForReviewableField,
   selectCompositeSourceForReviewableField,
+  selectMultipleSourcesForReviewableField,
 } from "./review-fields.js"
 export type {
   ApplyReviewCorrectionAndRerunInput,
@@ -50,6 +52,7 @@ export type {
   GuidedReviewStepSummary,
   PersonNameSourceRole,
   SelectCompositeFieldSourceInput,
+  SelectMultipleSourcesInput,
   SelectAlternateSourceInput,
 } from "./review-fields.js"
 

@@ -19,6 +19,7 @@ export {
 export {
   selectAlternateSourceForReviewableField,
   selectCompositeSourceForReviewableField,
+  selectMultipleSourcesForReviewableField,
 } from "./guided-review/source-selection.js"
 export type {
   ApplyReviewCorrectionAndRerunInput,
@@ -28,5 +29,6 @@ export type {
   ReviewDecisionDetails,
   SelectAlternateSourceInput,
   SelectCompositeFieldSourceInput,
+  SelectMultipleSourcesInput,
 } from "./guided-review/types.js"
 export { buildWarningReviewFields } from "./guided-review/warning-review-fields.js"

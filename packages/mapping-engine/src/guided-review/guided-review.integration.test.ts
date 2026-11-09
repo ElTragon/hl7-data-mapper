@@ -19,6 +19,7 @@ import {
   markReviewableFieldUnavailable,
   selectAlternateSourceForReviewableField,
   selectCompositeSourceForReviewableField,
+  selectMultipleSourcesForReviewableField,
 } from "../review-fields.js"
 
 const sampleMessage = `MSH|^~\\&|NORTHSTAR_LIS|NORTHSTAR_LAB|HL7_MAPPER|DEMO_FACILITY|20260706101500-0700||OML^O21^OML_O21|MSG-20260706-0001|P|2.5.1|||AL|NE|USA|ASCII
@@ -280,6 +281,250 @@ describe("review fields", () => {
       },
       value: "Elena",
     })
+  })
+
+  it("combines ordered sources from different message rows with a chosen separator", () => {
+    const draftProfile = ClientProfileSchema.parse({
+      ...defaultOmlO21ClientProfile,
+      status: "draft",
+      publishedAt: undefined,
+    })
+    const parsedMessage = parseHl7Message(sampleMessage)
+    const initialMapping = executeMapping({
+      parsedMessage,
+      profile: draftProfile,
+    })
+    const reportField = buildReviewableFields({
+      mappingResult: initialMapping,
+      profile: draftProfile,
+    }).find(
+      (candidate) =>
+        candidate.normalizedPath === "sender.application.namespaceId",
+    )
+
+    if (!reportField) {
+      throw new Error("Expected the sending application review field.")
+    }
+
+    const selectedField = selectMultipleSourcesForReviewableField({
+      profile: draftProfile,
+      field: reportField,
+      replacementSources: [
+        createSourceReference({
+          segment: "MSH",
+          field: 3,
+          component: 1,
+          segmentIndex: 0,
+        }),
+        createSourceReference({
+          segment: "PID",
+          field: 3,
+          component: 1,
+          segmentIndex: 1,
+          literalSplit: { separator: "-", partNumber: 2 },
+        }),
+      ],
+      joinSeparator: " / ",
+    })
+    const updatedProfile = applyReviewFieldCorrectionToProfile({
+      profile: draftProfile,
+      field: selectedField,
+      parsedMessage,
+      updatedAt: "2026-07-07T16:45:00-07:00",
+    })
+    const updatedItem = updatedProfile.itemSet.items.find(
+      (item) => item.id === "sender-application",
+    )
+    const updatedMapping = executeMapping({
+      parsedMessage,
+      profile: updatedProfile,
+    })
+    const updatedTrace = updatedMapping.executionTrace.find(
+      (entry) => entry.itemId === "sender-application",
+    )
+
+    expect(updatedItem).toMatchObject({
+      action: "join",
+      joinSeparator: " / ",
+      sources: [
+        { path: "MSH-3.1", segmentIndex: 0 },
+        {
+          path: "PID-3.1",
+          segmentIndex: 1,
+          literalSplit: { separator: "-", partNumber: 2 },
+        },
+      ],
+    })
+    expect(updatedTrace?.sourceReads.map((read) => read.value)).toEqual([
+      "NORTHSTAR_LIS",
+      "104892",
+    ])
+    expect(updatedTrace?.outputValue).toBe("NORTHSTAR_LIS / 104892")
+
+    const laterMessage = parseHl7Message(
+      sampleMessage.replace("MRN-104892", "MRN"),
+    )
+    const laterMapping = executeMapping({
+      parsedMessage: laterMessage,
+      profile: updatedProfile,
+    })
+    const laterTrace = laterMapping.executionTrace.find(
+      (entry) => entry.itemId === "sender-application",
+    )
+
+    expect(laterTrace?.sourceReads.map((read) => read.status)).toEqual([
+      "found",
+      "missing_split_part",
+    ])
+    expect(laterTrace?.outputValue).toBeNull()
+    expect(
+      (laterMapping.normalizedDraft.sender as Record<string, unknown>)
+        .application,
+    ).toMatchObject({ namespaceId: null })
+  })
+
+  it("rejects combining sources into a structural or repeated record field", () => {
+    const draftProfile = ClientProfileSchema.parse({
+      ...defaultOmlO21ClientProfile,
+      status: "draft",
+      publishedAt: undefined,
+    })
+    const parsedMessage = parseHl7Message(sampleMessage)
+    const mappingResult = executeMapping({
+      parsedMessage,
+      profile: draftProfile,
+    })
+    const fields = buildReviewableFields({
+      mappingResult,
+      profile: draftProfile,
+    })
+    const patientNameField = fields.find(
+      (field) => field.normalizedPath === "patient.name",
+    )
+    const labOrderServiceCode = fields.find(
+      (field) => field.normalizedPath === "labOrders[0].service.code",
+    )
+    const replacementSources = [
+      createSourceReference({ segment: "PID", field: 5, component: 1 }),
+      createSourceReference({ segment: "PID", field: 5, component: 2 }),
+    ]
+
+    if (!patientNameField || !labOrderServiceCode) {
+      throw new Error("Expected patient name and lab order review fields.")
+    }
+
+    expect(() =>
+      selectMultipleSourcesForReviewableField({
+        profile: draftProfile,
+        field: patientNameField,
+        replacementSources,
+        joinSeparator: " ",
+      }),
+    ).toThrow("Multiple sources can only replace a string report field.")
+    expect(() =>
+      selectMultipleSourcesForReviewableField({
+        profile: draftProfile,
+        field: labOrderServiceCode,
+        replacementSources,
+        joinSeparator: " ",
+      }),
+    ).toThrow("A repeated record field needs a correction tied to its record")
+  })
+
+  it.each([
+    ["patient-date-of-birth", "patient.dateOfBirth"],
+    ["message-sent-at", "message.sentAt"],
+  ])(
+    "rejects combining sources into a non-plain mapping item %s",
+    (itemId, targetPath) => {
+      const draftProfile = ClientProfileSchema.parse({
+        ...defaultOmlO21ClientProfile,
+        status: "draft",
+        publishedAt: undefined,
+      })
+      const parsedMessage = parseHl7Message(sampleMessage)
+      const mappingResult = executeMapping({
+        parsedMessage,
+        profile: draftProfile,
+      })
+      const reviewField = buildReviewableFields({
+        mappingResult,
+        profile: draftProfile,
+      }).find((field) => field.hl7ItemId === itemId)
+      if (!reviewField) throw new Error(`Expected review field ${itemId}.`)
+
+      expect(() =>
+        selectMultipleSourcesForReviewableField({
+          profile: draftProfile,
+          field: reviewField,
+          replacementSources: [
+            createSourceReference({
+              segment: "PID",
+              field: 7,
+              segmentIndex: 1,
+            }),
+            createSourceReference({
+              segment: "PID",
+              field: 5,
+              component: 1,
+              segmentIndex: 1,
+            }),
+          ],
+          joinSeparator: " ",
+        }),
+      ).toThrow(
+        "Multiple sources can only replace a plain string extract or join mapping item.",
+      )
+      expect(reviewField.normalizedPath).toBe(targetPath)
+    },
+  )
+
+  it("preserves validation on a string mapping item", () => {
+    const draftProfile = ClientProfileSchema.parse({
+      ...defaultOmlO21ClientProfile,
+      status: "draft",
+      publishedAt: undefined,
+    })
+    const validatedProfile = ClientProfileSchema.parse({
+      ...draftProfile,
+      itemSet: {
+        ...draftProfile.itemSet,
+        items: draftProfile.itemSet.items.map((item) =>
+          item.id === "message-control-id"
+            ? {
+                ...item,
+                action: "validate",
+                transform: { name: "mustEqual", params: { expected: "MSG-1" } },
+              }
+            : item,
+        ),
+      },
+    })
+    const parsedMessage = parseHl7Message(sampleMessage)
+    const mappingResult = executeMapping({
+      parsedMessage,
+      profile: validatedProfile,
+    })
+    const reviewField = buildReviewableFields({
+      mappingResult,
+      profile: validatedProfile,
+    }).find((field) => field.hl7ItemId === "message-control-id")
+    if (!reviewField)
+      throw new Error("Expected message control ID review field.")
+
+    expect(() =>
+      selectMultipleSourcesForReviewableField({
+        profile: validatedProfile,
+        field: reviewField,
+        replacementSources: [
+          createSourceReference({ segment: "PID", field: 3, segmentIndex: 1 }),
+          createSourceReference({ segment: "MSH", field: 3, segmentIndex: 0 }),
+        ],
+        joinSeparator: " / ",
+      }),
+    ).toThrow(
+      "Multiple sources can only replace a plain string extract or join mapping item.",
+    )
   })
 
   it("applies a correction and reruns mapping in one deterministic review flow", () => {

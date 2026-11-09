@@ -89,6 +89,7 @@ export const Hl7ItemSchema = z
     targetPath: NormalizedTargetPathSchema,
     label: z.string().min(1),
     action: Hl7ItemActionSchema,
+    joinSeparator: z.string().max(256).optional(),
     valueType: Hl7ItemValueTypeSchema.default("string"),
     sources: z.array(SourceReferenceSchema).default([]),
     sourceExpectations: z.array(SourceExpectationSchema).default([]),

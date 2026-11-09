@@ -66,7 +66,16 @@ export function applySupportedAction(
   }
 
   if (item.action === "join") {
-    return inputValues.filter((value) => !isMissingValue(value)).join("")
+    if (
+      item.sources.length > 1 &&
+      inputValues.some((value) => isMissingValue(value))
+    ) {
+      return null
+    }
+
+    return inputValues
+      .filter((value) => !isMissingValue(value))
+      .join(item.joinSeparator ?? "")
   }
 
   if (item.action === "extract" || item.action === "validate") {

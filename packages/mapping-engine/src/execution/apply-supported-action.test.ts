@@ -1,4 +1,4 @@
-import type { Hl7Item } from "@hl7-data-mapper/contracts"
+import { createSourceReference, type Hl7Item } from "@hl7-data-mapper/contracts"
 import { describe, expect, it } from "vitest"
 
 import { applySupportedAction } from "./apply-supported-action.js"
@@ -61,5 +61,29 @@ describe("applySupportedAction", () => {
 
   it("returns null when an extract action has no input", () => {
     expect(applySupportedAction(item({}), [], [])).toBeNull()
+  })
+
+  it("requires every source in a combined value while preserving dependency joins", () => {
+    const firstSource = createSourceReference({ segment: "MSH", field: 3 })
+    const secondSource = createSourceReference({ segment: "PID", field: 3 })
+    const combinedItem = item({
+      action: "join",
+      sources: [firstSource, secondSource],
+      joinSeparator: " / ",
+    })
+
+    expect(
+      applySupportedAction(combinedItem, ["NORTHSTAR_LIS", "104892"], []),
+    ).toBe("NORTHSTAR_LIS / 104892")
+    expect(
+      applySupportedAction(combinedItem, ["NORTHSTAR_LIS", null], []),
+    ).toBeNull()
+    expect(
+      applySupportedAction(
+        item({ action: "join", dependsOn: ["first", "second"] }),
+        ["NORTHSTAR_LIS", null],
+        [],
+      ),
+    ).toBe("NORTHSTAR_LIS")
   })
 })
