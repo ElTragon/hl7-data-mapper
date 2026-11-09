@@ -36,13 +36,30 @@ export function buildReportHl7Items(
 export function buildReportReviewDecisions(
   reviewFields: readonly ReviewableField[],
   updatedAt: string,
+  profile: ClientProfile,
 ) {
+  const joinedItemSeparators = new Map<string, string>(
+    profile.itemSet.items
+      .filter((mappingItem) => mappingItem.action === "join")
+      .map(
+        (mappingItem) =>
+          [mappingItem.id, mappingItem.joinSeparator ?? ""] as const,
+      ),
+  )
+
   return reviewFields.map((field) => ({
     fieldId: field.id,
     normalizedPath: field.normalizedPath,
     hl7ItemId: field.hl7ItemId,
     reviewStatus: field.reviewStatus,
     sourcePath: field.primarySource?.path ?? null,
+    sourceReferences: field.sources.map((sourceReference) => ({
+      ...sourceReference,
+      raw: undefined,
+    })),
+    joinSeparator: field.hl7ItemId
+      ? joinedItemSeparators.get(field.hl7ItemId)
+      : undefined,
     correctionApplied: Boolean(field.appliedCorrection),
     reasonCode: field.reasonCode ?? null,
     reviewNote: field.reviewNote ?? null,

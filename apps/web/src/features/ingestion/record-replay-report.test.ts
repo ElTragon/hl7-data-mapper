@@ -169,6 +169,7 @@ async function completedReport(state: ReviewWorkflowState) {
           reviewStatus: "confirmed",
         })),
         occurredAt,
+        state.profile,
       ),
       validationResults: state.mappingResult.validation,
     },

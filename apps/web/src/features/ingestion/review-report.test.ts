@@ -18,6 +18,7 @@ import {
 
 import sampleHl7Message from "../../../../../fixtures/valid/oml-o21-basic.hl7?raw"
 import {
+  buildReportHl7Items,
   buildReportReviewDecisions,
   composeCurrentNormalizedOutput,
 } from "./review-report"
@@ -138,6 +139,7 @@ describe("review report", () => {
             reviewStatus: "confirmed",
           })),
           generatedAt,
+          profile,
         ),
         validationResults: restored.mappingResult.validation,
       }
@@ -165,10 +167,61 @@ describe("review report", () => {
     const updatedAt = "2026-08-19T12:00:00.000Z"
 
     expect(
-      buildReportReviewDecisions(reviewFields, updatedAt).every(
-        (decision) => decision.updatedAt === updatedAt,
-      ),
+      buildReportReviewDecisions(
+        reviewFields,
+        updatedAt,
+        defaultOmlO21ClientProfile,
+      ).every((decision) => decision.updatedAt === updatedAt),
     ).toBe(true)
+  })
+
+  it("exports every source rule without copying raw source text", () => {
+    const parsedMessage = parseHl7Message(sampleHl7Message)
+    const mappingResult = executeMapping({
+      parsedMessage,
+      profile: defaultOmlO21ClientProfile,
+    })
+    const reviewFields = buildReviewableFields({
+      mappingResult,
+      profile: defaultOmlO21ClientProfile,
+    })
+    const patientNameField = reviewFields.find(
+      (reviewField) => reviewField.hl7ItemId === "patient-name",
+    )
+    if (!patientNameField) throw new Error("Patient name review field missing")
+
+    const familyNameSource = createSourceReference({
+      segment: "PID",
+      field: 5,
+      component: 1,
+      segmentIndex: 1,
+      literalSplit: { separator: "-", partNumber: 2 },
+      raw: "private sample value",
+    })
+    const givenNameSource = createSourceReference({
+      segment: "PID",
+      field: 5,
+      component: 2,
+      segmentIndex: 1,
+    })
+    const [reviewDecision] = buildReportReviewDecisions(
+      [
+        {
+          ...patientNameField,
+          primarySource: familyNameSource,
+          sources: [familyNameSource, givenNameSource],
+        },
+      ],
+      "2026-11-05T00:00:00Z",
+      defaultOmlO21ClientProfile,
+    )
+
+    expect(reviewDecision?.sourcePath).toBe("PID-5.1")
+    expect(reviewDecision?.sourceReferences).toEqual([
+      { ...familyNameSource, raw: undefined },
+      { ...givenNameSource, raw: undefined },
+    ])
+    expect(JSON.stringify(reviewDecision)).not.toContain("private sample value")
   })
 
   it("overlays current mapped values without losing normalized metadata", () => {
@@ -232,7 +285,7 @@ it("exports a completed report from current browser review decisions", async () 
         mappingResult,
       }),
       hl7Items: profile.itemSet.items,
-      reviewDecisions: buildReportReviewDecisions(fields, generatedAt),
+      reviewDecisions: buildReportReviewDecisions(fields, generatedAt, profile),
       validationResults: mappingResult.validation,
     },
     () => hash,
@@ -297,13 +350,14 @@ it("exports a completed report after correcting a timestamp while preserving abs
       profileVersion: corrected.profile.profileVersion,
       messageHash: hash,
       normalizedData,
-      hl7Items: corrected.profile.itemSet.items,
+      hl7Items: buildReportHl7Items(corrected.profile, corrected.mappingResult),
       reviewDecisions: buildReportReviewDecisions(
         corrected.reviewFields.map((field) => ({
           ...field,
           reviewStatus: "confirmed",
         })),
         generatedAt,
+        corrected.profile,
       ),
       validationResults: corrected.mappingResult.validation,
     },

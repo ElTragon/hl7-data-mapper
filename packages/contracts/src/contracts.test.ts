@@ -36,6 +36,7 @@ import {
   MappingRunMetadataSchema,
   MappingVersionRecordSchema,
   MAPPING_SUMMARY_CSV_COLUMNS,
+  REPORT_CONTRACT_SCHEMA_VERSION,
   AuditEventRecordSchema,
   HASHED_REPORT_FILE_NAMES,
   REQUIRED_REPORT_FILE_NAMES,
@@ -1326,7 +1327,7 @@ describe("report contracts", () => {
     "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
 
   const manifestInput = {
-    schemaVersion: "1.2.0",
+    schemaVersion: REPORT_CONTRACT_SCHEMA_VERSION,
     appName: "HL7 Data Mapper",
     appVersion: "0.1.0",
     generatedAt: "2026-07-09T00:10:00-07:00",
@@ -1412,6 +1413,9 @@ describe("report contracts", () => {
           hl7ItemId: "patient-name",
           reviewStatus: "confirmed",
           sourcePath: "PID-5.1",
+          sourceReferences: [
+            createSourceReference({ segment: "PID", field: 5, component: 1 }),
+          ],
           correctionApplied: false,
           updatedAt: "2026-07-09T00:11:00-07:00",
         },
@@ -1428,6 +1432,7 @@ describe("report contracts", () => {
       MAPPING_SUMMARY_CSV_COLUMNS,
     )
     expect(reportPlan.reviewDecisions[0]?.sourcePath).toBe("PID-5.1")
+    expect(reportPlan.reviewDecisions[0]?.sourceReferences).toHaveLength(1)
   })
 })
 

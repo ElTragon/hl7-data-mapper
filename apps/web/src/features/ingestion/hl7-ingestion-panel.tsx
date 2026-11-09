@@ -236,6 +236,7 @@ export function Hl7IngestionPanel() {
           reviewDecisions: buildReportReviewDecisions(
             snapshot.reviewFields,
             generatedAt,
+            snapshot.activeProfile,
           ),
           validationResults: snapshot.mappingResult.validation,
         },
