@@ -34,6 +34,27 @@ describe("source options", () => {
     expect(sourceValue(options, "PID-3[2].5")).toBe("MR")
   })
 
+  it("previews the value read from the selected repetition", () => {
+    const parsedMessage = parseHl7Message(`${BASE_MSH}\nPID|1||~SECOND`)
+    const options = buildSourceOptions(parsedMessage)
+
+    expect(sourceValue(options, "PID-3")).toBe("")
+    expect(sourceValue(options, "PID-3[1]")).toBe("")
+    expect(sourceValue(options, "PID-3[2]")).toBe("SECOND")
+    expect(
+      parsedMessage.segments[1]?.fields.find((field) => field.index === 3)?.raw,
+    ).toBe("~SECOND")
+  })
+
+  it("does not present whitespace-only text as a usable source", () => {
+    const options = buildSourceOptions(
+      parseHl7Message(`${BASE_MSH}\nPID|1||MRN-1|   |NEXT`),
+    )
+
+    expect(sourceValue(options, "PID-4")).toBe("")
+    expect(sourceValue(options, "PID-5")).toBe("NEXT")
+  })
+
   it("only creates subcomponent choices when the source contains them", () => {
     const parsedMessage = parseHl7Message(
       `${BASE_MSH}\nPID|1||MRN-1||Lopez^Elena||||||742 Evergreen Ave&Unit 4^^Los Angeles`,

@@ -184,7 +184,11 @@ export function isSameSource(
     left &&
     right &&
     left.path === right.path &&
-    (left.segmentIndex ?? null) === (right.segmentIndex ?? null),
+    (left.segmentIndex ?? null) === (right.segmentIndex ?? null) &&
+    (left.literalSplit?.separator ?? null) ===
+      (right.literalSplit?.separator ?? null) &&
+    (left.literalSplit?.partNumber ?? null) ===
+      (right.literalSplit?.partNumber ?? null),
   )
 }
 
@@ -192,7 +196,9 @@ export function getSegmentKey(segment: Hl7Segment): string {
   return `${segment.name}-${segment.index}`
 }
 
-export function getSourceLevelLabel(source: SourceReference): string {
+export function getSourceLevelLabel(option: SourceOption): string {
+  const source = option.source
+
   if (source.subComponent) {
     return `Subcomponent ${source.subComponent}`
   }
@@ -205,7 +211,7 @@ export function getSourceLevelLabel(source: SourceReference): string {
     return `Repetition ${source.repetition}`
   }
 
-  return "Entire field"
+  return option.valueShape === "repeated" ? "First repetition" : "Entire field"
 }
 
 function getSourceDepth(source: SourceReference): number {
