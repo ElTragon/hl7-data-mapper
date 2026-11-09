@@ -336,6 +336,7 @@ describe("App", () => {
       screen.getByRole("button", { name: /select patient name/i }),
     )
 
+    openPathSearch()
     const sourceSearch = screen.getByRole("textbox", {
       name: /find a source/i,
     })
@@ -388,6 +389,7 @@ describe("App", () => {
     await user.click(
       screen.getByRole("button", { name: /select patient name/i }),
     )
+    openPathSearch()
     await user.click(screen.getByRole("checkbox", { name: /show empty/i }))
     fireEvent.change(screen.getByRole("textbox", { name: /find a source/i }), {
       target: { value: "PID-5.2" },
@@ -483,6 +485,7 @@ describe("App", () => {
     await user.click(
       screen.getByRole("button", { name: /select patient name/i }),
     )
+    openPathSearch()
     await user.click(
       screen.getByRole("button", { name: /build a source path/i }),
     )
@@ -540,6 +543,7 @@ describe("App", () => {
     await user.click(
       screen.getByRole("button", { name: /select patient mrn/i }),
     )
+    openPathSearch()
     await user.click(
       screen.getByRole("button", { name: /build a source path/i }),
     )
@@ -573,6 +577,7 @@ describe("App", () => {
       screen.getByRole("button", { name: /select patient name/i }),
     )
 
+    openPathSearch()
     const sourceSearch = screen.getByRole("textbox", {
       name: /find a source/i,
     })
@@ -606,6 +611,7 @@ describe("App", () => {
     await user.click(
       screen.getByRole("button", { name: /^select laboratory orders$/i }),
     )
+    openPathSearch()
     fireEvent.change(screen.getByRole("textbox", { name: /find a source/i }), {
       target: { value: "OBR-4.1" },
     })
@@ -841,6 +847,7 @@ function getActionButton(label: string): HTMLButtonElement {
 }
 
 function getSourceOption(path: string): HTMLElement {
+  openPathSearch()
   const sourceOption = screen
     .getAllByText(path)
     .map((element) => element.closest<HTMLElement>("[data-source-option]"))
@@ -851,6 +858,15 @@ function getSourceOption(path: string): HTMLElement {
   }
 
   return sourceOption
+}
+
+function openPathSearch(): void {
+  const searchToggle = screen.getByRole("button", {
+    name: /search by path or value/i,
+  })
+  if (searchToggle.getAttribute("aria-expanded") !== "true") {
+    fireEvent.click(searchToggle)
+  }
 }
 
 async function selectNameSourceRole(

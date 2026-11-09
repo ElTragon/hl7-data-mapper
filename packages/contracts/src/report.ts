@@ -7,9 +7,10 @@ import {
   ReviewNoteSchema,
 } from "./review-decision.js"
 import { ReviewStatusSchema } from "./review-status.js"
+import { SourceReferenceSchema } from "./source-reference.js"
 import { ValidationSummarySchema } from "./validation.js"
 
-export const REPORT_CONTRACT_SCHEMA_VERSION = "1.2.0" as const
+export const REPORT_CONTRACT_SCHEMA_VERSION = "1.3.0" as const
 
 export const REQUIRED_REPORT_FILE_NAMES = [
   "REPORT.md",
@@ -66,6 +67,7 @@ export const MappingSummaryCsvColumnSchema = z.enum([
   "transformApplied",
   "reviewReason",
   "reviewNote",
+  "sourceDetails",
 ])
 
 export const MAPPING_SUMMARY_CSV_COLUMNS = [
@@ -78,6 +80,7 @@ export const MAPPING_SUMMARY_CSV_COLUMNS = [
   "transformApplied",
   "reviewReason",
   "reviewNote",
+  "sourceDetails",
 ] as const satisfies readonly MappingSummaryCsvColumn[]
 
 export const ReportFileManifestEntrySchema = z
@@ -150,6 +153,8 @@ export const ReportReviewDecisionSchema = z
     hl7ItemId: z.string().min(1).nullable().optional(),
     reviewStatus: ReviewStatusSchema,
     sourcePath: z.string().min(1).nullable().optional(),
+    sourceReferences: z.array(SourceReferenceSchema).optional(),
+    joinSeparator: z.string().max(256).optional(),
     correctionApplied: z.boolean().default(false),
     reasonCode: ReviewDecisionReasonSchema.nullable().optional(),
     reviewNote: ReviewNoteSchema.nullable().optional(),

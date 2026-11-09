@@ -137,7 +137,8 @@ That includes:
 - missing fields;
 - missing repetitions;
 - missing components;
-- missing subcomponents; and
+- missing subcomponents;
+- missing parts after a configured literal split; and
 - empty source values.
 
 Missing required values, optional-but-empty fields, unsupported transforms,
@@ -210,6 +211,37 @@ locations with enough evidence to make the choice safe:
 For example, if the default patient identifier used `PID-3[1]` but the client
 stores the required MRN in `PID-3[2]`, the correction should update the source
 on the patient identifier `hl7Item`.
+
+The grid is the primary source picker. Path and value search remains available
+under a secondary toggle. The grid shows each segment at its original one-based
+message row and each field under its HL7 field number. Segment, message-row,
+and value/path filters do not renumber the rows. A selected `PID-5.1` in message row 2 is shown
+as `PID(row 2) × 5.1`; the saved `SourceReference` contains the conventional
+path and a zero-based `segmentIndex` of 1. This row coordinate selects the exact
+segment in the current message. The grid search accepts that display coordinate,
+the compact `PID(2)x5.1` form, and `PIDx5.1` for the first matching PID row. If
+a later message moves that segment, a scalar row-pinned rule may need review;
+repeated-record corrections use their separate identity checks described below.
+
+After choosing an HL7 field, repetition, component, or subcomponent, a reviewer
+can configure a literal separator and a one-based part number. The split applies
+to the selected value. A missing part produces `missing_split_part` evidence
+instead of silently using another part. Standard HL7 components should normally
+be selected by their parsed component positions. For a plain `Mario D. Lopez`
+value, splitting on a space can assign parts 3, 1, and 2 to the family, given,
+and middle name roles. Each part keeps its own source expectation.
+
+For a scalar report field mapped by a plain string `extract` or `join` rule,
+reviewers can assemble an ordered list of sources from different message rows
+and fields, choose the exact text between parts, preview the result, and apply
+it to that field's existing normalized target. Date, timestamp, and validated
+rules retain their existing transforms. Person-name parts continue to use their
+named roles. Repeated-record leaf corrections remain single-source because a
+multi-source record correction would need identity anchors for every
+contributing record.
+
+If any selected source is unavailable in a later message, a source-based join
+produces no combined value and reports the missing source for review.
 
 ## Synthetic data boundary
 

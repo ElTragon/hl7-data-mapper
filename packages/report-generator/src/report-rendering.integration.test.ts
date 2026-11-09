@@ -91,10 +91,10 @@ describe("report rendering integration", () => {
       "WARNING missing-specimen: Specimen is recommended.",
     )
     expect(csv).toContain(
-      "section,targetPath,valueStatus,sourcePath,hl7ItemId,reviewStatus,transformApplied,reviewReason,reviewNote",
+      "section,targetPath,valueStatus,sourcePath,hl7ItemId,reviewStatus,transformApplied,reviewReason,reviewNote,sourceDetails",
     )
     expect(csv).toContain(
-      "patient,patient.name,mapping_changed,PID-5.1,patient-name,mapping_changed,source_replaced,Wrong source mapping,Client sends the middle name in a separate PID field.",
+      "patient,patient.name,mapping_changed,PID-5.1,patient-name,mapping_changed,source_replaced,Wrong source mapping,Client sends the middle name in a separate PID field.,PID-5.1",
     )
     expect(csv).toContain(
       'labOrders,labOrders.0.service.display,confirmed,"OBR-4.2,""alternate""",lab-service-display,confirmed,,,',

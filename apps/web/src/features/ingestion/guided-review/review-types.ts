@@ -23,3 +23,9 @@ export type ApplyReviewSource = (
   source: SourceReference,
   sourceRole?: PersonNameSourceRole,
 ) => void
+
+export type ApplyReviewSourceRecipe = (
+  field: ReviewableField,
+  sources: readonly SourceReference[],
+  joinSeparator: string,
+) => void

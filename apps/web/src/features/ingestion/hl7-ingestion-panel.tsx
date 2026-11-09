@@ -236,6 +236,7 @@ export function Hl7IngestionPanel() {
           reviewDecisions: buildReportReviewDecisions(
             snapshot.reviewFields,
             generatedAt,
+            snapshot.activeProfile,
           ),
           validationResults: snapshot.mappingResult.validation,
         },
@@ -560,6 +561,7 @@ export function Hl7IngestionPanel() {
               updateReviewField(updatedField)
             }}
             onApplySource={reviewWorkflow.applySource}
+            onApplySourceRecipe={reviewWorkflow.applySourceRecipe}
             onDownloadReport={() => void handleDownloadReport()}
             onResetDemo={handleResetDemo}
           />

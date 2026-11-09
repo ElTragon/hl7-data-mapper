@@ -18,6 +18,7 @@ import {
   type DemoSnapshotStore,
 } from "./demo-storage"
 import {
+  applyMultipleSourceCorrection,
   applySourceCorrection,
   changeReviewStep,
   createReviewWorkflow,
@@ -210,6 +211,20 @@ export function useIngestionWorkflow({
           field,
           source,
           sourceRole,
+          occurredAt,
+        }),
+      ),
+    applySourceRecipe: (
+      field: ReviewableField,
+      sources: readonly SourceReference[],
+      joinSeparator: string,
+    ) =>
+      commit((current, occurredAt) =>
+        applyMultipleSourceCorrection({
+          state: current,
+          field,
+          sources,
+          joinSeparator,
           occurredAt,
         }),
       ),

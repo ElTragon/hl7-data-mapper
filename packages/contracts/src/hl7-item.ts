@@ -48,6 +48,8 @@ export const SourceExpectationRequirednessSchema = z.enum([
 
 export const SourceExpectationSchema = z.object({
   path: SourceReferenceSchema.shape.path,
+  segmentIndex: SourceReferenceSchema.shape.segmentIndex,
+  literalSplit: SourceReferenceSchema.shape.literalSplit,
   expectedLabel: z.string().min(1),
   requiredness: SourceExpectationRequirednessSchema,
   examples: z.array(z.string().min(1)).default([]),
@@ -87,6 +89,7 @@ export const Hl7ItemSchema = z
     targetPath: NormalizedTargetPathSchema,
     label: z.string().min(1),
     action: Hl7ItemActionSchema,
+    joinSeparator: z.string().max(256).optional(),
     valueType: Hl7ItemValueTypeSchema.default("string"),
     sources: z.array(SourceReferenceSchema).default([]),
     sourceExpectations: z.array(SourceExpectationSchema).default([]),
@@ -99,10 +102,21 @@ export const Hl7ItemSchema = z
     recordCorrectionIdentity: RecordCorrectionIdentitySchema.optional(),
   })
   .superRefine(({ sources, sourceExpectations }, context) => {
-    const sourcePaths = new Set(sources.map((source) => source.path))
-
     sourceExpectations.forEach((expectation, index) => {
-      if (!sourcePaths.has(expectation.path)) {
+      const matchesSource = sources.some(
+        (source) =>
+          source.path === expectation.path &&
+          (expectation.segmentIndex === undefined ||
+            expectation.segmentIndex === null ||
+            expectation.segmentIndex === source.segmentIndex) &&
+          (expectation.literalSplit === undefined ||
+            (expectation.literalSplit.separator ===
+              source.literalSplit?.separator &&
+              expectation.literalSplit.partNumber ===
+                source.literalSplit?.partNumber)),
+      )
+
+      if (!matchesSource) {
         context.addIssue({
           code: "custom",
           message: `Source expectation "${expectation.path}" does not match an hl7Item source.`,

@@ -11,6 +11,12 @@ export const SourceReferenceSchema = z.object({
   component: z.number().int().positive().nullable().optional(),
   subComponent: z.number().int().positive().nullable().optional(),
   segmentIndex: z.number().int().nonnegative().nullable().optional(),
+  literalSplit: z
+    .object({
+      separator: z.string().min(1).max(32),
+      partNumber: z.number().int().positive(),
+    })
+    .optional(),
   raw: z.string().nullable().optional(),
 })
 

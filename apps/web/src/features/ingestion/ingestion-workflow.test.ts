@@ -17,6 +17,7 @@ import {
   mergeReviewFields,
   changeReviewStep,
   createReviewWorkflow,
+  applyMultipleSourceCorrection,
   applySourceCorrection,
   restoreStoredReviewDecisions,
   updateReviewedField,
@@ -320,6 +321,7 @@ it("preserves applied correction history after confirmation and reload", () => {
       buildReportReviewDecisions(
         [{ ...reviewed, reviewStatus }],
         OCCURRED_AT,
+        confirmed.profile,
       )[0]?.correctionApplied,
     ).toBe(true)
   }
@@ -396,9 +398,11 @@ it("retains applied history through a review engine upgrade, save, and report ex
     occurredAt: OCCURRED_AT,
   })
   expect(
-    buildReportReviewDecisions(reloaded.reviewFields, OCCURRED_AT).find(
-      (entry) => entry.fieldId === field.id,
-    )?.correctionApplied,
+    buildReportReviewDecisions(
+      reloaded.reviewFields,
+      OCCURRED_AT,
+      reloaded.profile,
+    ).find((entry) => entry.fieldId === field.id)?.correctionApplied,
   ).toBe(true)
   const hash = "a".repeat(64)
   const report = await buildReportPackage(
@@ -414,6 +418,7 @@ it("retains applied history through a review engine upgrade, save, and report ex
       reviewDecisions: buildReportReviewDecisions(
         reloaded.reviewFields,
         OCCURRED_AT,
+        reloaded.profile,
       ),
       validationResults: reloaded.mappingResult.validation,
     },
@@ -540,6 +545,81 @@ it("ignores stale review values and missing replacement sources", () => {
       applySourceCorrection({ state, field, source, occurredAt: OCCURRED_AT }),
     ).toBe(state)
   }
+})
+
+it("joins sources from different message rows for one report field", () => {
+  const state = createState()
+  const messageControlIdField = state.reviewFields.find(
+    (reviewField) => reviewField.hl7ItemId === "message-control-id",
+  )
+  if (!messageControlIdField) {
+    throw new Error("Expected the message control ID review field")
+  }
+
+  const sources = [
+    createSourceReference({ segment: "MSH", field: 10, segmentIndex: 0 }),
+    createSourceReference({
+      segment: "PID",
+      field: 5,
+      component: 1,
+      segmentIndex: 1,
+    }),
+  ]
+  const correctedState = applyMultipleSourceCorrection({
+    state,
+    field: messageControlIdField,
+    sources,
+    joinSeparator: " / ",
+    occurredAt: OCCURRED_AT,
+  })
+
+  const correctedItem = correctedState.profile.itemSet.items.find(
+    (item) => item.id === "message-control-id",
+  )
+  expect(correctedItem?.sources).toEqual(sources)
+  expect(correctedItem?.joinSeparator).toBe(" / ")
+  expect(correctedState.mappingResult.normalizedDraft).toMatchObject({
+    message: { controlId: "MSG-20260706-0001 / Lopez" },
+  })
+  expect(
+    correctedState.reviewFields.find(
+      (reviewField) => reviewField.hl7ItemId === "message-control-id",
+    )?.reviewStatus,
+  ).toBe("mapping_changed")
+})
+
+it("preserves date normalization when a combined-source correction is attempted", () => {
+  const state = createState()
+  const dateOfBirthField = state.reviewFields.find(
+    (reviewField) => reviewField.hl7ItemId === "patient-date-of-birth",
+  )
+  if (!dateOfBirthField) {
+    throw new Error("Expected the patient date of birth review field")
+  }
+
+  const sources = [
+    createSourceReference({ segment: "PID", field: 7, segmentIndex: 1 }),
+    createSourceReference({
+      segment: "PID",
+      field: 5,
+      component: 1,
+      segmentIndex: 1,
+    }),
+  ]
+  const attemptedState = applyMultipleSourceCorrection({
+    state,
+    field: dateOfBirthField,
+    sources,
+    joinSeparator: " ",
+    occurredAt: OCCURRED_AT,
+  })
+
+  expect(attemptedState).toBe(state)
+  expect(
+    state.profile.itemSet.items.find(
+      (mappingItem) => mappingItem.id === "patient-date-of-birth",
+    ),
+  ).toMatchObject({ action: "normalize_date", valueType: "date" })
 })
 
 it("does not replace an array composer through its exception field", () => {

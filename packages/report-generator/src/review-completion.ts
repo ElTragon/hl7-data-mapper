@@ -1,6 +1,7 @@
 import {
   assessReviewCompletion,
   normalizedPathKind,
+  type SourceReference,
 } from "@hl7-data-mapper/contracts"
 import type { BuildReportPackageInput } from "./types.js"
 
@@ -21,7 +22,12 @@ export function assessReportReview(input: BuildReportPackageInput) {
       (candidate) =>
         candidate?.normalizedPath === item.targetPath &&
         candidate.hl7ItemId === item.id &&
-        (candidate.sourcePath ?? null) === (item.sources[0]?.path ?? null),
+        (candidate.sourcePath ?? null) === (item.sources[0]?.path ?? null) &&
+        (candidate.sourceReferences === undefined
+          ? !requiresFullSourceReferences(item.sources)
+          : sourceReferencesMatch(candidate.sourceReferences, item.sources)) &&
+        (item.action !== "join" ||
+          candidate.joinSeparator === (item.joinSeparator ?? "")),
     )
     return {
       section: item.section,
@@ -39,7 +45,12 @@ export function assessReportReview(input: BuildReportPackageInput) {
       value: null,
       reviewStatus:
         decision?.normalizedPath === path &&
-        (decision.sourcePath ?? null) === (issue.source?.path ?? null)
+        (decision.sourcePath ?? null) === (issue.source?.path ?? null) &&
+        (decision.sourceReferences === undefined ||
+          sourceReferencesMatch(
+            decision.sourceReferences,
+            issue.source ? [issue.source] : [],
+          ))
           ? decision.reviewStatus
           : ("unreviewed" as const),
       validation: [issue],
@@ -89,6 +100,47 @@ export function assessReportReview(input: BuildReportPackageInput) {
     ...result,
     status: fields.length === 0 ? ("interim" as const) : result.status,
   }
+}
+
+function requiresFullSourceReferences(
+  sources: readonly SourceReference[],
+): boolean {
+  return (
+    sources.length > 1 ||
+    sources.some(
+      (source) =>
+        source.literalSplit !== undefined ||
+        (source.segmentIndex !== undefined && source.segmentIndex !== null),
+    )
+  )
+}
+
+function sourceReferencesMatch(
+  reviewedSources: readonly SourceReference[],
+  currentSources: readonly SourceReference[],
+): boolean {
+  if (reviewedSources.length !== currentSources.length) return false
+
+  return reviewedSources.every((reviewedSource, sourceIndex) => {
+    const currentSource = currentSources[sourceIndex]!
+    return (
+      reviewedSource.path === currentSource.path &&
+      reviewedSource.segment === currentSource.segment &&
+      reviewedSource.field === currentSource.field &&
+      (reviewedSource.repetition ?? null) ===
+        (currentSource.repetition ?? null) &&
+      (reviewedSource.component ?? null) ===
+        (currentSource.component ?? null) &&
+      (reviewedSource.subComponent ?? null) ===
+        (currentSource.subComponent ?? null) &&
+      (reviewedSource.segmentIndex ?? null) ===
+        (currentSource.segmentIndex ?? null) &&
+      (reviewedSource.literalSplit?.separator ?? null) ===
+        (currentSource.literalSplit?.separator ?? null) &&
+      (reviewedSource.literalSplit?.partNumber ?? null) ===
+        (currentSource.literalSplit?.partNumber ?? null)
+    )
+  })
 }
 
 function valueAt(root: unknown, path: string): unknown {

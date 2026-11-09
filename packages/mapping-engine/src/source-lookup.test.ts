@@ -55,6 +55,49 @@ describe("source lookup", () => {
     expect(read.status).toBe("found")
   })
 
+  it("takes a one-based part after a literal split and keeps the raw field", () => {
+    const parsedMessage = parseHl7Message(messageWithTwoOrders)
+    const read = readSource(
+      parsedMessage,
+      createSourceReference({
+        segment: "PID",
+        field: 3,
+        component: 1,
+        literalSplit: { separator: "-", partNumber: 2 },
+      }),
+    )
+
+    expect(read).toMatchObject({
+      value: "104892",
+      status: "found",
+      rawField: "MRN-104892^^^NORTHSTAR_LAB^MR",
+      source: {
+        path: "PID-3.1",
+        literalSplit: { separator: "-", partNumber: 2 },
+      },
+    })
+  })
+
+  it("reports when the requested literal split part does not exist", () => {
+    const parsedMessage = parseHl7Message(messageWithTwoOrders)
+    const read = readSource(
+      parsedMessage,
+      createSourceReference({
+        segment: "PID",
+        field: 3,
+        component: 1,
+        literalSplit: { separator: "-", partNumber: 3 },
+      }),
+    )
+
+    expect(read).toMatchObject({
+      value: null,
+      status: "missing_split_part",
+      segmentIndex: 1,
+      rawField: "MRN-104892^^^NORTHSTAR_LAB^MR",
+    })
+  })
+
   it("reports missing source parts without throwing", () => {
     const parsedMessage = parseHl7Message(messageWithTwoOrders)
     const read = readSource(

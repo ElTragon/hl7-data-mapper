@@ -8,6 +8,7 @@ export type Hl7SourceReadStatus =
   | "missing_repetition"
   | "missing_component"
   | "missing_subcomponent"
+  | "missing_split_part"
   | "empty"
 
 export type Hl7SourceRead = {
@@ -146,7 +147,16 @@ function createFoundRead(
   segment: Hl7Segment,
   rawField: string,
 ): Hl7SourceRead {
-  const normalizedValue = emptyToNull(value)
+  const literalSplit = source.literalSplit
+  const selectedValue = literalSplit
+    ? value.split(literalSplit.separator)[literalSplit.partNumber - 1]
+    : value
+
+  if (selectedValue === undefined) {
+    return createMissingRead(source, "missing_split_part", segment, rawField)
+  }
+
+  const normalizedValue = emptyToNull(selectedValue)
 
   return {
     source,

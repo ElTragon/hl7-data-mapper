@@ -19,6 +19,7 @@ import {
   readSource,
   selectAlternateSourceForReviewableField,
   selectCompositeSourceForReviewableField,
+  selectMultipleSourcesForReviewableField,
   type MappingExecutionResult,
   type PersonNameSourceRole,
 } from "@hl7-data-mapper/mapping-engine"
@@ -174,6 +175,81 @@ export function applySourceCorrection({
         rawSegment: source.raw,
         notes: `Use ${replacementSource.path} for ${field.normalizedPath}.`,
       })
+  return applyCorrectedReviewField({ state, field, correctedField, occurredAt })
+}
+
+export function applyMultipleSourceCorrection({
+  state,
+  field,
+  sources,
+  joinSeparator,
+  occurredAt,
+}: {
+  readonly state: ReviewWorkflowState
+  readonly field: ReviewableField
+  readonly sources: readonly SourceReference[]
+  readonly joinSeparator: string
+  readonly occurredAt: string
+}): ReviewWorkflowState {
+  const currentField = state.reviewFields.find(
+    (candidateField) => candidateField.id === field.id,
+  )
+  if (
+    !currentField ||
+    fieldEvidence(currentField, state.profile) !==
+      fieldEvidence(field, state.profile) ||
+    !field.hl7ItemId ||
+    sources.length < 2 ||
+    Array.isArray(field.value) ||
+    normalizedPathKind(field.normalizedPath) !== "string" ||
+    field.normalizedPath.includes("[")
+  ) {
+    return state
+  }
+  const targetMappingItem = state.profile.itemSet.items.find(
+    (mappingItem) => mappingItem.id === field.hl7ItemId,
+  )
+  if (
+    targetMappingItem?.valueType !== "string" ||
+    (targetMappingItem.action !== "extract" &&
+      targetMappingItem.action !== "join") ||
+    targetMappingItem.transform
+  ) {
+    return state
+  }
+
+  const everySourceHasValue = sources.every((source) => {
+    const sourceRead = readSource(state.parsedMessage, source)
+    return sourceRead.status === "found" && Boolean(sourceRead.value?.trim())
+  })
+  if (!everySourceHasValue) return state
+
+  const replacementSources = sources.map((source) => ({
+    ...source,
+    raw: undefined,
+  }))
+  const correctedField = selectMultipleSourcesForReviewableField({
+    profile: state.profile,
+    field,
+    replacementSources,
+    joinSeparator,
+    notes: `Join ${replacementSources.map((source) => source.path).join(", ")} for ${field.normalizedPath}.`,
+  })
+
+  return applyCorrectedReviewField({ state, field, correctedField, occurredAt })
+}
+
+function applyCorrectedReviewField({
+  state,
+  field,
+  correctedField,
+  occurredAt,
+}: {
+  readonly state: ReviewWorkflowState
+  readonly field: ReviewableField
+  readonly correctedField: ReviewableField
+  readonly occurredAt: string
+}): ReviewWorkflowState {
   const result = applyReviewCorrectionAndRerunMapping({
     parsedMessage: state.parsedMessage,
     profile: state.profile,

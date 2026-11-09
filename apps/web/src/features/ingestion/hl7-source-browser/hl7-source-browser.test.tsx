@@ -1,18 +1,381 @@
-import { fireEvent, render, screen } from "@testing-library/react"
+import { fireEvent, render, screen, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import {
   createSourceReference,
   type ReviewableField,
 } from "@hl7-data-mapper/contracts"
 import { parseHl7Message } from "@hl7-data-mapper/hl7-parser"
+import { defaultOmlO21ClientProfile } from "@hl7-data-mapper/mapping-engine"
 import { describe, expect, it, vi } from "vitest"
 
 import { Hl7SourceBrowser } from "./hl7-source-browser"
+import { SourceRecipeEditor } from "./source-recipe-editor"
 
 const BASE_MSH =
   "MSH|^~\\&|SEND|FAC|RECV|FAC|20260706101500-0700||OML^O21^OML_O21|MSG-1|P|2.5.1"
 
 describe("HL7 source browser", () => {
+  it("finds a named field through the grid while preserving the message row", async () => {
+    const user = userEvent.setup()
+    const parsedMessage = parseHl7Message(
+      `${BASE_MSH}\nPID|1||MRN-1||Lopez^Mario^D.`,
+    )
+    const onApplySource = vi.fn()
+
+    render(
+      <Hl7SourceBrowser
+        parsedMessage={parsedMessage}
+        field={createReviewField()}
+        onApplySource={onApplySource}
+      />,
+    )
+
+    expect(
+      screen.queryByRole("textbox", { name: "Find a source" }),
+    ).not.toBeInTheDocument()
+    await user.click(
+      screen.getByRole("button", { name: "Browse message as a grid" }),
+    )
+    await user.selectOptions(screen.getByLabelText("Segment"), "PID")
+    expect(screen.getByText("2", { selector: "td" })).toBeInTheDocument()
+    await user.type(
+      screen.getByRole("textbox", { name: "Find value or path" }),
+      "PID(row 2) × 5.2",
+    )
+    expect(screen.getByText("1 message row")).toBeInTheDocument()
+    await user.click(
+      screen.getByRole("button", {
+        name: "PID message row 2, field 5: Lopez^Mario^D.",
+      }),
+    )
+    await user.click(
+      screen.getByRole("button", {
+        name: /PID\(row 2\) × 5\.2.*Mario/,
+      }),
+    )
+    await user.click(
+      screen.getByRole("button", { name: "Preview this source" }),
+    )
+
+    const selectedPreview = screen
+      .getByText("Selected source")
+      .closest<HTMLElement>("[data-selected-source-preview]")
+    expect(selectedPreview).toHaveTextContent("PID(row 2) × 5.2")
+    expect(selectedPreview).toHaveTextContent("Given")
+    await user.click(
+      within(selectedPreview!).getByRole("button", { name: "Use this source" }),
+    )
+    expect(onApplySource).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        path: "PID-5.2",
+        segmentIndex: 1,
+      }),
+      "given",
+    )
+  })
+
+  it("does not preview a source hidden by grid filters", async () => {
+    const user = userEvent.setup()
+    const parsedMessage = parseHl7Message(
+      `${BASE_MSH}\nPID|1||MRN-1||Lopez^Mario\nORC|NW|ORDER-1`,
+    )
+
+    render(
+      <Hl7SourceBrowser
+        parsedMessage={parsedMessage}
+        field={createReviewField()}
+        onApplySource={vi.fn()}
+      />,
+    )
+
+    await user.click(
+      screen.getByRole("button", { name: "Browse message as a grid" }),
+    )
+    const previewSourceButton = screen.getByRole("button", {
+      name: "Preview this source",
+    })
+    expect(previewSourceButton).toBeEnabled()
+
+    await user.selectOptions(screen.getByLabelText("Segment"), "ORC")
+    expect(previewSourceButton).toBeDisabled()
+    expect(screen.getByText("Choose a field in the grid")).toBeInTheDocument()
+
+    await user.type(
+      screen.getByRole("textbox", { name: "Find value or path" }),
+      "PID(row 2) × 5.2",
+    )
+    expect(screen.getByText("1 message row")).toBeInTheDocument()
+    expect(screen.getByLabelText("Segment")).toHaveValue("")
+    expect(screen.getByRole("spinbutton", { name: "Message row" })).toHaveValue(
+      null,
+    )
+    expect(previewSourceButton).toBeEnabled()
+
+    await user.clear(
+      screen.getByRole("textbox", { name: "Find value or path" }),
+    )
+    expect(previewSourceButton).toBeEnabled()
+  })
+
+  it("explains the first-repetition behavior for a repeated grid field", async () => {
+    const user = userEvent.setup()
+    const parsedMessage = parseHl7Message(
+      `${BASE_MSH}\nPID|1||LOCAL~MRN-2||Lopez^Mario`,
+    )
+    render(
+      <Hl7SourceBrowser
+        parsedMessage={parsedMessage}
+        field={createReviewField()}
+        onApplySource={vi.fn()}
+      />,
+    )
+
+    await user.click(
+      screen.getByRole("button", { name: "Browse message as a grid" }),
+    )
+    await user.click(
+      screen.getByRole("button", {
+        name: "PID message row 2, field 3: LOCAL~MRN-2",
+      }),
+    )
+
+    expect(
+      screen.getByText(/An unnumbered field reads its first repetition/),
+    ).toBeInTheDocument()
+  })
+
+  it("does not preview an empty current source hidden by grid options", async () => {
+    const user = userEvent.setup()
+    const parsedMessage = parseHl7Message(
+      `${BASE_MSH}\nPID|1||MRN-1||Lopez^Mario^`,
+    )
+    const emptyMiddleSource = createSourceReference({
+      segment: "PID",
+      field: 5,
+      component: 3,
+      segmentIndex: 1,
+    })
+    render(
+      <Hl7SourceBrowser
+        parsedMessage={parsedMessage}
+        field={createReviewField({
+          primarySource: emptyMiddleSource,
+          sources: [emptyMiddleSource],
+        })}
+        onApplySource={vi.fn()}
+      />,
+    )
+
+    await user.click(
+      screen.getByRole("button", { name: "Browse message as a grid" }),
+    )
+    expect(
+      screen.getByRole("button", { name: "Preview this source" }),
+    ).toBeDisabled()
+  })
+
+  it("splits one selected part and combines values from different rows", async () => {
+    const user = userEvent.setup()
+    const parsedMessage = parseHl7Message(
+      `${BASE_MSH}\nPID|1||MRN-104892^^^LAB^MR||Lopez^Mario`,
+    )
+    const onApplySourceRecipe = vi.fn()
+    const messageControlIdSource = createSourceReference({
+      segment: "MSH",
+      field: 10,
+      segmentIndex: 0,
+    })
+    const { container } = render(
+      <Hl7SourceBrowser
+        parsedMessage={parsedMessage}
+        profile={defaultOmlO21ClientProfile}
+        field={createReviewField({
+          id: "message-control-id",
+          section: "sender",
+          normalizedPath: "message.controlId",
+          label: "Message control ID",
+          value: "MSG-1",
+          hl7ItemId: "message-control-id",
+          primarySource: messageControlIdSource,
+          sources: [messageControlIdSource],
+        })}
+        onApplySource={vi.fn()}
+        onApplySourceRecipe={onApplySourceRecipe}
+      />,
+    )
+
+    await user.click(
+      screen.getByRole("button", { name: /Search by path or value/ }),
+    )
+    await user.clear(screen.getByRole("textbox", { name: "Find a source" }))
+    await user.type(
+      screen.getByRole("textbox", { name: "Find a source" }),
+      "PID-3.1",
+    )
+    await user.click(
+      within(
+        container.querySelector('[data-source-option="PID-3.1"]')!,
+      ).getByRole("button", { name: "Select" }),
+    )
+    await user.type(
+      screen.getByRole("textbox", { name: "Split by (optional)" }),
+      "-",
+    )
+    await user.clear(screen.getByRole("spinbutton", { name: "Take part" }))
+    await user.type(screen.getByRole("spinbutton", { name: "Take part" }), "2")
+    expect(screen.getByText("104892")).toBeInTheDocument()
+    await user.click(
+      screen.getByRole("button", { name: "Add to combined value" }),
+    )
+
+    await user.clear(screen.getByRole("textbox", { name: "Find a source" }))
+    await user.type(
+      screen.getByRole("textbox", { name: "Find a source" }),
+      "MSH-3",
+    )
+    await user.click(
+      within(
+        container.querySelector('[data-source-option="MSH-3"]')!,
+      ).getByRole("button", { name: "Select" }),
+    )
+    await user.click(
+      screen.getByRole("button", { name: "Add to combined value" }),
+    )
+    await user.type(screen.getByRole("textbox", { name: "Join with" }), " / ")
+    expect(screen.getByText("104892 / SEND")).toBeInTheDocument()
+    await user.click(screen.getByRole("button", { name: "Use combined value" }))
+
+    expect(onApplySourceRecipe).toHaveBeenCalledWith(
+      expect.anything(),
+      [
+        expect.objectContaining({
+          path: "PID-3.1",
+          segmentIndex: 1,
+          literalSplit: { separator: "-", partNumber: 2 },
+        }),
+        expect.objectContaining({ path: "MSH-3", segmentIndex: 0 }),
+      ],
+      " / ",
+    )
+  })
+
+  it("blocks a whitespace-only split part before applying it", async () => {
+    const user = userEvent.setup()
+    const parsedMessage = parseHl7Message(
+      `${BASE_MSH}\nPID|1||MRN-   ||Lopez^Mario`,
+    )
+    const { container } = render(
+      <Hl7SourceBrowser
+        parsedMessage={parsedMessage}
+        profile={defaultOmlO21ClientProfile}
+        field={createReviewField({
+          id: "message-control-id",
+          section: "sender",
+          normalizedPath: "message.controlId",
+          label: "Message control ID",
+          value: "MSG-1",
+          hl7ItemId: "message-control-id",
+        })}
+        onApplySource={vi.fn()}
+        onApplySourceRecipe={vi.fn()}
+      />,
+    )
+
+    await user.click(
+      screen.getByRole("button", { name: /Search by path or value/ }),
+    )
+    await user.clear(screen.getByRole("textbox", { name: "Find a source" }))
+    await user.type(
+      screen.getByRole("textbox", { name: "Find a source" }),
+      "PID-3",
+    )
+    await user.click(
+      within(
+        container.querySelector('[data-source-option="PID-3"]')!,
+      ).getByRole("button", { name: "Select" }),
+    )
+    await user.type(
+      screen.getByRole("textbox", { name: "Split by (optional)" }),
+      "-",
+    )
+    await user.clear(screen.getByRole("spinbutton", { name: "Take part" }))
+    await user.type(screen.getByRole("spinbutton", { name: "Take part" }), "2")
+
+    expect(
+      screen.getByText("This selection has no usable text."),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole("button", { name: "Use this source" }),
+    ).toBeDisabled()
+    expect(
+      screen.getByRole("button", { name: "Add to combined value" }),
+    ).toBeDisabled()
+  })
+
+  it("blocks a combined recipe when one source contains only spaces", () => {
+    const parsedMessage = parseHl7Message(
+      `${BASE_MSH}\nPID|1||MRN-   ||Lopez^Mario`,
+    )
+    render(
+      <SourceRecipeEditor
+        parsedMessage={parsedMessage}
+        sources={[
+          createSourceReference({ segment: "MSH", field: 3, segmentIndex: 0 }),
+          createSourceReference({
+            segment: "PID",
+            field: 3,
+            segmentIndex: 1,
+            literalSplit: { separator: "-", partNumber: 2 },
+          }),
+        ]}
+        joinSeparator=" / "
+        onJoinSeparatorChange={vi.fn()}
+        onMoveSource={vi.fn()}
+        onRemoveSource={vi.fn()}
+        onApply={vi.fn()}
+      />,
+    )
+
+    expect(
+      screen.getByRole("button", { name: "Use combined value" }),
+    ).toBeDisabled()
+  })
+
+  it("does not offer a combined source for a date mapping item", () => {
+    const parsedMessage = parseHl7Message(
+      `${BASE_MSH}\nPID|1||MRN-1||Lopez^Mario||19870514`,
+    )
+    const dateOfBirthSource = createSourceReference({
+      segment: "PID",
+      field: 7,
+      component: 1,
+      segmentIndex: 1,
+    })
+
+    render(
+      <Hl7SourceBrowser
+        parsedMessage={parsedMessage}
+        profile={defaultOmlO21ClientProfile}
+        field={createReviewField({
+          id: "patient-date-of-birth",
+          normalizedPath: "patient.dateOfBirth",
+          label: "Patient date of birth",
+          value: "1987-05-14",
+          hl7ItemId: "patient-date-of-birth",
+          primarySource: dateOfBirthSource,
+          sources: [dateOfBirthSource],
+        })}
+        onApplySource={vi.fn()}
+        onApplySourceRecipe={vi.fn()}
+      />,
+    )
+
+    expect(
+      screen.queryByRole("button", { name: /Combine sources/ }),
+    ).not.toBeInTheDocument()
+  })
+
   it("counts only empty sources that match the active search", () => {
     const parsedMessage = parseHl7Message(`${BASE_MSH}\nPID|1||MRN-1||Lopez^`)
 
@@ -24,6 +387,9 @@ describe("HL7 source browser", () => {
       />,
     )
 
+    fireEvent.click(
+      screen.getByRole("button", { name: /Search by path or value/ }),
+    )
     fireEvent.change(screen.getByRole("textbox", { name: /find a source/i }), {
       target: { value: "PID-5.2" },
     })
@@ -57,6 +423,9 @@ describe("HL7 source browser", () => {
       />,
     )
 
+    await user.click(
+      screen.getByRole("button", { name: /Search by path or value/ }),
+    )
     await user.click(
       screen.getByRole("button", { name: /build a source path/i }),
     )
@@ -125,6 +494,9 @@ describe("HL7 source browser", () => {
     )
 
     await user.click(
+      screen.getByRole("button", { name: /Search by path or value/ }),
+    )
+    await user.click(
       screen.getByRole("button", { name: "Middle", pressed: false }),
     )
     await user.click(
@@ -182,6 +554,9 @@ it("resets search when the review field is replaced", () => {
       onApplySource={onApplySource}
     />,
   )
+  fireEvent.click(
+    screen.getByRole("button", { name: /Search by path or value/ }),
+  )
   fireEvent.change(screen.getByRole("textbox", { name: /find a source/i }), {
     target: { value: "Elena" },
   })
@@ -194,6 +569,12 @@ it("resets search when the review field is replaced", () => {
       }}
       onApplySource={onApplySource}
     />,
+  )
+  expect(
+    screen.queryByRole("textbox", { name: /find a source/i }),
+  ).not.toBeInTheDocument()
+  fireEvent.click(
+    screen.getByRole("button", { name: /Search by path or value/ }),
   )
   expect(screen.getByRole("textbox", { name: /find a source/i })).toHaveValue(
     "MSH",

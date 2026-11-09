@@ -28,13 +28,21 @@ async function parseSample(page: Page) {
   await expect(page.getByText("Message can continue to review")).toBeVisible()
 }
 
+async function fillSourceSearch(page: Page, searchText: string) {
+  const sourceSearch = page.getByLabel("Find a source")
+  if (!(await sourceSearch.isVisible())) {
+    await page.getByRole("button", { name: /Search by path or value/ }).click()
+  }
+  await sourceSearch.fill(searchText)
+}
+
 async function correctPatientName(page: Page) {
   await page.getByRole("button", { name: "Select Patient name" }).click()
   await page
     .getByRole("group", { name: "Map selected source to" })
     .getByRole("button", { name: "Middle" })
     .click()
-  await page.getByLabel("Find a source").fill("PID-5.2")
+  await fillSourceSearch(page, "PID-5.2")
   await page
     .locator('[data-source-option="PID-5.2"]')
     .getByRole("button", { name: "Select" })
@@ -58,14 +66,179 @@ async function readZip(download: Download) {
     expect(entry, `ZIP contains ${name}`).toBeDefined()
     return JSON.parse(new TextDecoder().decode(entry))
   }
+  const text = (name: string) => {
+    const entry = Object.entries(entries).find(([path]) =>
+      path.endsWith(`/${name}`),
+    )?.[1]
+    expect(entry, `ZIP contains ${name}`).toBeDefined()
+    return new TextDecoder().decode(entry)
+  }
   return {
     manifest: json("manifest.json"),
     decisions: json("review-decisions.json"),
     items: json("hl7-items.json"),
     normalized: json("normalized-data.json"),
     validation: json("validation-results.json"),
+    mappingSummary: text("mapping-summary.csv"),
   }
 }
+
+test("grid selection and a split value flow into a combined report field", async ({
+  page,
+}) => {
+  await parseSample(page)
+  await page.getByRole("button", { name: /Sender\/client information/ }).click()
+  await page.getByRole("button", { name: "Select Message control ID" }).click()
+
+  await page.getByRole("button", { name: "Browse message as a grid" }).click()
+  const sourceGrid = page.getByRole("dialog", { name: "Browse HL7 message" })
+  await sourceGrid.getByLabel("Segment").selectOption("PID")
+  await sourceGrid.getByRole("spinbutton", { name: "Message row" }).fill("2")
+  await sourceGrid
+    .getByRole("button", { name: /PID message row 2, field 3:/ })
+    .click()
+  await sourceGrid
+    .getByRole("button", { name: /PID\(row 2\) × 3\.1.*MRN-104892/ })
+    .click()
+  await sourceGrid.getByRole("button", { name: "Preview this source" }).click()
+
+  await page.getByRole("textbox", { name: "Split by (optional)" }).fill("-")
+  await page.getByRole("spinbutton", { name: "Take part" }).fill("2")
+  await expect(page.locator("[data-selected-source-preview]")).toContainText(
+    "104892",
+  )
+  await page.getByRole("button", { name: "Add to combined value" }).click()
+
+  await fillSourceSearch(page, "MSH-3")
+  await page
+    .locator('[data-source-option="MSH-3"]')
+    .getByRole("button", { name: "Select" })
+    .click()
+  await page.getByRole("button", { name: "Add to combined value" }).click()
+  await page.getByRole("textbox", { name: "Join with" }).fill(" / ")
+  await expect(page.getByText("104892 / NORTHSTAR_LIS")).toBeVisible()
+  await page.getByRole("button", { name: "Use combined value" }).click()
+
+  const messageControlIdCard = page.locator("[data-review-field-card]").filter({
+    has: page.getByRole("button", { name: "Select Message control ID" }),
+  })
+  await expect(messageControlIdCard).toContainText("104892 / NORTHSTAR_LIS")
+  await expect(messageControlIdCard).toContainText("Mapping changed")
+
+  await page.reload()
+  await page.getByRole("button", { name: "Parse message" }).click()
+  await page.getByRole("button", { name: /Sender\/client information/ }).click()
+  await expect(messageControlIdCard).toContainText("104892 / NORTHSTAR_LIS")
+
+  const downloadPromise = page.waitForEvent("download")
+  await page
+    .getByRole("button", { name: "Download interim report ZIP" })
+    .click()
+  const report = await readZip(await downloadPromise)
+  expect(report.normalized.message.controlId).toBe("104892 / NORTHSTAR_LIS")
+  const exportedControlIdMapping = report.items.find(
+    (item: { id: string }) => item.id === "message-control-id",
+  )
+  expect(exportedControlIdMapping.joinSeparator).toBe(" / ")
+  expect(exportedControlIdMapping.sources).toEqual([
+    expect.objectContaining({
+      path: "PID-3.1",
+      segmentIndex: 1,
+      literalSplit: { separator: "-", partNumber: 2 },
+    }),
+    expect.objectContaining({ path: "MSH-3", segmentIndex: 0 }),
+  ])
+  const exportedControlIdDecision = report.decisions.find(
+    (decision: { fieldId: string }) =>
+      decision.fieldId === "message-control-id",
+  )
+  expect(exportedControlIdDecision.sourceReferences).toEqual(
+    exportedControlIdMapping.sources,
+  )
+  expect(exportedControlIdDecision.joinSeparator).toBe(" / ")
+  expect(report.mappingSummary).toContain('join with "" / ""')
+})
+
+test("separate parts of one plain name field keep their name roles", async ({
+  page,
+}) => {
+  const sampleMessage = await readFile(fixture, "utf8")
+  expect(sampleMessage).toContain("Lopez^Elena^M")
+
+  await page.goto("/")
+  await page
+    .getByLabel("Editable HL7 message")
+    .fill(sampleMessage.replace("Lopez^Elena^M", "Mario D. Lopez"))
+  await page.getByRole("button", { name: "Parse message" }).click()
+  await page.getByRole("button", { name: "Select Patient name" }).click()
+
+  async function useNamePart(role: string, partNumber: number) {
+    await page
+      .getByRole("group", { name: "Map selected source to" })
+      .getByRole("button", { name: role })
+      .click()
+    await page.getByRole("button", { name: "Browse message as a grid" }).click()
+    const sourceGrid = page.getByRole("dialog", { name: "Browse HL7 message" })
+    await sourceGrid.getByLabel("Segment").selectOption("PID")
+    await sourceGrid.getByRole("spinbutton", { name: "Message row" }).fill("2")
+    await sourceGrid
+      .getByRole("button", { name: /PID message row 2, field 5:/ })
+      .click()
+    await sourceGrid
+      .getByRole("button", { name: /PID\(row 2\) × 5 PID-5/ })
+      .click()
+    await sourceGrid
+      .getByRole("button", { name: "Preview this source" })
+      .click()
+    await page.getByRole("textbox", { name: "Split by (optional)" }).fill(" ")
+    await page
+      .getByRole("spinbutton", { name: "Take part" })
+      .fill(String(partNumber))
+    await page.getByRole("button", { name: "Use this source" }).click()
+  }
+
+  await useNamePart("Family", 3)
+  await useNamePart("Given", 1)
+  await useNamePart("Middle", 2)
+
+  const patientNameCard = page.locator("[data-review-field-card]").filter({
+    has: page.getByRole("button", { name: "Select Patient name" }),
+  })
+  await expect(patientNameCard).toContainText("Lopez")
+  await expect(patientNameCard).toContainText("Mario")
+  await expect(patientNameCard).toContainText("D.")
+
+  const currentSourceReads = page
+    .getByText("Current source reads")
+    .locator("..")
+  await expect(
+    currentSourceReads.getByText("Patient family name"),
+  ).toBeVisible()
+  await expect(currentSourceReads.getByText("Patient given name")).toBeVisible()
+  await expect(
+    currentSourceReads.getByText("Patient middle name or initial"),
+  ).toBeVisible()
+  await expect(
+    currentSourceReads.getByText('Split on " ", part 3'),
+  ).toBeVisible()
+  await expect(
+    currentSourceReads.getByText('Split on " ", part 1'),
+  ).toBeVisible()
+  await expect(
+    currentSourceReads.getByText('Split on " ", part 2'),
+  ).toBeVisible()
+
+  const downloadPromise = page.waitForEvent("download")
+  await page
+    .getByRole("button", { name: "Download interim report ZIP" })
+    .click()
+  const report = await readZip(await downloadPromise)
+  expect(report.normalized.patient.name).toMatchObject({
+    family: "Lopez",
+    given: "Mario",
+    middle: "D.",
+  })
+})
 
 test("upload, correct, reload, and export retain the reviewed source", async ({
   page,
@@ -243,6 +416,24 @@ test("review controls remain usable at a phone width", async ({
     overflow.documentWidth,
     overflow.offenders.join("\n"),
   ).toBeLessThanOrEqual(overflow.viewportWidth)
+  await page.getByRole("button", { name: "Browse message as a grid" }).click()
+  const sourceGrid = page.getByRole("dialog", { name: "Browse HL7 message" })
+  await expect(sourceGrid).toBeVisible()
+  await sourceGrid.getByRole("spinbutton", { name: "Message row" }).fill("2")
+  await expect(
+    sourceGrid.getByRole("button", { name: /PID message row 2, field 5:/ }),
+  ).toBeVisible()
+  const gridOverflow = await page.evaluate(() => ({
+    documentWidth: document.documentElement.scrollWidth,
+    viewportWidth: document.documentElement.clientWidth,
+  }))
+  expect(gridOverflow.documentWidth).toBeLessThanOrEqual(
+    gridOverflow.viewportWidth,
+  )
+  await sourceGrid.screenshot({
+    path: testInfo.outputPath("source-grid-phone.png"),
+  })
+  await page.keyboard.press("Escape")
   await page
     .getByRole("button", { name: "Reset demo draft" })
     .scrollIntoViewIfNeeded()
@@ -259,7 +450,7 @@ test("a record field correction survives reload and export without changing sibl
       exact: true,
     })
     .click()
-  await page.getByLabel("Find a source").fill("PID-11.4")
+  await fillSourceSearch(page, "PID-11.4")
   await page
     .locator('[data-source-option="PID-11.4"]')
     .getByRole("button", { name: "Select", exact: true })
@@ -297,7 +488,7 @@ test("a repeated address correction follows its source after the first repetitio
       exact: true,
     })
     .click()
-  await page.getByLabel("Find a source").fill("PID-11[2].4")
+  await fillSourceSearch(page, "PID-11[2].4")
   await page
     .locator('[data-source-option="PID-11[2].4"]')
     .getByRole("button", { name: "Select", exact: true })
@@ -338,7 +529,7 @@ test("a legacy record correction stays in the draft but blocks replay", async ({
       exact: true,
     })
     .click()
-  await page.getByLabel("Find a source").fill("PID-11.4")
+  await fillSourceSearch(page, "PID-11.4")
   await page
     .locator('[data-source-option="PID-11.4"]')
     .getByRole("button", { name: "Select", exact: true })
@@ -395,7 +586,7 @@ test("relocated and newly added corrections survive reload and completed export"
       has: page.getByText("patient.addresses[0].city", { exact: true }),
     })
     await card.getByRole("button", { name: /^Select / }).click()
-    await page.getByLabel("Find a source").fill(source)
+    await fillSourceSearch(page, source)
     await page
       .locator(`[data-source-option="${source}"]`)
       .getByRole("button", { name: "Select", exact: true })
@@ -494,7 +685,7 @@ test("two address corrections retain distinct review IDs when the first repetiti
         exact: true,
       })
       .click()
-    await page.getByLabel("Find a source").fill(source)
+    await fillSourceSearch(page, source)
     await page
       .locator(`[data-source-option="${source}"]`)
       .getByRole("button", { name: "Select", exact: true })
@@ -545,7 +736,7 @@ test("switching review fields clears an uncommitted source selection", async ({
       exact: true,
     })
     .click()
-  await page.getByLabel("Find a source").fill("PID-11.4")
+  await fillSourceSearch(page, "PID-11.4")
   await page
     .locator('[data-source-option="PID-11.4"]')
     .getByRole("button", { name: "Select", exact: true })
@@ -619,7 +810,7 @@ test("record corrections preserve absent objects and clear corrected timestamp e
       exact: true,
     })
     .click()
-  await page.getByLabel("Find a source").fill("PID-5.2")
+  await fillSourceSearch(page, "PID-5.2")
   await expect(
     page
       .locator('[data-source-option="PID-5.2"]')
@@ -631,7 +822,7 @@ test("record corrections preserve absent objects and clear corrected timestamp e
       exact: true,
     })
     .click()
-  await page.getByLabel("Find a source").fill("MSH-7")
+  await fillSourceSearch(page, "MSH-7")
   await page
     .locator('[data-source-option="MSH-7"]')
     .getByRole("button", { name: "Select", exact: true })

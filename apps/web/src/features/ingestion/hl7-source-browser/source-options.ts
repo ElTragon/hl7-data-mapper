@@ -3,7 +3,6 @@ import {
   type SourceReference,
 } from "@hl7-data-mapper/contracts"
 import type {
-  Hl7Component,
   Hl7Field,
   Hl7Repetition,
   Hl7Segment,
@@ -95,7 +94,6 @@ function fieldToSourceOptions({
           segmentOccurrence,
           orderGroup,
           field,
-          repetition,
           repetitionIndex: sourceRepetitionIndex,
           valueShape: repetitionShape(repetition),
         }),
@@ -114,9 +112,7 @@ function fieldToSourceOptions({
           segmentOccurrence,
           orderGroup,
           field,
-          repetition,
           repetitionIndex: sourceRepetitionIndex,
-          component,
           componentIndex: componentIndex + 1,
           valueShape:
             component.subComponents.length > 1 ? "composite" : "scalar",
@@ -135,9 +131,7 @@ function fieldToSourceOptions({
             segmentOccurrence,
             orderGroup,
             field,
-            repetition,
             repetitionIndex: sourceRepetitionIndex,
-            component,
             componentIndex: componentIndex + 1,
             subComponentIndex: subComponentIndex + 1,
             valueShape: "scalar",
@@ -156,9 +150,7 @@ function createSourceOption({
   segmentOccurrence,
   orderGroup,
   field,
-  repetition,
   repetitionIndex,
-  component,
   componentIndex,
   subComponentIndex,
   valueShape,
@@ -168,9 +160,7 @@ function createSourceOption({
   readonly segmentOccurrence: number
   readonly orderGroup: number | null
   readonly field: Hl7Field
-  readonly repetition?: Hl7Repetition
   readonly repetitionIndex?: number
-  readonly component?: Hl7Component
   readonly componentIndex?: number
   readonly subComponentIndex?: number
   readonly valueShape: SourceValueShape
@@ -184,7 +174,8 @@ function createSourceOption({
     segmentIndex: segment.index,
     raw: segment.raw,
   })
-  const previewValue = readSourceValue(parsedMessage, source)
+  const sourceValue = readSourceValue(parsedMessage, source)
+  const previewValue = sourceValue?.trim() ? sourceValue : ""
 
   return {
     path: source.path,
@@ -192,10 +183,7 @@ function createSourceOption({
     segment,
     segmentOccurrence,
     orderGroup,
-    previewValue:
-      typeof previewValue === "string"
-        ? previewValue
-        : (component?.value ?? repetition?.value ?? field.raw),
+    previewValue,
     valueShape,
   }
 }

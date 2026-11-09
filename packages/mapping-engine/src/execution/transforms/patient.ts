@@ -10,6 +10,10 @@ import type {
 
 import type { Hl7SourceRead } from "../../source-lookup.js"
 import {
+  isPersonNameSourceRoleEntry,
+  sourceRuleIdentityKey,
+} from "../../person-name-source-roles.js"
+import {
   hasAnyObjectValue,
   createDatatypeMappers,
   STANDARD_DELIMITERS,
@@ -124,9 +128,8 @@ function getPersonNameSourceRole(
   if (Array.isArray(configuredRoles)) {
     const configuredRole = configuredRoles.find(
       (entry) =>
-        isSourceRoleEntry(entry) &&
-        entry.path === source.path &&
-        (entry.segmentIndex ?? null) === (source.segmentIndex ?? null),
+        isPersonNameSourceRoleEntry(entry) &&
+        sourceRuleIdentityKey(entry) === sourceRuleIdentityKey(source),
     )
 
     if (configuredRole) {
@@ -135,38 +138,4 @@ function getPersonNameSourceRole(
   }
 
   return DEFAULT_PERSON_NAME_SOURCE_ROLES[sourceIndex] ?? null
-}
-
-function isSourceRoleEntry(value: unknown): value is {
-  readonly path: string
-  readonly segmentIndex?: number | null
-  readonly role: PersonNameSourceRole
-} {
-  if (!value || typeof value !== "object") {
-    return false
-  }
-
-  const candidate = value as {
-    readonly path?: unknown
-    readonly segmentIndex?: unknown
-    readonly role?: unknown
-  }
-
-  return (
-    typeof candidate.path === "string" &&
-    (candidate.segmentIndex === undefined ||
-      candidate.segmentIndex === null ||
-      typeof candidate.segmentIndex === "number") &&
-    isPersonNameSourceRole(candidate.role)
-  )
-}
-
-function isPersonNameSourceRole(role: unknown): role is PersonNameSourceRole {
-  return (
-    role === "family" ||
-    role === "given" ||
-    role === "middle" ||
-    role === "suffix" ||
-    role === "prefix"
-  )
 }

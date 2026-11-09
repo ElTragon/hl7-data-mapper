@@ -98,7 +98,7 @@ export function Hl7SourceResults({
                       </span>
                       <span className="font-mono text-xs">{option.path}</span>
                       <span className="text-xs text-muted-foreground">
-                        {getSourceLevelLabel(option.source)}
+                        {getSourceLevelLabel(option)}
                       </span>
                       {isSameSource(currentSource, option.source) ? (
                         <Badge variant="secondary">Current</Badge>

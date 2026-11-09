@@ -44,13 +44,14 @@ without validation errors. It then offers a **completed report**. Both require
 valid normalized output; interim exports do not bypass
 `NormalizedOutputSchema`. Parser errors prevent export.
 
-Manifest version `1.2.0` includes a `review` summary with status, total, resolved,
+Manifest version `1.3.0` includes a `review` summary with status, total, resolved,
 unresolved, error, warning, and informational counts. `REPORT.md` shows the same
 status and unresolved count. The generator derives completion from mapping items,
 current normalized values, validation issues, and matching decisions. Decisions
-must match the field ID, target path, and current primary source path; warning
-acknowledgments must match the issue path and source path. The generator rejects a
-requested completed export if those inputs do not support completion.
+must match the field ID, target path, and current source identity, including the
+join separator where applicable. Warning acknowledgments must match the issue
+path and source path. The generator rejects a requested completed export if those
+inputs do not support completion.
 
 Each export uses one cloned workspace snapshot. Input changes, review decisions,
 source corrections, reset, and reload cancel pending downloads. An older export's
@@ -210,10 +211,20 @@ A spreadsheet-friendly summary for business users.
 The required columns are:
 
 ```text
-section,targetPath,valueStatus,sourcePath,hl7ItemId,reviewStatus,transformApplied,reviewReason,reviewNote
+section,targetPath,valueStatus,sourcePath,hl7ItemId,reviewStatus,transformApplied,reviewReason,reviewNote,sourceDetails
 ```
 
 The columns are represented by `MAPPING_SUMMARY_CSV_COLUMNS`.
+`sourcePath` retains the current primary source for older consumers.
+`sourceDetails` lists every current ordered source for a direct mapping, with its
+message row, any literal split rule, and the join separator when sources are
+combined. Record-specific leaves retain the sources recorded for that leaf;
+issue-only rows use their review-decision sources.
+`review-decisions.json` also records the ordered source references and join
+separator, while `hl7-items.json` records the mapping action and join separator. These details
+let a report show how a combined value reached its normalized target.
+Completion requires full source identity for multi-source, row-pinned, and
+literal-split rules, and checks the separator for join mappings.
 
 CSV values are escaped when needed, so commas, quotes, and new lines do not break
 spreadsheet imports.

@@ -35,6 +35,7 @@ export type MappingSummaryRow = {
   readonly transformApplied: string
   readonly reviewReason: string
   readonly reviewNote: string
+  readonly sourceDetails: string
 }
 export type ReportExtractionSummary = {
   readonly patientIdentifierCount: number

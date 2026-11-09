@@ -36,6 +36,7 @@ import {
   MappingRunMetadataSchema,
   MappingVersionRecordSchema,
   MAPPING_SUMMARY_CSV_COLUMNS,
+  REPORT_CONTRACT_SCHEMA_VERSION,
   AuditEventRecordSchema,
   HASHED_REPORT_FILE_NAMES,
   REQUIRED_REPORT_FILE_NAMES,
@@ -236,6 +237,49 @@ describe("hl7Item contracts", () => {
                 requiredness: "required",
               },
             ],
+          },
+        ],
+      }),
+    ).toThrow(/does not match an hl7Item source/)
+  })
+
+  it("ties a split-part expectation to its specific source part", () => {
+    const splitSource = createSourceReference({
+      segment: "PID",
+      field: 5,
+      segmentIndex: 1,
+      literalSplit: { separator: " ", partNumber: 2 },
+    })
+    const item = {
+      id: "patient-middle-name",
+      clientId: "northstar-lab",
+      sequence: 1,
+      section: "patient",
+      targetPath: "patient.name.middle",
+      label: "Patient middle name",
+      action: "extract",
+      sources: [splitSource],
+      sourceExpectations: [
+        {
+          path: splitSource.path,
+          segmentIndex: 1,
+          literalSplit: { separator: " ", partNumber: 2 },
+          expectedLabel: "Patient middle name",
+          requiredness: "optional",
+        },
+      ],
+    }
+
+    expect(
+      Hl7ItemSchema.parse(item).sourceExpectations[0]?.literalSplit,
+    ).toEqual({ separator: " ", partNumber: 2 })
+    expect(() =>
+      Hl7ItemSchema.parse({
+        ...item,
+        sourceExpectations: [
+          {
+            ...item.sourceExpectations[0],
+            literalSplit: { separator: " ", partNumber: 3 },
           },
         ],
       }),
@@ -1283,7 +1327,7 @@ describe("report contracts", () => {
     "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
 
   const manifestInput = {
-    schemaVersion: "1.2.0",
+    schemaVersion: REPORT_CONTRACT_SCHEMA_VERSION,
     appName: "HL7 Data Mapper",
     appVersion: "0.1.0",
     generatedAt: "2026-07-09T00:10:00-07:00",
@@ -1369,6 +1413,9 @@ describe("report contracts", () => {
           hl7ItemId: "patient-name",
           reviewStatus: "confirmed",
           sourcePath: "PID-5.1",
+          sourceReferences: [
+            createSourceReference({ segment: "PID", field: 5, component: 1 }),
+          ],
           correctionApplied: false,
           updatedAt: "2026-07-09T00:11:00-07:00",
         },
@@ -1385,6 +1432,7 @@ describe("report contracts", () => {
       MAPPING_SUMMARY_CSV_COLUMNS,
     )
     expect(reportPlan.reviewDecisions[0]?.sourcePath).toBe("PID-5.1")
+    expect(reportPlan.reviewDecisions[0]?.sourceReferences).toHaveLength(1)
   })
 })
 

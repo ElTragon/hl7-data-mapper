@@ -6,6 +6,7 @@ import { buildSourceOptions } from "./source-options"
 import {
   findSourceOption,
   groupSourceOptions,
+  isSameSource,
   searchSourceOptions,
 } from "./source-search"
 
@@ -86,6 +87,25 @@ describe("source search", () => {
 
     expect(findSourceOption(options, emptySource)?.previewValue).toBe("")
     expect(findSourceOption(options, absentSource)).toBeNull()
+  })
+
+  it("does not label an unsplit option as the current split mapping", () => {
+    const sourceLocation = createSourceReference({
+      segment: "PID",
+      field: 3,
+      component: 1,
+      segmentIndex: 1,
+    })
+    const splitMapping = createSourceReference({
+      segment: "PID",
+      field: 3,
+      component: 1,
+      segmentIndex: 1,
+      literalSplit: { separator: "-", partNumber: 2 },
+    })
+
+    expect(isSameSource(sourceLocation, splitMapping)).toBe(false)
+    expect(isSameSource(splitMapping, { ...splitMapping })).toBe(true)
   })
 
   it("reports malformed paths and returns no result for an absent occurrence", () => {

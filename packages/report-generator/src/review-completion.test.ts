@@ -92,7 +92,7 @@ describe("report review completion", () => {
     },
   )
 
-  it("requires the primary source for a mapping with multiple sources", async () => {
+  it("requires all source references for a mapping with multiple sources", async () => {
     const secondary = {
       path: "PID-5.2",
       segment: "PID",
@@ -105,8 +105,22 @@ describe("report review completion", () => {
       ],
       requestedReviewStatus: "completed",
     })
+    await expect(buildReportPackage(input, () => fakeHash)).rejects.toThrow(
+      "Complete all required",
+    )
+    const currentSources = input.hl7Items[0]!.sources
     expect(
-      (await buildReportPackage(input, () => fakeHash)).manifest.review.status,
+      (
+        await buildReportPackage(
+          {
+            ...input,
+            reviewDecisions: [
+              { ...sampleReviewDecision, sourceReferences: currentSources },
+            ],
+          },
+          () => fakeHash,
+        )
+      ).manifest.review.status,
     ).toBe("completed")
     await expect(
       buildReportPackage(
@@ -119,6 +133,135 @@ describe("report review completion", () => {
         () => fakeHash,
       ),
     ).rejects.toThrow("Complete all required")
+  })
+
+  it("invalidates a reviewed join when its separator changes", async () => {
+    const secondSource = {
+      path: "PID-5.2",
+      segment: "PID",
+      field: 5,
+      component: 2,
+    }
+    const currentSources = [...sampleHl7Item.sources, secondSource]
+    const input = createReportInput({
+      hl7Items: [
+        {
+          ...sampleHl7Item,
+          action: "join",
+          sources: currentSources,
+          joinSeparator: " / ",
+        },
+      ],
+      reviewDecisions: [
+        {
+          ...sampleReviewDecision,
+          sourceReferences: currentSources,
+          joinSeparator: " / ",
+        },
+      ],
+      requestedReviewStatus: "completed",
+    })
+
+    expect(
+      (await buildReportPackage(input, () => fakeHash)).manifest.review.status,
+    ).toBe("completed")
+    for (const joinSeparator of ["-", undefined]) {
+      await expect(
+        buildReportPackage(
+          {
+            ...input,
+            reviewDecisions: [{ ...input.reviewDecisions[0]!, joinSeparator }],
+          },
+          () => fakeHash,
+        ),
+      ).rejects.toThrow("Complete all required")
+    }
+  })
+
+  it("requires full identity for a row-pinned or split source", async () => {
+    const pinnedSplitSource = {
+      ...sampleHl7Item.sources[0]!,
+      segmentIndex: 1,
+      literalSplit: { separator: "-", partNumber: 2 },
+    }
+    const input = createReportInput({
+      hl7Items: [{ ...sampleHl7Item, sources: [pinnedSplitSource] }],
+      requestedReviewStatus: "completed",
+    })
+
+    await expect(buildReportPackage(input, () => fakeHash)).rejects.toThrow(
+      "Complete all required",
+    )
+    expect(
+      (
+        await buildReportPackage(
+          {
+            ...input,
+            reviewDecisions: [
+              {
+                ...sampleReviewDecision,
+                sourceReferences: [pinnedSplitSource],
+              },
+            ],
+          },
+          () => fakeHash,
+        )
+      ).manifest.review.status,
+    ).toBe("completed")
+  })
+
+  it("rejects a confirmation when any source coordinate or split rule changes", async () => {
+    const primarySource = {
+      ...sampleHl7Item.sources[0]!,
+      segmentIndex: 1,
+      literalSplit: { separator: "-", partNumber: 1 },
+    }
+    const secondarySource = {
+      path: "PID-5.2",
+      segment: "PID",
+      field: 5,
+      component: 2,
+      segmentIndex: 1,
+    }
+    const currentSources = [primarySource, secondarySource]
+    const reportInput = createReportInput({
+      hl7Items: [{ ...sampleHl7Item, sources: currentSources }],
+      reviewDecisions: [
+        { ...sampleReviewDecision, sourceReferences: currentSources },
+      ],
+      requestedReviewStatus: "completed",
+    })
+
+    expect(
+      (await buildReportPackage(reportInput, () => fakeHash)).manifest.review
+        .status,
+    ).toBe("completed")
+
+    const staleSourceSets = [
+      [{ ...primarySource, segmentIndex: 2 }, secondarySource],
+      [
+        {
+          ...primarySource,
+          literalSplit: { separator: "-", partNumber: 2 },
+        },
+        secondarySource,
+      ],
+      [primarySource, { ...secondarySource, field: 7, path: "PID-7" }],
+    ]
+
+    for (const staleSources of staleSourceSets) {
+      await expect(
+        buildReportPackage(
+          {
+            ...reportInput,
+            reviewDecisions: [
+              { ...sampleReviewDecision, sourceReferences: staleSources },
+            ],
+          },
+          () => fakeHash,
+        ),
+      ).rejects.toThrow("Complete all required")
+    }
   })
 
   it.each([null, undefined])(

@@ -17,6 +17,14 @@ export type SelectAlternateSourceInput = {
   readonly notes?: string
 }
 
+export type SelectMultipleSourcesInput = {
+  readonly profile: ClientProfile
+  readonly field: ReviewableField
+  readonly replacementSources: readonly SourceReference[]
+  readonly joinSeparator: string
+  readonly notes?: string
+}
+
 export type PersonNameSourceRole =
   "family" | "given" | "middle" | "suffix" | "prefix"
 

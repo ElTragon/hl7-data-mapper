@@ -60,6 +60,11 @@ type GuidedReviewWorkspaceProps = {
     source: SourceReference,
     sourceRole?: PersonNameSourceRole,
   ) => void
+  readonly onApplySourceRecipe: (
+    field: ReviewableField,
+    sources: readonly SourceReference[],
+    joinSeparator: string,
+  ) => void
   readonly exportLabel?: string
   readonly onDownloadReport: () => void
   readonly onResetDemo: () => void
@@ -78,6 +83,7 @@ export function GuidedReviewWorkspace({
   onConfirmField,
   onSaveReviewDecision,
   onApplySource,
+  onApplySourceRecipe,
   onDownloadReport,
   exportLabel,
   onResetDemo,
@@ -165,11 +171,16 @@ export function GuidedReviewWorkspace({
 
         <ReviewFieldInspector
           parsedMessage={parsedMessage}
+          profile={profile}
           field={selectedField}
           mappingResult={mappingResult}
           onApplySource={(field, source, sourceRole) => {
             setDecisionEditor(null)
             onApplySource(field, source, sourceRole)
+          }}
+          onApplySourceRecipe={(field, sources, joinSeparator) => {
+            setDecisionEditor(null)
+            onApplySourceRecipe(field, sources, joinSeparator)
           }}
           onEditDecision={openDecisionEditor}
         />

@@ -9,7 +9,7 @@ import type { BuildReportPackageInput, ReportPayloadFile } from "./types.js"
 export function buildPayloadFiles(
   input: BuildReportPackageInput,
 ): readonly ReportPayloadFile[] {
-  const rows = buildMappingSummaryRows(input.reviewDecisions)
+  const rows = buildMappingSummaryRows(input.reviewDecisions, input.hl7Items)
   const requiredFiles: ReportPayloadFile[] = [
     {
       fileName: "REPORT.md",
