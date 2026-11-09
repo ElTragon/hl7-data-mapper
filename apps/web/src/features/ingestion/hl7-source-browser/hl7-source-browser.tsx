@@ -6,7 +6,10 @@ import type {
   SourceReference,
 } from "@hl7-data-mapper/contracts"
 import type { ParsedHl7Message } from "@hl7-data-mapper/hl7-parser"
-import type { PersonNameSourceRole } from "@hl7-data-mapper/mapping-engine"
+import {
+  readSource,
+  type PersonNameSourceRole,
+} from "@hl7-data-mapper/mapping-engine"
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
@@ -14,6 +17,7 @@ import { Field, FieldDescription, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 
 import { Hl7SourceBuilder } from "./hl7-source-builder"
+import { Hl7SourceGridDialog } from "./hl7-source-grid"
 import { Hl7SourceResults } from "./hl7-source-results"
 import { SelectedSourcePreview } from "./selected-source-preview"
 import {
@@ -66,18 +70,27 @@ export function Hl7SourceBrowser({
   const [query, setQuery] = useState(field.primarySource?.segment ?? "")
   const [sourceRole, setSourceRole] = useState<PersonNameSourceRole>("family")
   const [showEmpty, setShowEmpty] = useState(false)
+  const [searchIsOpen, setSearchIsOpen] = useState(false)
   const [builderOpen, setBuilderOpen] = useState(false)
   const [builder, setBuilder] =
     useState<SourceBuilderState>(EMPTY_SOURCE_BUILDER)
   const [selectedCandidate, setSelectedCandidate] =
     useState<SourceOption | null>(null)
+  const [literalSplitSeparator, setLiteralSplitSeparator] = useState("")
+  const [literalSplitPartNumber, setLiteralSplitPartNumber] = useState("1")
   const [context, setContext] = useState({ parsedMessage, field })
-  if (context.parsedMessage !== parsedMessage || context.field !== field) {
+  if (
+    context.parsedMessage !== parsedMessage ||
+    context.field !== field
+  ) {
     setContext({ parsedMessage, field })
     setQuery(field.primarySource?.segment ?? "")
+    setSearchIsOpen(false)
     setSourceRole("family")
     setBuilder(EMPTY_SOURCE_BUILDER)
     setSelectedCandidate(null)
+    setLiteralSplitSeparator("")
+    setLiteralSplitPartNumber("1")
   }
   const sourceOptions = useMemo(
     () => buildSourceOptions(parsedMessage),
@@ -95,16 +108,65 @@ export function Hl7SourceBrowser({
         query,
         builder,
       })
+  const parsedSplitPartNumber = Number(literalSplitPartNumber)
+  const splitPartNumberIsValid =
+    Number.isInteger(parsedSplitPartNumber) && parsedSplitPartNumber > 0
+  const splitIsConfigured = literalSplitSeparator.length > 0
+  const splitConfigurationError =
+    splitIsConfigured && !splitPartNumberIsValid
+      ? "Choose a part number of 1 or greater."
+      : null
+  const selectedSource =
+    selectedCandidate && !splitConfigurationError
+      ? {
+          ...selectedCandidate.source,
+          literalSplit: splitIsConfigured
+            ? {
+                separator: literalSplitSeparator,
+                partNumber: parsedSplitPartNumber,
+              }
+            : undefined,
+        }
+      : null
+  const selectedSourceRead = selectedSource
+    ? readSource(parsedMessage, selectedSource)
+    : null
+  const sourceHasCompositeValue =
+    selectedSourceRead?.value !== null &&
+    selectedSourceRead?.value !== undefined &&
+    [
+      parsedMessage.delimiters.component,
+      parsedMessage.delimiters.subcomponent,
+      parsedMessage.delimiters.repetition,
+    ].some((delimiter) => selectedSourceRead.value?.includes(delimiter))
   const candidateBlockReason = Array.isArray(field.value)
     ? "Choose an individual field within this record to change its source."
-    : getCandidateBlockReason(
-        selectedCandidate,
-        isPersonNameField || field.id.includes(":"),
-      )
+    : (splitConfigurationError ??
+      (selectedSourceRead && selectedSourceRead.status !== "found"
+        ? `This selection is ${selectedSourceRead.status.replaceAll("_", " ")}.`
+        : null) ??
+      (selectedSourceRead?.status === "found" &&
+      !selectedSourceRead.value?.trim()
+        ? "This selection has no usable text."
+        : null) ??
+      (splitIsConfigured
+        ? (isPersonNameField || field.id.includes(":")) &&
+          sourceHasCompositeValue
+          ? "Choose a single value for this name or record field."
+          : null
+        : getCandidateBlockReason(
+            selectedCandidate,
+            isPersonNameField || field.id.includes(":"),
+          )))
+  function chooseCandidate(sourceOption: SourceOption | null) {
+    setSelectedCandidate(sourceOption)
+    setLiteralSplitSeparator("")
+    setLiteralSplitPartNumber("1")
+  }
 
   function updateBuilder(nextBuilder: SourceBuilderState) {
     setBuilder(nextBuilder)
-    setSelectedCandidate(null)
+    chooseCandidate(null)
   }
 
   function resetToCurrentMapping() {
@@ -112,10 +174,15 @@ export function Hl7SourceBrowser({
       return
     }
 
+    setSearchIsOpen(true)
     setBuilderOpen(true)
     setQuery("")
     setBuilder(builderFromOption(currentSourceOption))
     setSelectedCandidate(currentSourceOption)
+    setLiteralSplitSeparator(currentSource?.literalSplit?.separator ?? "")
+    setLiteralSplitPartNumber(
+      String(currentSource?.literalSplit?.partNumber ?? 1),
+    )
   }
 
   return (
@@ -138,7 +205,7 @@ export function Hl7SourceBrowser({
                   aria-pressed={sourceRole === role}
                   onClick={() => {
                     setSourceRole(role)
-                    setSelectedCandidate(null)
+                    chooseCandidate(null)
                     setBuilder(EMPTY_SOURCE_BUILDER)
                   }}
                 >
@@ -149,50 +216,32 @@ export function Hl7SourceBrowser({
           </Field>
         ) : null}
 
-        <Field>
-          <FieldLabel htmlFor={`source-search-${field.id}`}>
-            Find a source
-          </FieldLabel>
-          <div className="relative">
-            <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              id={`source-search-${field.id}`}
-              className="pl-9 font-mono"
-              value={query}
-              placeholder="PID-5.1, PID[2]-5.1, or Lopez"
-              autoComplete="off"
-              spellCheck={false}
-              onChange={(event) => {
-                setQuery(event.target.value)
-                setSelectedCandidate(null)
-              }}
-            />
-          </div>
-          <FieldDescription>
-            Search by path or value, or use the guided builder.
-          </FieldDescription>
-        </Field>
+        <Hl7SourceGridDialog
+          parsedMessage={parsedMessage}
+          sourceOptions={sourceOptions}
+          currentSource={currentSource}
+          onChooseSource={(sourceOption) => {
+            if (
+              isPersonNameField &&
+              sourceOption.source.segment === "PID" &&
+              sourceOption.source.field === 5 &&
+              sourceOption.source.component
+            ) {
+              const matchingNameRole =
+                PERSON_NAME_SOURCE_ROLES[sourceOption.source.component - 1]
 
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <label className="flex w-fit items-center gap-2 text-xs text-muted-foreground">
-            <input
-              type="checkbox"
-              checked={showEmpty}
-              onChange={(event) => setShowEmpty(event.target.checked)}
-            />
-            Show empty fields
-          </label>
-          <Button
-            type="button"
-            size="sm"
-            variant="ghost"
-            disabled={!currentSourceOption}
-            onClick={resetToCurrentMapping}
-          >
-            <RotateCcw data-icon="inline-start" />
-            Reset to current mapping
-          </Button>
-        </div>
+              if (matchingNameRole) {
+                setSourceRole(matchingNameRole)
+              }
+            }
+
+            chooseCandidate(sourceOption)
+          }}
+        />
+
+        <p className="text-xs text-muted-foreground">
+          Start in the message grid to choose a row, field, or smaller part.
+        </p>
 
         {currentSource && !currentSourceOption ? (
           <Alert variant="destructive">
@@ -206,39 +255,107 @@ export function Hl7SourceBrowser({
           </Alert>
         ) : null}
 
-        <div className="border-t pt-3">
-          <Button
-            type="button"
-            size="sm"
-            variant="ghost"
-            className="w-full justify-between"
-            aria-expanded={builderOpen}
-            aria-controls={`source-builder-${field.id}`}
-            onClick={() => setBuilderOpen((isOpen) => !isOpen)}
-          >
-            <span className="flex items-center gap-2">
-              <SlidersHorizontal data-icon="inline-start" />
-              Build a source path
-            </span>
-            <span className="text-xs text-muted-foreground">
-              {builderOpen ? "Hide" : "Show"}
-            </span>
-          </Button>
+        <Button
+          type="button"
+          size="sm"
+          variant="ghost"
+          className="justify-start"
+          disabled={!currentSourceOption}
+          onClick={resetToCurrentMapping}
+        >
+          <RotateCcw data-icon="inline-start" />
+          Reset to current mapping
+        </Button>
 
-          {builderOpen ? (
-            <Hl7SourceBuilder
-              id={`source-builder-${field.id}`}
-              parsedMessage={parsedMessage}
-              sourceOptions={sourceOptions}
-              state={builder}
-              onChange={(nextBuilder) => {
-                setQuery("")
-                updateBuilder(nextBuilder)
-              }}
-              onClear={() => updateBuilder(EMPTY_SOURCE_BUILDER)}
-            />
-          ) : null}
-        </div>
+        <Button
+          type="button"
+          size="sm"
+          variant="ghost"
+          className="w-full justify-between"
+          aria-expanded={searchIsOpen}
+          onClick={() => setSearchIsOpen((isOpen) => !isOpen)}
+        >
+          <span className="flex items-center gap-2">
+            <Search data-icon="inline-start" />
+            Search by path or value
+          </span>
+          <span className="text-xs text-muted-foreground">
+            {searchIsOpen ? "Hide" : "Show"}
+          </span>
+        </Button>
+
+        {searchIsOpen ? (
+          <div className="flex flex-col gap-3 border-t pt-3">
+            <Field>
+              <FieldLabel htmlFor={`source-search-${field.id}`}>
+                Find a source
+              </FieldLabel>
+              <div className="relative">
+                <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  id={`source-search-${field.id}`}
+                  className="pl-9 font-mono"
+                  value={query}
+                  placeholder="PID-5.1, PID[2]-5.1, or Lopez"
+                  autoComplete="off"
+                  spellCheck={false}
+                  onChange={(event) => {
+                    setQuery(event.target.value)
+                    chooseCandidate(null)
+                  }}
+                />
+              </div>
+              <FieldDescription>
+                Search by path or value, or use the guided builder.
+              </FieldDescription>
+            </Field>
+
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <label className="flex w-fit items-center gap-2 text-xs text-muted-foreground">
+                <input
+                  type="checkbox"
+                  checked={showEmpty}
+                  onChange={(event) => setShowEmpty(event.target.checked)}
+                />
+                Show empty fields
+              </label>
+            </div>
+
+            <div className="border-t pt-3">
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                className="w-full justify-between"
+                aria-expanded={builderOpen}
+                aria-controls={`source-builder-${field.id}`}
+                onClick={() => setBuilderOpen((isOpen) => !isOpen)}
+              >
+                <span className="flex items-center gap-2">
+                  <SlidersHorizontal data-icon="inline-start" />
+                  Build a source path
+                </span>
+                <span className="text-xs text-muted-foreground">
+                  {builderOpen ? "Hide" : "Show"}
+                </span>
+              </Button>
+
+              {builderOpen ? (
+                <Hl7SourceBuilder
+                  id={`source-builder-${field.id}`}
+                  parsedMessage={parsedMessage}
+                  sourceOptions={sourceOptions}
+                  state={builder}
+                  onChange={(nextBuilder) => {
+                    setQuery("")
+                    updateBuilder(nextBuilder)
+                  }}
+                  onClear={() => updateBuilder(EMPTY_SOURCE_BUILDER)}
+                />
+              ) : null}
+            </div>
+          </div>
+        ) : null}
       </div>
 
       {selectedCandidate ? (
@@ -254,38 +371,85 @@ export function Hl7SourceBrowser({
               ? "This field has no editable mapping source."
               : candidateBlockReason
           }
-          onClear={() => setSelectedCandidate(null)}
+          selectedValue={selectedSourceRead?.value ?? "(unavailable)"}
+          splitDescription={
+            splitIsConfigured
+              ? `Split on ${JSON.stringify(literalSplitSeparator)}, part ${literalSplitPartNumber}`
+              : null
+          }
+          onClear={() => chooseCandidate(null)}
           onApply={() => {
-            if (!field.hl7ItemId || candidateBlockReason) return
+            if (!field.hl7ItemId || candidateBlockReason || !selectedSource)
+              return
             onApplySource(
               field,
-              selectedCandidate.source,
+              selectedSource,
               isPersonNameField ? sourceRole : undefined,
             )
-            setSelectedCandidate(null)
+            chooseCandidate(null)
           }}
-        />
+        >
+          <div className="mt-3 grid grid-cols-[minmax(0,1fr)_92px] gap-2">
+            <Field>
+              <FieldLabel htmlFor={`literal-split-separator-${field.id}`}>
+                Split by (optional)
+              </FieldLabel>
+              <Input
+                id={`literal-split-separator-${field.id}`}
+                value={literalSplitSeparator}
+                placeholder="e.g. -"
+                maxLength={32}
+                onChange={(event) =>
+                  setLiteralSplitSeparator(event.target.value)
+                }
+              />
+            </Field>
+            <Field data-invalid={Boolean(splitConfigurationError)}>
+              <FieldLabel htmlFor={`literal-split-part-${field.id}`}>
+                Take part
+              </FieldLabel>
+              <Input
+                id={`literal-split-part-${field.id}`}
+                type="number"
+                min={1}
+                value={literalSplitPartNumber}
+                disabled={!splitIsConfigured}
+                aria-invalid={Boolean(splitConfigurationError)}
+                onChange={(event) =>
+                  setLiteralSplitPartNumber(event.target.value)
+                }
+              />
+            </Field>
+          </div>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Splitting happens after the selected HL7 field or component.
+          </p>
+        </SelectedSourcePreview>
       ) : null}
 
-      <div className="flex items-center justify-between gap-3 border-b px-3 py-2 text-xs text-muted-foreground">
-        <span>
-          {builderOptions.length} result
-          {builderOptions.length === 1 ? "" : "s"}
-        </span>
-        <span>Select a source to preview it</span>
-      </div>
+      {searchIsOpen ? (
+        <>
+          <div className="flex items-center justify-between gap-3 border-b px-3 py-2 text-xs text-muted-foreground">
+            <span>
+              {builderOptions.length} result
+              {builderOptions.length === 1 ? "" : "s"}
+            </span>
+            <span>Select a source to preview it</span>
+          </div>
 
-      <Hl7SourceResults
-        groups={groupedOptions}
-        query={query}
-        searchError={searchResult.error}
-        hiddenEmptyCount={hiddenEmptyCount}
-        selectedCandidate={selectedCandidate}
-        currentSource={currentSource}
-        isPersonNameField={isPersonNameField}
-        canApply={Boolean(field.hl7ItemId)}
-        onSelect={setSelectedCandidate}
-      />
+          <Hl7SourceResults
+            groups={groupedOptions}
+            query={query}
+            searchError={searchResult.error}
+            hiddenEmptyCount={hiddenEmptyCount}
+            selectedCandidate={selectedCandidate}
+            currentSource={currentSource}
+            isPersonNameField={isPersonNameField}
+            canApply={Boolean(field.hl7ItemId)}
+            onSelect={chooseCandidate}
+          />
+        </>
+      ) : null}
     </div>
   )
 }
