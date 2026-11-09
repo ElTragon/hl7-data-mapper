@@ -242,6 +242,49 @@ describe("hl7Item contracts", () => {
     ).toThrow(/does not match an hl7Item source/)
   })
 
+  it("ties a split-part expectation to its specific source part", () => {
+    const splitSource = createSourceReference({
+      segment: "PID",
+      field: 5,
+      segmentIndex: 1,
+      literalSplit: { separator: " ", partNumber: 2 },
+    })
+    const item = {
+      id: "patient-middle-name",
+      clientId: "northstar-lab",
+      sequence: 1,
+      section: "patient",
+      targetPath: "patient.name.middle",
+      label: "Patient middle name",
+      action: "extract",
+      sources: [splitSource],
+      sourceExpectations: [
+        {
+          path: splitSource.path,
+          segmentIndex: 1,
+          literalSplit: { separator: " ", partNumber: 2 },
+          expectedLabel: "Patient middle name",
+          requiredness: "optional",
+        },
+      ],
+    }
+
+    expect(
+      Hl7ItemSchema.parse(item).sourceExpectations[0]?.literalSplit,
+    ).toEqual({ separator: " ", partNumber: 2 })
+    expect(() =>
+      Hl7ItemSchema.parse({
+        ...item,
+        sourceExpectations: [
+          {
+            ...item.sourceExpectations[0],
+            literalSplit: { separator: " ", partNumber: 3 },
+          },
+        ],
+      }),
+    ).toThrow(/does not match an hl7Item source/)
+  })
+
   it("rejects duplicate hl7Item ids", () => {
     expect(() =>
       Hl7ItemSetSchema.parse({

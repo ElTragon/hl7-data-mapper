@@ -14,6 +14,7 @@ import type {
   MappingExecutionResult,
   MappingExecutionTraceEntry,
 } from "../execute-mapping.js"
+import { findSourceExpectationForRead } from "../source-expectation.js"
 
 export function collectReviewValidation(
   mappingResult: MappingExecutionResult,
@@ -163,7 +164,11 @@ function sourceReadIssue(
   trace: MappingExecutionTraceEntry,
   sourceRead: MappingExecutionTraceEntry["sourceReads"][number],
 ): ValidationIssue {
-  const expectation = findSourceExpectation(trace, sourceRead.source.path)
+  const expectation = findSourceExpectationForRead(
+    trace.sourceExpectations,
+    trace.sourceReads,
+    trace.sourceReads.indexOf(sourceRead),
+  )
 
   return {
     code: `source-read-${sourceRead.status}`,
@@ -190,7 +195,8 @@ function isSafeToIgnoreSource(
   if (
     sourceRead.status !== "empty" &&
     sourceRead.status !== "missing_component" &&
-    sourceRead.status !== "missing_subcomponent"
+    sourceRead.status !== "missing_subcomponent" &&
+    sourceRead.status !== "missing_split_part"
   ) {
     return false
   }
@@ -202,6 +208,11 @@ function sourceReadMessage(
   sourceRead: MappingExecutionTraceEntry["sourceReads"][number],
   expectation: SourceExpectation | null,
 ): string {
+  if (sourceRead.status === "missing_split_part") {
+    const split = sourceRead.source.literalSplit
+    return `Source ${sourceRead.source.path} for ${trace.targetPath} has no part ${split?.partNumber ?? "?"} after splitting by ${JSON.stringify(split?.separator ?? "")}.`
+  }
+
   if (!expectation) {
     return `Source ${sourceRead.source.path} for ${trace.targetPath} returned ${sourceRead.status}.`
   }
@@ -218,17 +229,4 @@ function sourceReadMessage(
 
 function sentenceCaseLabel(label: string): string {
   return `${label.slice(0, 1).toLowerCase()}${label.slice(1)}`
-}
-
-function findSourceExpectation(
-  trace: MappingExecutionTraceEntry,
-  sourcePath: string,
-): SourceExpectation | null {
-  return (
-    trace.sourceExpectations?.find(
-      (expectation) =>
-        expectation.path === sourcePath ||
-        expectation.path === sourcePath.replace(/\[\d+\]/g, ""),
-    ) ?? null
-  )
 }

@@ -4,6 +4,11 @@ import type {
   SourceReference,
 } from "@hl7-data-mapper/contracts"
 
+import {
+  isPersonNameSourceRoleEntry,
+  sourceRuleIdentityKey,
+} from "../person-name-source-roles.js"
+import { expectationMatchesSource } from "../source-expectation.js"
 import type { PersonNameSourceRole } from "./types.js"
 
 const PERSON_NAME_SOURCE_ROLES: readonly PersonNameSourceRole[] = [
@@ -28,7 +33,7 @@ export function replacePersonNameRoleSource({
   const sourceRoles = buildPersonNameSourceRoles(item)
   const replacementIndex = item.sources.findIndex(
     (existingSource, index) =>
-      (sourceRoles.get(sourceKey(existingSource)) ??
+      (sourceRoles.get(sourceRuleIdentityKey(existingSource)) ??
         PERSON_NAME_SOURCE_ROLES[index]) === sourceRole,
   )
   const nextSources =
@@ -40,16 +45,17 @@ export function replacePersonNameRoleSource({
   const nextSourceRoles = nextSources.map((nextSource, index) => ({
     path: nextSource.path,
     segmentIndex: nextSource.segmentIndex ?? null,
+    literalSplit: nextSource.literalSplit,
     role:
       index === replacementIndex ||
       (replacementIndex < 0 && index === nextSources.length - 1)
         ? sourceRole
-        : (sourceRoles.get(sourceKey(nextSource)) ??
+        : (sourceRoles.get(sourceRuleIdentityKey(nextSource)) ??
           PERSON_NAME_SOURCE_ROLES[index] ??
           "family"),
   }))
-  const sourceRoleByPath = new Map<string, PersonNameSourceRole>(
-    nextSourceRoles.map((entry) => [entry.path, entry.role]),
+  const sourceRoleByIdentity = new Map<string, PersonNameSourceRole>(
+    nextSourceRoles.map((entry) => [sourceRuleIdentityKey(entry), entry.role]),
   )
 
   return {
@@ -61,7 +67,8 @@ export function replacePersonNameRoleSource({
       createFallbackExpectation: (nextSource) =>
         createPersonNameSourceExpectation(
           nextSource,
-          sourceRoleByPath.get(nextSource.path) ?? "family",
+          sourceRoleByIdentity.get(sourceRuleIdentityKey(nextSource)) ??
+            "family",
         ),
     }),
     transform: {
@@ -91,11 +98,40 @@ export function buildUpdatedSourceExpectations({
     source: SourceReference,
   ) => SourceExpectation
 }): SourceExpectation[] {
-  return nextSources.map((source) => {
-    const existing = item.sourceExpectations.find(
-      (expectation) => expectation.path === source.path,
+  const previousSourcesAndExpectationsAreAligned =
+    item.sources.length === item.sourceExpectations.length &&
+    item.sources.every(
+      (existingSource, sourceIndex) =>
+        item.sourceExpectations[sourceIndex]?.path === existingSource.path &&
+        expectationMatchesSource(
+          item.sourceExpectations[sourceIndex]!,
+          existingSource,
+        ),
     )
-    return existing ?? createFallbackExpectation(source)
+
+  return nextSources.map((source) => {
+    const previousSourceIndex = item.sources.findIndex(
+      (previousSource) =>
+        sourceRuleIdentityKey(previousSource) === sourceRuleIdentityKey(source),
+    )
+    const expectationForSameSource =
+      previousSourcesAndExpectationsAreAligned && previousSourceIndex >= 0
+        ? item.sourceExpectations[previousSourceIndex]
+        : undefined
+    if (expectationForSameSource) return expectationForSameSource
+
+    const expectationForUnsplitSource = !source.literalSplit
+      ? item.sourceExpectations.find(
+          (expectation) =>
+            expectation.path === source.path &&
+            !expectation.literalSplit &&
+            (expectation.segmentIndex === undefined ||
+              expectation.segmentIndex === null ||
+              expectation.segmentIndex === source.segmentIndex),
+        )
+      : undefined
+
+    return expectationForUnsplitSource ?? createFallbackExpectation(source)
   })
 }
 
@@ -112,6 +148,8 @@ function createFallbackSourceExpectation(
 ): SourceExpectation {
   return {
     path: source.path,
+    segmentIndex: source.segmentIndex,
+    literalSplit: source.literalSplit,
     expectedLabel: item.label,
     requiredness: item.required ? "required" : "recommended",
     examples: [],
@@ -142,6 +180,8 @@ function createPersonNameSourceExpectation(
 ): SourceExpectation {
   return {
     path: source.path,
+    segmentIndex: source.segmentIndex,
+    literalSplit: source.literalSplit,
     expectedLabel: ROLE_LABELS[role],
     requiredness:
       role === "family" || role === "given" ? "required" : "optional",
@@ -162,43 +202,17 @@ function buildPersonNameSourceRoles(
 
   if (Array.isArray(configuredRoles)) {
     configuredRoles.forEach((entry) => {
-      if (isSourceRoleEntry(entry)) {
-        roles.set(sourceKey(entry), entry.role)
+      if (isPersonNameSourceRoleEntry(entry)) {
+        roles.set(sourceRuleIdentityKey(entry), entry.role)
       }
     })
   }
 
   item.sources.forEach((source, index) => {
-    if (!roles.has(sourceKey(source))) {
+    if (!roles.has(sourceRuleIdentityKey(source))) {
       const role = PERSON_NAME_SOURCE_ROLES[index]
-      if (role) roles.set(sourceKey(source), role)
+      if (role) roles.set(sourceRuleIdentityKey(source), role)
     }
   })
   return roles
-}
-
-function isSourceRoleEntry(value: unknown): value is {
-  readonly path: string
-  readonly segmentIndex?: number | null
-  readonly role: PersonNameSourceRole
-} {
-  if (!value || typeof value !== "object") return false
-  const candidate = value as Record<string, unknown>
-  return (
-    typeof candidate["path"] === "string" &&
-    (candidate["segmentIndex"] === undefined ||
-      candidate["segmentIndex"] === null ||
-      typeof candidate["segmentIndex"] === "number") &&
-    PERSON_NAME_SOURCE_ROLES.includes(candidate["role"] as PersonNameSourceRole)
-  )
-}
-
-function sourceKey({
-  path,
-  segmentIndex,
-}: {
-  readonly path: string
-  readonly segmentIndex?: number | null
-}): string {
-  return `${segmentIndex ?? "first"}:${path}`
 }
