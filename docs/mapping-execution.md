@@ -52,7 +52,10 @@ The mapping engine exports `readSource()`, `readSourceValue()`,
 `getSegmentsByName()`, and `getOrderGroups()`. Source lookup supports field,
 repetition, component, and subcomponent positions. It returns statuses such as
 `missing_segment`, `missing_field`, `missing_repetition`, and
-`missing_component` instead of throwing for an absent value.
+`missing_component` instead of throwing for an absent value. A source can also
+declare `literalSplit` with an exact separator and a one-based `partNumber`;
+this applies after its HL7 location is read and reports `missing_split_part`
+when the requested part does not exist.
 An unqualified source selects the first segment with that name. An explicit
 zero-based `segmentIndex` selects that exact parsed segment; field,
 repetition, component, and subcomponent positions in the source path are
@@ -76,6 +79,10 @@ implementation is [here](../packages/mapping-engine/src/source-lookup.ts).
   JavaScript property names are rejected.
 - Add an error when a required item produces no value. Report unknown named
   transforms with an informational `pending-transform` issue.
+- A `join` item reads its ordered `sources` and places `joinSeparator` between
+  values before writing to its existing normalized target path. A source-based
+  join returns no value if any source is missing; joins of prior item outputs
+  without direct sources keep their existing omit-missing behavior.
 
 [`executeMapping`](../packages/mapping-engine/src/execution/execute-mapping.ts)
 assembles `normalizedDraft`, per-item `NormalizedField`s, validation, and
