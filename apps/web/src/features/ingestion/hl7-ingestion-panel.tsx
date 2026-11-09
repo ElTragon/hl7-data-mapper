@@ -561,6 +561,7 @@ export function Hl7IngestionPanel() {
               updateReviewField(updatedField)
             }}
             onApplySource={reviewWorkflow.applySource}
+            onApplySourceRecipe={reviewWorkflow.applySourceRecipe}
             onDownloadReport={() => void handleDownloadReport()}
             onResetDemo={handleResetDemo}
           />

@@ -1,13 +1,16 @@
 import { FileSearch, MessageSquareText } from "lucide-react"
 
 import {
+  type ClientProfile,
   type ReviewableField,
   type SourceExpectation,
+  type SourceReference,
 } from "@hl7-data-mapper/contracts"
 import type { ParsedHl7Message } from "@hl7-data-mapper/hl7-parser"
-import type {
-  MappingExecutionResult,
-  MappingExecutionTraceEntry,
+import {
+  findSourceExpectationForRead,
+  type MappingExecutionResult,
+  type MappingExecutionTraceEntry,
 } from "@hl7-data-mapper/mapping-engine"
 
 import { Badge } from "@/components/ui/badge"
@@ -29,7 +32,11 @@ import {
   SeverityBadge,
   SeverityHelp,
 } from "./review-field-feedback"
-import type { ApplyReviewSource, EditableReviewStatus } from "./review-types"
+import type {
+  ApplyReviewSource,
+  ApplyReviewSourceRecipe,
+  EditableReviewStatus,
+} from "./review-types"
 import {
   hasReviewExplanation,
   isEditableReviewStatus,
@@ -37,9 +44,11 @@ import {
 
 type ReviewFieldInspectorProps = {
   readonly parsedMessage: ParsedHl7Message
+  readonly profile: ClientProfile
   readonly field: ReviewableField | null
   readonly mappingResult: MappingExecutionResult
   readonly onApplySource: ApplyReviewSource
+  readonly onApplySourceRecipe: ApplyReviewSourceRecipe
   readonly onEditDecision: (
     field: ReviewableField,
     status: EditableReviewStatus,
@@ -48,9 +57,11 @@ type ReviewFieldInspectorProps = {
 
 export function ReviewFieldInspector({
   parsedMessage,
+  profile,
   field,
   mappingResult,
   onApplySource,
+  onApplySourceRecipe,
   onEditDecision,
 }: ReviewFieldInspectorProps) {
   if (!field) {
@@ -152,11 +163,12 @@ export function ReviewFieldInspector({
               {trace.sourceReads.map((sourceRead, index) => (
                 <SourceReadEvidence
                   key={`${sourceRead.source.segmentIndex ?? "first"}-${sourceRead.source.path}-${sourceRead.status}-${index}`}
-                  expectation={findSourceExpectation(
+                  expectation={findSourceExpectationForRead(
                     trace.sourceExpectations,
-                    sourceRead.source.path,
+                    trace.sourceReads,
+                    index,
                   )}
-                  sourcePath={sourceRead.source.path}
+                  source={sourceRead.source}
                   status={sourceRead.status}
                   value={sourceRead.value}
                 />
@@ -175,8 +187,10 @@ export function ReviewFieldInspector({
           <Hl7SourceBrowser
             key={`${field.id}:${parsedMessage.normalizedText}`}
             parsedMessage={parsedMessage}
+            profile={profile}
             field={field}
             onApplySource={onApplySource}
+            onApplySourceRecipe={onApplySourceRecipe}
           />
         </div>
       </CardContent>
@@ -186,19 +200,27 @@ export function ReviewFieldInspector({
 
 function SourceReadEvidence({
   expectation,
-  sourcePath,
+  source,
   status,
   value,
 }: {
   readonly expectation: SourceExpectation | null
-  readonly sourcePath: string
+  readonly source: SourceReference
   readonly status: MappingExecutionTraceEntry["sourceReads"][number]["status"]
   readonly value: string | null
 }) {
   return (
     <div className="rounded-md border p-2 text-xs">
       <div className="flex items-center justify-between gap-2">
-        <span className="font-mono">{sourcePath}</span>
+        <div className="min-w-0">
+          <span className="font-mono">{source.path}</span>
+          {source.literalSplit ? (
+            <p className="break-words text-muted-foreground">
+              Split on {JSON.stringify(source.literalSplit.separator)}, part{" "}
+              {source.literalSplit.partNumber}
+            </p>
+          ) : null}
+        </div>
         <div className="flex flex-wrap justify-end gap-1">
           {expectation ? (
             <Badge variant="outline">
@@ -239,15 +261,6 @@ const EXPECTATION_REQUIREDNESS_LABELS: Record<
   recommended: "Recommended",
   optional: "Optional",
   conditional: "Conditional",
-}
-
-function findSourceExpectation(
-  expectations: readonly SourceExpectation[],
-  sourcePath: string,
-): SourceExpectation | null {
-  return (
-    expectations.find((expectation) => expectation.path === sourcePath) ?? null
-  )
 }
 
 function EvidenceRow({

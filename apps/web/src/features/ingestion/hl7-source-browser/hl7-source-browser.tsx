@@ -2,9 +2,11 @@ import { useMemo, useState } from "react"
 import { AlertCircle, RotateCcw, Search, SlidersHorizontal } from "lucide-react"
 
 import type {
+  ClientProfile,
   ReviewableField,
   SourceReference,
 } from "@hl7-data-mapper/contracts"
+import { normalizedPathKind } from "@hl7-data-mapper/contracts"
 import type { ParsedHl7Message } from "@hl7-data-mapper/hl7-parser"
 import {
   readSource,
@@ -20,6 +22,7 @@ import { Hl7SourceBuilder } from "./hl7-source-builder"
 import { Hl7SourceGridDialog } from "./hl7-source-grid"
 import { Hl7SourceResults } from "./hl7-source-results"
 import { SelectedSourcePreview } from "./selected-source-preview"
+import { SourceRecipeEditor } from "./source-recipe-editor"
 import {
   builderFromOption,
   countHiddenEmptyOptions,
@@ -37,11 +40,17 @@ import {
 
 export type Hl7SourceBrowserProps = {
   readonly parsedMessage: ParsedHl7Message
+  readonly profile?: ClientProfile
   readonly field: ReviewableField
   readonly onApplySource: (
     field: ReviewableField,
     source: SourceReference,
     sourceRole?: PersonNameSourceRole,
+  ) => void
+  readonly onApplySourceRecipe?: (
+    field: ReviewableField,
+    sources: readonly SourceReference[],
+    joinSeparator: string,
   ) => void
 }
 
@@ -63,10 +72,17 @@ const PERSON_NAME_SOURCE_LABELS: Record<PersonNameSourceRole, string> = {
 
 export function Hl7SourceBrowser({
   parsedMessage,
+  profile,
   field,
   onApplySource,
+  onApplySourceRecipe,
 }: Hl7SourceBrowserProps) {
   const isPersonNameField = isPersonNameReviewField(field)
+  const mappedHl7Item = profile?.itemSet.items.find(
+    (item) => item.id === field.hl7ItemId,
+  )
+  const initialRecipeSources =
+    mappedHl7Item?.action === "join" ? mappedHl7Item.sources : []
   const [query, setQuery] = useState(field.primarySource?.segment ?? "")
   const [sourceRole, setSourceRole] = useState<PersonNameSourceRole>("family")
   const [showEmpty, setShowEmpty] = useState(false)
@@ -78,12 +94,19 @@ export function Hl7SourceBrowser({
     useState<SourceOption | null>(null)
   const [literalSplitSeparator, setLiteralSplitSeparator] = useState("")
   const [literalSplitPartNumber, setLiteralSplitPartNumber] = useState("1")
-  const [context, setContext] = useState({ parsedMessage, field })
+  const [recipeSources, setRecipeSources] =
+    useState<SourceReference[]>(initialRecipeSources)
+  const [joinSeparator, setJoinSeparator] = useState(
+    mappedHl7Item?.joinSeparator ?? "",
+  )
+  const [recipeOpen, setRecipeOpen] = useState(initialRecipeSources.length > 0)
+  const [context, setContext] = useState({ parsedMessage, field, profile })
   if (
     context.parsedMessage !== parsedMessage ||
-    context.field !== field
+    context.field !== field ||
+    context.profile !== profile
   ) {
-    setContext({ parsedMessage, field })
+    setContext({ parsedMessage, field, profile })
     setQuery(field.primarySource?.segment ?? "")
     setSearchIsOpen(false)
     setSourceRole("family")
@@ -91,6 +114,9 @@ export function Hl7SourceBrowser({
     setSelectedCandidate(null)
     setLiteralSplitSeparator("")
     setLiteralSplitPartNumber("1")
+    setRecipeSources(initialRecipeSources)
+    setJoinSeparator(mappedHl7Item?.joinSeparator ?? "")
+    setRecipeOpen(initialRecipeSources.length > 0)
   }
   const sourceOptions = useMemo(
     () => buildSourceOptions(parsedMessage),
@@ -158,6 +184,17 @@ export function Hl7SourceBrowser({
             selectedCandidate,
             isPersonNameField || field.id.includes(":"),
           )))
+  const canCombineSources =
+    Boolean(onApplySourceRecipe && field.hl7ItemId) &&
+    mappedHl7Item?.valueType === "string" &&
+    (mappedHl7Item.action === "extract" || mappedHl7Item.action === "join") &&
+    !mappedHl7Item.transform &&
+    !isPersonNameField &&
+    !field.id.includes(":") &&
+    !field.normalizedPath.includes("[") &&
+    normalizedPathKind(field.normalizedPath) === "string" &&
+    !Array.isArray(field.value)
+
   function chooseCandidate(sourceOption: SourceOption | null) {
     setSelectedCandidate(sourceOption)
     setLiteralSplitSeparator("")
@@ -183,6 +220,41 @@ export function Hl7SourceBrowser({
     setLiteralSplitPartNumber(
       String(currentSource?.literalSplit?.partNumber ?? 1),
     )
+  }
+
+  function addSelectedSourceToRecipe() {
+    if (!selectedSource || candidateBlockReason) return
+
+    const sourceWithoutRawSegment = { ...selectedSource, raw: undefined }
+    setRecipeSources((currentSources) =>
+      currentSources.some((currentSource) =>
+        sameSourceRule(currentSource, sourceWithoutRawSegment),
+      )
+        ? currentSources
+        : [...currentSources, sourceWithoutRawSegment],
+    )
+    setRecipeOpen(true)
+  }
+
+  function moveRecipeSource(sourceIndex: number, direction: -1 | 1) {
+    setRecipeSources((currentSources) => {
+      const destinationIndex = sourceIndex + direction
+      if (
+        sourceIndex < 0 ||
+        sourceIndex >= currentSources.length ||
+        destinationIndex < 0 ||
+        destinationIndex >= currentSources.length
+      ) {
+        return currentSources
+      }
+
+      const reorderedSources = [...currentSources]
+      const sourceToMove = reorderedSources[sourceIndex]
+      if (!sourceToMove) return currentSources
+      reorderedSources[sourceIndex] = reorderedSources[destinationIndex]!
+      reorderedSources[destinationIndex] = sourceToMove
+      return reorderedSources
+    })
   }
 
   return (
@@ -377,6 +449,9 @@ export function Hl7SourceBrowser({
               ? `Split on ${JSON.stringify(literalSplitSeparator)}, part ${literalSplitPartNumber}`
               : null
           }
+          onAddToRecipe={
+            canCombineSources ? addSelectedSourceToRecipe : undefined
+          }
           onClear={() => chooseCandidate(null)}
           onApply={() => {
             if (!field.hl7ItemId || candidateBlockReason || !selectedSource)
@@ -427,6 +502,41 @@ export function Hl7SourceBrowser({
         </SelectedSourcePreview>
       ) : null}
 
+      {canCombineSources ? (
+        <div className="border-b">
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            className="w-full justify-between rounded-none px-3"
+            aria-expanded={recipeOpen}
+            onClick={() => setRecipeOpen((isOpen) => !isOpen)}
+          >
+            <span>Combine sources</span>
+            <span className="text-xs text-muted-foreground">
+              {recipeSources.length} selected · {recipeOpen ? "Hide" : "Show"}
+            </span>
+          </Button>
+          {recipeOpen ? (
+            <SourceRecipeEditor
+              parsedMessage={parsedMessage}
+              sources={recipeSources}
+              joinSeparator={joinSeparator}
+              onJoinSeparatorChange={setJoinSeparator}
+              onMoveSource={moveRecipeSource}
+              onRemoveSource={(sourceIndex) =>
+                setRecipeSources((currentSources) =>
+                  currentSources.filter((_, index) => index !== sourceIndex),
+                )
+              }
+              onApply={() =>
+                onApplySourceRecipe?.(field, recipeSources, joinSeparator)
+              }
+            />
+          ) : null}
+        </div>
+      ) : null}
+
       {searchIsOpen ? (
         <>
           <div className="flex items-center justify-between gap-3 border-b px-3 py-2 text-xs text-muted-foreground">
@@ -474,5 +584,20 @@ function isPersonNameReviewField(field: ReviewableField): boolean {
     field.value !== null &&
     typeof field.value === "object" &&
     ("family" in field.value || "given" in field.value)
+  )
+}
+
+function sameSourceRule(
+  firstSource: SourceReference,
+  secondSource: SourceReference,
+): boolean {
+  return (
+    firstSource.path === secondSource.path &&
+    (firstSource.segmentIndex ?? null) ===
+      (secondSource.segmentIndex ?? null) &&
+    (firstSource.literalSplit?.separator ?? null) ===
+      (secondSource.literalSplit?.separator ?? null) &&
+    (firstSource.literalSplit?.partNumber ?? null) ===
+      (secondSource.literalSplit?.partNumber ?? null)
   )
 }
